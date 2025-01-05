@@ -1,0 +1,3 @@
+"name","type","length","leftDigits","rightDigits"
+"cod_fpg","INTEGER","2","2","0"
+"forma","STRING","15","0","0"

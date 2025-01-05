@@ -1,0 +1,4 @@
+"name","type","length","leftDigits","rightDigits"
+"emissao","STRING","19","0","0"
+"descricao","STRING","40","0","0"
+"despesa","DECIMAL","7","4","2"
