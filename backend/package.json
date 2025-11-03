@@ -1,0 +1,44 @@
+{
+    "name":  "pos-api",
+    "version":  "1.0.0",
+    "type":  "module",
+    "main":  "dist/server.js",
+    "scripts":  {
+                    "dev":  "tsx watch src/server.ts",
+                    "build":  "tsc -p tsconfig.json",
+                    "start":  "node dist/server.js",
+                    "db:init":  "psql \"$POSTGRES_URL\" -f sql/init.sql"
+                },
+    "dependencies":  {
+                         "archiver":  "^6.0.2",
+                         "cors":  "^2.8.5",
+                         "dotenv":  "^16.4.5",
+                         "express":  "^4.19.2",
+                         "helmet":  "^7.0.0",
+                         "morgan":  "^1.10.0",
+                         "multer":  "^1.4.5-lts.1",
+                         "pg":  "^8.12.0",
+                         "swagger-ui-express":  "^5.0.1",
+                         "yaml":  "^2.6.0",
+                         "zod":  "^3.23.8",
+                         "bcryptjs":  "^2.4.3",
+                         "extract-zip":  "^2.0.1",
+                         "jsonwebtoken":  "^9.0.2",
+                         "dbffile":  "^1.12.0",
+                         "iconv-lite":  "^0.6.3"
+                     },
+    "devDependencies":  {
+                            "@types/express":  "^4.17.21",
+                            "@types/cors":  "^2.8.17",
+                            "@types/morgan":  "^1.9.6",
+                            "@types/node":  "^22.5.0",
+                            "@types/swagger-ui-express":  "^4.1.8",
+                            "@types/pg":  "^8.11.8",
+                            "@types/jsonwebtoken":  "^9.0.7",
+                            "@types/multer":  "^1.4.11",
+                            "@types/archiver":  "^5.3.4",
+                            "tsx":  "^4.19.0",
+                            "typescript":  "^5.6.3",
+                            "@types/bcryptjs":  "^2.4.2"
+                        }
+}

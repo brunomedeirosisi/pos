@@ -1,8 +1,0 @@
-"name","type","length","leftDigits","rightDigits"
-"vencimento","STRING","0","0","0"
-"num_doc","STRING","0","0","0"
-"doc","STRING","0","0","0"
-"cod_fornec","STRING","0","0","0"
-"credor","STRING","0","0","0"
-"valor","STRING","0","0","0"
-"situacao","STRING","0","0","0"
