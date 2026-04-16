@@ -35,7 +35,7 @@ const jobQueue: LegacyImportJob[] = [];
 let processing = false;
 let initialized = false;
 
-const REQUIRED_FILES = ['PRODUTO.DBF', 'GRUPO.DBF', 'CLIENTES.DBF', 'VENDEDOR.DBF', 'VENDAS.DBF'];
+const REQUIRED_FILES = ['PRODUTO.DBF', 'GRUPO.DBF', 'CLIENTES.DBF', 'VENDEDOR.DBF', 'VENDAS.DBF', 'PAGAMENT.DBF'];
 
 type StagingColumn = {
   name: string;
@@ -236,6 +236,14 @@ function normalizeDate(value: unknown): Date | null {
   return null;
 }
 
+function normalizeLegacyCodeNumber(value: string): string | null {
+  const parsed = normalizeNumber(value);
+  if (parsed == null || !Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+    return null;
+  }
+  return String(parsed);
+}
+
 async function appendLog(importId: string, level: 'info' | 'warn' | 'error', message: string): Promise<void> {
   await query(
     `insert into system_legacy_import_log (import_id, level, message) values ($1, $2, $3)`,
@@ -356,6 +364,24 @@ async function truncateStagingTables(): Promise<void> {
   }
 }
 
+async function waitForDatabaseReady(retries = 20, delayMs = 1500): Promise<void> {
+  for (let attempt = 0; attempt < retries; attempt += 1) {
+    try {
+      await query('select 1');
+      return;
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      if (code !== '57P03' && code !== 'ECONNREFUSED') {
+        throw error;
+      }
+      if (attempt === retries - 1) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
 async function buildLegacyMap(table: string): Promise<Map<string, string>> {
   const { rows } = await query(`select legacy_code, id from ${table} where legacy_code is not null`);
   const map = new Map<string, string>();
@@ -365,6 +391,104 @@ async function buildLegacyMap(table: string): Promise<Map<string, string>> {
     }
   }
   return map;
+}
+
+function buildLegacyVariants(value: string): string[] {
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  const variants = new Set<string>();
+  variants.add(trimmed);
+  variants.add(trimmed.toUpperCase());
+
+  const numericVariant = normalizeLegacyCodeNumber(trimmed);
+  if (numericVariant) {
+    variants.add(numericVariant);
+  }
+
+  const noLeadingZeros = trimmed.replace(/^0+/, '');
+  if (noLeadingZeros) {
+    variants.add(noLeadingZeros);
+    variants.add(noLeadingZeros.toUpperCase());
+  }
+
+  const digitsOnly = trimmed.replace(/[^0-9]/g, '');
+  if (digitsOnly) {
+    variants.add(digitsOnly);
+    variants.add(digitsOnly.replace(/^0+/, ''));
+  }
+
+  return Array.from(variants).filter((entry) => entry.length > 0);
+}
+
+function buildProductLegacyVariants(value: string): string[] {
+  const trimmed = value.trim();
+  if (!trimmed) return [];
+  const variants = new Set<string>();
+  variants.add(trimmed);
+  variants.add(trimmed.toUpperCase());
+
+  const numericVariant = normalizeLegacyCodeNumber(trimmed);
+  if (numericVariant) {
+    variants.add(numericVariant);
+  }
+
+  const noLeadingZeros = trimmed.replace(/^0+/, '');
+  if (noLeadingZeros) {
+    variants.add(noLeadingZeros);
+    variants.add(noLeadingZeros.toUpperCase());
+  }
+
+  return Array.from(variants).filter((entry) => entry.length > 0);
+}
+
+async function buildCustomerLegacyMap(): Promise<Map<string, string>> {
+  const { rows } = await query(`select legacy_code, id from customer where legacy_code is not null`);
+  const map = new Map<string, string>();
+  for (const row of rows) {
+    if (!row.legacy_code) continue;
+    const variants = buildLegacyVariants(String(row.legacy_code));
+    variants.forEach((variant) => map.set(variant, row.id));
+  }
+  return map;
+}
+
+async function buildProductLegacyMap(): Promise<Map<string, string>> {
+  const { rows } = await query(`select legacy_code, id from product where legacy_code is not null`);
+  const map = new Map<string, string>();
+  for (const row of rows) {
+    if (!row.legacy_code) continue;
+    const variants = buildProductLegacyVariants(String(row.legacy_code));
+    variants.forEach((variant) => map.set(variant, row.id));
+  }
+  return map;
+}
+
+function resolveCustomerId(customerMap: Map<string, string>, value: unknown): string | null {
+  if (value == null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const candidates = buildLegacyVariants(raw);
+  for (const candidate of candidates) {
+    const id = customerMap.get(candidate);
+    if (id) {
+      return id;
+    }
+  }
+  return customerMap.get(raw) ?? null;
+}
+
+function resolveProductId(productMap: Map<string, string>, value: unknown): string | null {
+  if (value == null) return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const candidates = buildProductLegacyVariants(raw);
+  for (const candidate of candidates) {
+    const id = productMap.get(candidate);
+    if (id) {
+      return id;
+    }
+  }
+  return productMap.get(raw) ?? null;
 }
 
 async function migrateMasterData(overwrite: boolean): Promise<Record<string, number>> {
@@ -457,21 +581,32 @@ async function migrateMasterData(overwrite: boolean): Promise<Record<string, num
 
 async function migrateCustomerPayments(): Promise<number> {
   const { rows } = await query('select * from stg_pagament');
+  const customerMap = await buildCustomerLegacyMap();
   let count = 0;
   for (const row of rows) {
     if (!row.cod_cli) continue;
-    const customer = await query('select id from customer where legacy_code = $1 limit 1', [String(row.cod_cli).trim()]);
-    if (!customer.rows[0]) continue;
+    const customerId = resolveCustomerId(customerMap, row.cod_cli);
+    if (!customerId) continue;
+    const paid = normalizeNumber(row.vlr_pago);
+    const documentValue = normalizeNumber(row.valor_doc);
+    const remaining = normalizeNumber(row.restante);
+    const amount = paid ?? documentValue;
+    if (!amount || amount <= 0) continue;
     await query(
-      `insert into customer_payment (customer_id, payment_date, document_value, paid_value, remaining)
-       values ($1, $2, $3, $4, $5)`,
-      [
-        customer.rows[0].id,
-        normalizeDate(row.pagamento),
-        normalizeNumber(row.valor_doc),
-        normalizeNumber(row.vlr_pago),
-        normalizeNumber(row.restante),
-      ]
+      `insert into customer_payment (
+         customer_id,
+         amount,
+         payment_date,
+         method,
+         reference,
+         notes,
+         received_by,
+         source,
+         legacy_document_value,
+         legacy_remaining
+       )
+       values ($1, $2, $3, 'legacy', null, null, null, 'legacy', $4, $5)`,
+      [customerId, amount, normalizeDate(row.pagamento) ?? new Date(), documentValue, remaining]
     );
     count += 1;
   }
@@ -481,10 +616,10 @@ async function migrateCustomerPayments(): Promise<number> {
 async function migrateStockMovements(): Promise<number> {
   const { rows } = await query('select * from stg_mov_est');
   let count = 0;
-  const productMap = await buildLegacyMap('product');
+  const productMap = await buildProductLegacyMap();
   for (const row of rows) {
     if (!row.cod_prod) continue;
-    const productId = productMap.get(String(row.cod_prod).trim());
+    const productId = resolveProductId(productMap, row.cod_prod);
     if (!productId) continue;
     await query(
       `insert into stock_movement (product_id, date, type, quantity, unit_value, total, note_number)
@@ -545,9 +680,9 @@ async function migrateSales(overwrite: boolean): Promise<SaleSummary> {
   }
 
   const sellerMap = await buildLegacyMap('seller');
-  const customerMap = await buildLegacyMap('customer');
+  const customerMap = await buildCustomerLegacyMap();
   const paymentTermMap = await buildLegacyMap('payment_term');
-  const productMap = await buildLegacyMap('product');
+  const productMap = await buildProductLegacyMap();
 
   const sales = await query('select * from stg_vendas');
   for (const row of sales.rows) {
@@ -556,12 +691,13 @@ async function migrateSales(overwrite: boolean): Promise<SaleSummary> {
 
     const emission = normalizeDate(row.emissao);
     const sellerId = row.cod_vend ? sellerMap.get(String(row.cod_vend).trim()) : null;
-    const customerId = row.cod_cli ? customerMap.get(String(row.cod_cli).trim()) : null;
+    const customerId = row.cod_cli ? resolveCustomerId(customerMap, row.cod_cli) : null;
     const paymentTermId = row.cod_fpg ? paymentTermMap.get(String(row.cod_fpg).trim()) : null;
 
     const saleResult = await query(
-      `insert into sale (emission_date, order_number, seller_id, customer_id, payment_term_id, subtotal, discount, total, source, source_key)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, 'VENDAS', $9)
+      `insert into sale (emission_date, order_number, seller_id, customer_id, payment_term_id, subtotal,
+discount, total, status, source, source_key)
+       values ($1, $2, $3, $4, $5, $6, $7, $8, 'completed', 'VENDAS', $9)
        on conflict (source, source_key) do update set
          emission_date = excluded.emission_date,
          order_number = excluded.order_number,
@@ -570,7 +706,9 @@ async function migrateSales(overwrite: boolean): Promise<SaleSummary> {
          payment_term_id = excluded.payment_term_id,
          subtotal = excluded.subtotal,
          discount = excluded.discount,
-         total = excluded.total
+         total = excluded.total,
+
+         status = excluded.status
        returning id`,
       [
         emission,
@@ -590,7 +728,7 @@ async function migrateSales(overwrite: boolean): Promise<SaleSummary> {
 
     const items = extractSaleItems(row);
     for (const item of items) {
-      const productId = productMap.get(item.cod);
+      const productId = resolveProductId(productMap, item.cod);
       if (!productId) {
         summary.mismatches.push(`Sale ${sourceKey}: product ${item.cod} not found`);
         continue;
@@ -612,7 +750,7 @@ async function migrateSales(overwrite: boolean): Promise<SaleSummary> {
 
     const emission = normalizeDate(row.emissao);
     const sellerId = row.cod_vend ? sellerMap.get(String(row.cod_vend).trim()) : null;
-    const customerId = row.cod_cli ? customerMap.get(String(row.cod_cli).trim()) : null;
+    const customerId = row.cod_cli ? resolveCustomerId(customerMap, row.cod_cli) : null;
     const paymentTermId = row.cod_fpg ? paymentTermMap.get(String(row.cod_fpg).trim()) : null;
 
     const saleResult = await query(
@@ -647,7 +785,7 @@ async function migrateSales(overwrite: boolean): Promise<SaleSummary> {
 
     const items = extractSaleItems(row);
     for (const item of items) {
-      const productId = productMap.get(item.cod);
+      const productId = resolveProductId(productMap, item.cod);
       if (!productId) {
         summary.mismatches.push(`Order ${sourceKey}: product ${item.cod} not found`);
         continue;
@@ -799,6 +937,126 @@ async function ensureStagingTables(): Promise<void> {
   }
 }
 
+async function ensureCustomerPaymentSchema(): Promise<void> {
+  const { rows } = await query<{ column_name: string }>(
+    `select column_name
+     from information_schema.columns
+     where table_schema = 'public' and table_name = 'customer_payment'`
+  );
+  const existingColumns = new Set(rows.map((row) => row.column_name));
+
+  const columnStatements = [
+    `alter table customer_payment add column if not exists amount numeric(14,2)`,
+    `alter table customer_payment add column if not exists method text`,
+    `alter table customer_payment add column if not exists reference text`,
+    `alter table customer_payment add column if not exists notes text`,
+    `alter table customer_payment add column if not exists received_by uuid`,
+    `alter table customer_payment add column if not exists source text`,
+    `alter table customer_payment add column if not exists created_at timestamptz`,
+    `alter table customer_payment add column if not exists legacy_document_value numeric(14,2)`,
+    `alter table customer_payment add column if not exists legacy_remaining numeric(14,2)`,
+  ];
+
+  for (const statement of columnStatements) {
+    await query(statement);
+  }
+
+  if (existingColumns.has('paid_value')) {
+    await query(
+      `update customer_payment
+       set amount = paid_value
+       where amount is null and paid_value is not null`
+    );
+  }
+
+  if (existingColumns.has('document_value')) {
+    await query(
+      `update customer_payment
+       set amount = document_value
+       where amount is null and document_value is not null`
+    );
+    await query(
+      `update customer_payment
+       set legacy_document_value = document_value
+       where legacy_document_value is null and document_value is not null`
+    );
+  }
+
+  if (existingColumns.has('remaining')) {
+    await query(
+      `update customer_payment
+       set legacy_remaining = remaining
+       where legacy_remaining is null and remaining is not null`
+    );
+  }
+
+  await query(`update customer_payment set amount = 0 where amount is null`);
+  await query(`update customer_payment set method = 'legacy' where method is null or method = ''`);
+  await query(`update customer_payment set source = 'legacy' where source is null or source = ''`);
+  await query(
+    `update customer_payment
+     set created_at = coalesce(created_at, payment_date::timestamptz, now())
+     where created_at is null`
+  );
+  await query(
+    `update customer_payment
+     set legacy_document_value = coalesce(legacy_document_value, amount)
+     where legacy_document_value is null`
+  );
+  await query(
+    `update customer_payment
+     set legacy_remaining = coalesce(legacy_remaining, 0)
+     where legacy_remaining is null`
+  );
+  await query(
+    `update customer_payment
+     set payment_date = current_date
+     where payment_date is null`
+  );
+
+  await query(`alter table customer_payment alter column amount set not null`);
+  await query(`alter table customer_payment alter column method set not null`);
+  await query(`alter table customer_payment alter column source set not null`);
+  await query(`alter table customer_payment alter column created_at set not null`);
+  await query(`alter table customer_payment alter column payment_date set default now()`);
+  await query(`alter table customer_payment alter column method set default 'cash'`);
+  await query(`alter table customer_payment alter column source set default 'manual'`);
+  await query(`alter table customer_payment alter column created_at set default now()`);
+
+  await query(`
+    do $$
+    begin
+      alter table customer_payment
+        add constraint customer_payment_method_check
+        check (method in ('cash','card','bank','other','legacy'));
+    exception
+      when duplicate_object then null;
+    end $$;
+  `);
+
+  await query(`
+    do $$
+    begin
+      alter table customer_payment
+        add constraint customer_payment_source_check
+        check (source in ('manual','legacy'));
+    exception
+      when duplicate_object then null;
+    end $$;
+  `);
+
+  await query(`
+    do $$
+    begin
+      alter table customer_payment
+        add constraint customer_payment_amount_check
+        check (amount >= 0);
+    exception
+      when duplicate_object then null;
+    end $$;
+  `);
+}
+
 async function ensureCoreTables(): Promise<void> {
   await query(`
     create table if not exists product_group (
@@ -856,6 +1114,30 @@ async function ensureCoreTables(): Promise<void> {
   `);
 
   await query(`
+    create table if not exists app_role (
+      id uuid primary key default gen_random_uuid(),
+      name text not null unique,
+      description text,
+      permissions jsonb not null default '[]'::jsonb,
+      discount_limit numeric(14,2) default 0
+    )
+  `);
+
+  await query(`
+    create table if not exists app_user (
+      id uuid primary key default gen_random_uuid(),
+      email text not null unique,
+      password_hash text not null,
+      full_name text not null,
+      role_id uuid references app_role(id),
+      status text not null default 'active',
+      last_login_at timestamptz,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    )
+  `);
+
+  await query(`
     create table if not exists sale (
       id uuid primary key default gen_random_uuid(),
       emission_date date not null,
@@ -889,13 +1171,24 @@ async function ensureCoreTables(): Promise<void> {
   await query(`
     create table if not exists customer_payment (
       id uuid primary key default gen_random_uuid(),
-      customer_id uuid references customer(id),
-      payment_date date,
-      document_value numeric(14,2),
-      paid_value numeric(14,2),
-      remaining numeric(14,2)
+      customer_id uuid not null references customer(id) on delete cascade,
+      amount numeric(14,2) not null check (amount > 0),
+      payment_date date not null default now(),
+      method text not null default 'cash' check (method in ('cash', 'card', 'bank', 'other', 'legacy')),
+      reference text,
+      notes text,
+      received_by uuid references app_user(id),
+      source text not null default 'manual' check (source in ('manual', 'legacy')),
+      created_at timestamptz not null default now(),
+      legacy_document_value numeric(14,2),
+      legacy_remaining numeric(14,2)
     )
   `);
+  await ensureCustomerPaymentSchema();
+  await query(`create index if not exists idx_customer_payment_customer on customer_payment(customer_id)`);
+  await query(
+    `create index if not exists idx_customer_payment_customer_date on customer_payment(customer_id, payment_date desc, created_at desc)`
+  );
 
   await query(`
     create table if not exists stock_movement (
@@ -946,6 +1239,7 @@ async function ensureLegacyImportTables(): Promise<void> {
 }
 
 async function ensureSchema(): Promise<void> {
+  await waitForDatabaseReady();
   await query(`create extension if not exists pgcrypto`);
   await ensureCoreTables();
   await ensureLegacyImportTables();
@@ -1031,3 +1325,5 @@ export async function getLegacyImportReport(sessionId: string): Promise<{ path: 
   }
   return { path: record.report_path, filename: path.basename(record.report_path) };
 }
+
+

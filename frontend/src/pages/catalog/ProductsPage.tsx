@@ -9,13 +9,13 @@ import type { Product } from '../../types/catalog';
 import { useToast } from '../../components/ui/ToastProvider';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useHasPermission } from '../../store/auth';
+import { parseLocaleNumericInput } from '../../utils/number';
+import { Modal } from '../../components/ui/Modal';
 
-const nullableNumberSchema = z.preprocess((value) => {
-  if (value === '' || value === undefined || value === null) return null;
-  if (typeof value === 'number') return value;
-  const parsed = Number(value);
-  return Number.isNaN(parsed) ? value : parsed;
-}, z.number({ invalid_type_error: 'Invalid number' }).nonnegative().nullable());
+const nullableNumberSchema = z.preprocess(
+  parseLocaleNumericInput,
+  z.number({ invalid_type_error: 'Invalid number' }).nonnegative().nullable()
+);
 
 const productSchema = z.object({
   name: z.string().trim().min(1, 'Required'),
@@ -224,6 +224,11 @@ export function ProductsPage(): JSX.Element {
   }
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
+  const modalOpen = isFormOpen && canWriteCatalog;
+  const handleModalClose = () => {
+    if (isSubmitting) return;
+    closeForm();
+  };
 
   return (
     <div className="card">
@@ -257,77 +262,79 @@ export function ProductsPage(): JSX.Element {
         </table>
       </div>
 
-      {isFormOpen && canWriteCatalog && (
-        <div className="card" style={{ marginTop: '1.5rem' }}>
-          <form onSubmit={onSubmit}>
-            <h3>{editing ? t('products.editTitle') : t('products.addTitle')}</h3>
-            <p style={{ marginTop: 0, color: '#64748b' }}>{t('products.formHint')}</p>
-            <div className="form-grid">
-              <div className="form-group">
-                <label htmlFor="name">
-                  {t('products.heading')}*
-                </label>
-                <input id="name" {...form.register('name')} />
-                {form.formState.errors.name && (
-                  <small style={{ color: '#dc2626' }}>{form.formState.errors.name.message}</small>
-                )}
-              </div>
-              <div className="form-group">
-                <label htmlFor="legacy_code">{t('products.legacyCode')}</label>
-                <input id="legacy_code" {...form.register('legacy_code')} />
-              </div>
-              <div className="form-group">
-                <label htmlFor="barcode">{t('products.barcode')}</label>
-                <input id="barcode" {...form.register('barcode')} />
-              </div>
-              <div className="form-group">
-                <label htmlFor="group_id">{t('products.group')}</label>
-                <select id="group_id" {...form.register('group_id')}>
-                  <option value="">{t('common.none')}</option>
-                  {groups.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="reference">{t('products.reference')}</label>
-                <input id="reference" {...form.register('reference')} />
-              </div>
-              <div className="form-group">
-                <label htmlFor="min_stock">{t('products.minStock')}</label>
-                <input id="min_stock" type="number" step="0.001" {...form.register('min_stock')} />
-                {form.formState.errors.min_stock && (
-                  <small style={{ color: '#dc2626' }}>{form.formState.errors.min_stock.message as string}</small>
-                )}
-              </div>
-              <div className="form-group">
-                <label htmlFor="price_cash">{t('products.priceCash')}</label>
-                <input id="price_cash" type="number" step="0.01" {...form.register('price_cash')} />
-                {form.formState.errors.price_cash && (
-                  <small style={{ color: '#dc2626' }}>{form.formState.errors.price_cash.message as string}</small>
-                )}
-              </div>
-              <div className="form-group">
-                <label htmlFor="price_base">{t('products.priceBase')}</label>
-                <input id="price_base" type="number" step="0.01" {...form.register('price_base')} />
-                {form.formState.errors.price_base && (
-                  <small style={{ color: '#dc2626' }}>{form.formState.errors.price_base.message as string}</small>
-                )}
-              </div>
+      <Modal
+        open={modalOpen}
+        onClose={handleModalClose}
+        title={editing ? t('products.editTitle') : t('products.addTitle')}
+        width="720px"
+      >
+        <p style={{ marginTop: 0, color: '#64748b' }}>{t('products.formHint')}</p>
+        <form onSubmit={onSubmit}>
+          <div className="form-grid">
+            <div className="form-group">
+              <label htmlFor="name">
+                {t('products.heading')}*
+              </label>
+              <input id="name" {...form.register('name')} />
+              {form.formState.errors.name && (
+                <small style={{ color: '#dc2626' }}>{form.formState.errors.name.message}</small>
+              )}
             </div>
-            <div className="form-actions">
-              <button type="button" className="button secondary" onClick={closeForm} disabled={isSubmitting}>
-                {t('common.cancel')}
-              </button>
-              <button type="submit" className="button primary" disabled={isSubmitting}>
-                {isSubmitting ? t('common.loading') : t('common.save')}
-              </button>
+            <div className="form-group">
+              <label htmlFor="legacy_code">{t('products.legacyCode')}</label>
+              <input id="legacy_code" {...form.register('legacy_code')} />
             </div>
-          </form>
-        </div>
-      )}
+            <div className="form-group">
+              <label htmlFor="barcode">{t('products.barcode')}</label>
+              <input id="barcode" {...form.register('barcode')} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="group_id">{t('products.group')}</label>
+              <select id="group_id" {...form.register('group_id')}>
+                <option value="">{t('common.none')}</option>
+                {groups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label htmlFor="reference">{t('products.reference')}</label>
+              <input id="reference" {...form.register('reference')} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="min_stock">{t('products.minStock')}</label>
+              <input id="min_stock" type="number" step="0.001" {...form.register('min_stock')} />
+              {form.formState.errors.min_stock && (
+                <small style={{ color: '#dc2626' }}>{form.formState.errors.min_stock.message as string}</small>
+              )}
+            </div>
+            <div className="form-group">
+              <label htmlFor="price_cash">{t('products.priceCash')}</label>
+              <input id="price_cash" type="number" step="0.01" {...form.register('price_cash')} />
+              {form.formState.errors.price_cash && (
+                <small style={{ color: '#dc2626' }}>{form.formState.errors.price_cash.message as string}</small>
+              )}
+            </div>
+            <div className="form-group">
+              <label htmlFor="price_base">{t('products.priceBase')}</label>
+              <input id="price_base" type="number" step="0.01" {...form.register('price_base')} />
+              {form.formState.errors.price_base && (
+                <small style={{ color: '#dc2626' }}>{form.formState.errors.price_base.message as string}</small>
+              )}
+            </div>
+          </div>
+          <div className="form-actions">
+            <button type="button" className="button secondary" onClick={handleModalClose} disabled={isSubmitting}>
+              {t('common.cancel')}
+            </button>
+            <button type="submit" className="button primary" disabled={isSubmitting}>
+              {isSubmitting ? t('common.loading') : t('common.save')}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

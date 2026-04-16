@@ -1,6 +1,26 @@
 -- Basic schema (excerpt). Extend with the full model when ready.
 create extension if not exists pgcrypto;
 
+create table if not exists app_role (
+  id uuid primary key default gen_random_uuid(),
+  name text not null unique,
+  description text,
+  permissions jsonb not null default '[]'::jsonb,
+  discount_limit numeric(14,2) default 0
+);
+
+create table if not exists app_user (
+  id uuid primary key default gen_random_uuid(),
+  email text not null unique,
+  password_hash text not null,
+  full_name text not null,
+  role_id uuid references app_role(id),
+  status text not null default 'active',
+  last_login_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists product_group (
   id uuid primary key default gen_random_uuid(),
   legacy_code text unique,
@@ -69,25 +89,24 @@ create table if not exists sale_item (
   total numeric(14,2)
 );
 
-create table if not exists app_role (
+create table if not exists customer_payment (
   id uuid primary key default gen_random_uuid(),
-  name text not null unique,
-  description text,
-  permissions jsonb not null default '[]'::jsonb,
-  discount_limit numeric(14,2) default 0
+  customer_id uuid not null references customer(id) on delete cascade,
+  amount numeric(14,2) not null check (amount > 0),
+  payment_date date not null default now(),
+  method text not null default 'cash' check (method in ('cash', 'card', 'bank', 'other', 'legacy')),
+  reference text,
+  notes text,
+  received_by uuid references app_user(id),
+  source text not null default 'manual' check (source in ('manual', 'legacy')),
+  created_at timestamptz not null default now(),
+  legacy_document_value numeric(14,2),
+  legacy_remaining numeric(14,2)
 );
 
-create table if not exists app_user (
-  id uuid primary key default gen_random_uuid(),
-  email text not null unique,
-  password_hash text not null,
-  full_name text not null,
-  role_id uuid references app_role(id),
-  status text not null default 'active',
-  last_login_at timestamptz,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now()
-);
+create index if not exists idx_customer_payment_customer on customer_payment(customer_id);
+create index if not exists idx_customer_payment_customer_date on customer_payment(customer_id, payment_date desc, created_at desc);
+create index if not exists idx_customer_payment_method on customer_payment(customer_id, method);
 
 create table if not exists audit_log (
   id uuid primary key default gen_random_uuid(),
@@ -154,7 +173,7 @@ on conflict (name) do update set
   discount_limit = excluded.discount_limit;
 
 insert into app_user (email, password_hash, full_name, role_id)
-select 'admin@localhost.com', '$2a$10$gJtzg1fW/bSe4DYihnDpku.Cmwb/kxb4a1RRHsSXnD/c.MeDYrzPK', 'System Administrator', id
+select 'admin@localhost.com', crypt('magazine', gen_salt('bf', 10)), 'System Administrator', id
 from app_role
 where name = 'admin'
 on conflict (email) do nothing;

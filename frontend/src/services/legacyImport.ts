@@ -1,4 +1,5 @@
 import { http } from '../api';
+import { typedClient, unwrapOpenApiResponse } from '../api/openapi-client';
 
 export type LegacyImportResponse = {
   status: string;
@@ -44,7 +45,11 @@ export const legacyImportService = {
     return http.postForm<LegacyImportResponse>('/admin/import/legacy', formData);
   },
   status(sessionId: string) {
-    return http.get<LegacyImportStatus>(`/admin/import/legacy/${encodeURIComponent(sessionId)}/status`);
+    return unwrapOpenApiResponse(
+      typedClient.GET('/api/v1/admin/import/legacy/{sessionId}/status', {
+        params: { path: { sessionId } },
+      })
+    ) as Promise<LegacyImportStatus>;
   },
   downloadReport(sessionId: string) {
     return http.getBlob(`/admin/import/legacy/${encodeURIComponent(sessionId)}/report`);

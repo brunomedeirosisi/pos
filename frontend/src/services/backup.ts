@@ -1,4 +1,5 @@
 import { http } from '../api';
+import { typedClient, unwrapOpenApiResponse } from '../api/openapi-client';
 import type { BackupRecord, RestoreRequest } from '../types/backup';
 
 function encodeFilename(filename: string): string {
@@ -6,8 +7,8 @@ function encodeFilename(filename: string): string {
 }
 
 export const backupService = {
-  list: () => http.get<BackupRecord[]>('/admin/backups'),
-  create: () => http.post<BackupRecord>('/admin/backup'),
+  list: async (): Promise<BackupRecord[]> => unwrapOpenApiResponse(typedClient.GET('/api/v1/admin/backups')),
+  create: async (): Promise<BackupRecord> => unwrapOpenApiResponse(typedClient.POST('/api/v1/admin/backup')),
   upload: (file: File) => {
     const formData = new FormData();
     formData.append('file', file);
@@ -17,10 +18,20 @@ export const backupService = {
     const blob = await http.getBlob(`/admin/backup/${encodeFilename(filename)}/download`);
     return blob;
   },
-  remove: (filename: string) => http.delete<void>(`/admin/backup/${encodeFilename(filename)}`),
-  restore: (payload: Omit<RestoreRequest, 'confirm'> & { confirm?: boolean }) =>
-    http.post<{ status: string; restored: boolean }>('/admin/restore', {
-      ...payload,
-      confirm: payload.confirm ?? true,
-    }),
+  remove: async (filename: string): Promise<void> => {
+    await unwrapOpenApiResponse(
+      typedClient.DELETE('/api/v1/admin/backup/{filename}', {
+        params: { path: { filename } },
+      }),
+    );
+  },
+  restore: async (payload: Omit<RestoreRequest, 'confirm'> & { confirm?: boolean }): Promise<{ status: string; restored: boolean }> =>
+    unwrapOpenApiResponse(
+      typedClient.POST('/api/v1/admin/restore', {
+        body: {
+          ...payload,
+          confirm: payload.confirm ?? true,
+        },
+      })
+    ),
 };

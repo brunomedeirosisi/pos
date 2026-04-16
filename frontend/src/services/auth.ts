@@ -1,7 +1,8 @@
-import { http } from '../api';
+import { typedClient, unwrapOpenApiResponse } from '../api/openapi-client';
 import type { AuthUser, LoginCredentials, LoginResponse } from '../types/auth';
 
 export const authService = {
-  login: (credentials: LoginCredentials) => http.post<LoginResponse>('/auth/login', credentials),
-  me: () => http.get<{ user: AuthUser }>('/auth/me'),
+  login: async (credentials: LoginCredentials): Promise<LoginResponse> =>
+    unwrapOpenApiResponse(typedClient.POST('/api/v1/auth/login', { body: credentials })),
+  me: async (): Promise<{ user: AuthUser }> => unwrapOpenApiResponse(typedClient.GET('/api/v1/auth/me')),
 };

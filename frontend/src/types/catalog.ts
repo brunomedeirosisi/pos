@@ -63,6 +63,118 @@ export type CustomerInput = {
   notes?: string | null;
 };
 
+export type CustomerTotals = {
+  total_charges: number;
+  total_payments: number;
+  current_balance: number;
+  last_payment_date: string | null;
+};
+
+export type CustomerDetails = Customer & {
+  totals: CustomerTotals;
+};
+
+export type CustomerPaymentMethod = 'cash' | 'card' | 'bank' | 'other' | 'legacy';
+
+export type CustomerPayment = {
+  id: string;
+  amount: number;
+  payment_date: string | null;
+  method: CustomerPaymentMethod;
+  reference: string | null;
+  notes: string | null;
+  received_by: string | null;
+  received_by_name: string | null;
+  source: 'manual' | 'legacy';
+  created_at: string | null;
+};
+
+export type CustomerPaymentInput = {
+  amount: number;
+  payment_date?: string | null;
+  method?: Exclude<CustomerPaymentMethod, 'legacy'>;
+  reference?: string | null;
+  notes?: string | null;
+};
+
+export type CustomerPaymentsFilters = {
+  start_date?: string;
+  end_date?: string;
+  method?: CustomerPaymentMethod;
+  sort?: 'asc' | 'desc';
+};
+
+export type CustomerPaymentsSummary = {
+  total_debt: number;
+  total_paid: number;
+  current_balance: number;
+  filtered_total_paid: number;
+  filtered_count: number;
+  applied_filters: {
+    start_date: string | null;
+    end_date: string | null;
+    method: CustomerPaymentMethod | null;
+    sort: 'asc' | 'desc';
+  };
+};
+
+export type CustomerPaymentsResponse = {
+  payments: CustomerPayment[];
+  summary: CustomerPaymentsSummary;
+};
+
+export type CustomerPaymentRegisterResponse = {
+  payment: CustomerPayment;
+  summary: {
+    total_debt: number;
+    total_paid: number;
+    previous_balance: number;
+    new_balance: number;
+  };
+  receipt_hint?: string;
+};
+
+export type CompanyInfo = {
+  name: string;
+  address: string;
+  tax_id: string;
+};
+
+export type CustomerSummary = Pick<
+  Customer,
+  'id' | 'legacy_code' | 'name' | 'cpf' | 'address' | 'city' | 'uf' | 'cep' | 'phone'
+>;
+
+export type CustomerPaymentReceipt = {
+  company: CompanyInfo;
+  customer: CustomerSummary;
+  payment: CustomerPayment & { code: string };
+  balances: {
+    total_debt: number;
+    total_paid: number;
+    previous_balance: number;
+    payment_amount: number;
+    new_balance: number;
+  };
+  generated_at: string;
+};
+
+export type CustomerPaymentHistoryReport = {
+  generated_at: string;
+  company: CompanyInfo;
+  customer: CustomerSummary;
+  payments: CustomerPayment[];
+  summary: CustomerPaymentsSummary;
+};
+
+export type CustomerSale = {
+  id: string;
+  emission_date: string | null;
+  order_number: string | null;
+  total: number | null;
+  status: 'draft' | 'completed' | 'cancelled';
+};
+
 export type Seller = {
   id: string;
   legacy_code: string | null;

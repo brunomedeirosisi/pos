@@ -8,6 +8,7 @@ const navItems = [
   { to: '/', labelKey: 'nav.dashboard' },
   { to: '/pos', labelKey: 'nav.pos' },
   { to: '/sales', labelKey: 'nav.sales' },
+  { to: '/payments', labelKey: 'nav.payments' },
 ];
 
 const catalogItems = [

@@ -6,7 +6,7 @@ import type { Sale } from '../types/sales';
 import { useHasPermission } from '../store/auth';
 
 export function DashboardPage(): JSX.Element {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const canReadSales = useHasPermission('sales:read');
 
   const salesQuery = useQuery({
@@ -52,7 +52,7 @@ export function DashboardPage(): JSX.Element {
           <ul>
             {metrics.topProducts.map((item) => (
               <li key={item.productId}>
-                {item.productId} - {item.quantity}
+                {item.productName} - {item.quantity}
               </li>
             ))}
           </ul>
@@ -68,6 +68,7 @@ export function DashboardPage(): JSX.Element {
             <thead>
               <tr>
                 <th>{t('sales.emission')}</th>
+                <th>{t('sales.item')}</th>
                 <th>{t('sales.total')}</th>
                 <th>{t('sales.status')}</th>
               </tr>
@@ -75,7 +76,8 @@ export function DashboardPage(): JSX.Element {
             <tbody>
               {metrics.recentSales.map((sale) => (
                 <tr key={sale.id}>
-                  <td>{sale.emission_date}</td>
+                  <td>{formatSaleDateTime(sale.emission_date, i18n.language)}</td>
+                  <td>{getSalePrimaryItemName(sale)}</td>
                   <td>R$ {(sale.total ?? 0).toFixed(2)}</td>
                   <td>{sale.status}</td>
                 </tr>
@@ -102,6 +104,12 @@ function MetricCard({ title, value }: MetricCardProps) {
   );
 }
 
+type TopProductMetric = {
+  productId: string;
+  productName: string;
+  quantity: number;
+};
+
 function calculateMetrics(sales: Sale[]) {
   const today = new Date().toISOString().slice(0, 10);
   const salesToday = sales
@@ -112,18 +120,26 @@ function calculateMetrics(sales: Sale[]) {
   const count = sales.length;
   const avgTicket = count > 0 ? totalSales / count : 0;
 
-  const productCounter = new Map<string, number>();
+  const productCounter = new Map<string, TopProductMetric>();
   sales.forEach((sale) => {
     sale.items?.forEach((item) => {
-      const current = productCounter.get(item.product_id) ?? 0;
-      productCounter.set(item.product_id, current + item.quantity);
+      const existing = productCounter.get(item.product_id);
+      const productName = item.product_name ?? item.product_id;
+      if (existing) {
+        existing.quantity += item.quantity;
+      } else {
+        productCounter.set(item.product_id, {
+          productId: item.product_id,
+          productName,
+          quantity: item.quantity,
+        });
+      }
     });
   });
 
-  const topProducts = Array.from(productCounter.entries())
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([productId, quantity]) => ({ productId, quantity }));
+  const topProducts = Array.from(productCounter.values())
+    .sort((a, b) => b.quantity - a.quantity)
+    .slice(0, 5);
 
   const recentSales = [...sales]
     .sort((a, b) => b.emission_date.localeCompare(a.emission_date))
@@ -137,5 +153,38 @@ function calculateMetrics(sales: Sale[]) {
     topProducts,
     recentSales,
   };
+}
+
+function formatSaleDateTime(value: string, locale?: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  try {
+    return date.toLocaleString(locale ?? 'pt-BR', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    });
+  } catch {
+    return date.toLocaleString('pt-BR', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    });
+  }
+}
+
+function getSalePrimaryItemName(sale: Sale) {
+  if (!sale.items || sale.items.length === 0) {
+    return '--';
+  }
+
+  const [first, ...rest] = sale.items;
+  const base = first.product_name ?? first.product_id;
+  if (rest.length === 0) {
+    return base;
+  }
+
+  return `${base} (+${rest.length})`;
 }
 

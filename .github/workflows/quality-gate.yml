@@ -1,0 +1,102 @@
+name: quality-gate
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install backend deps
+        run: npm install
+        working-directory: backend
+      - name: Install frontend deps
+        run: npm install
+        working-directory: frontend
+
+  lint:
+    runs-on: ubuntu-latest
+    needs: install
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install backend deps
+        run: npm install
+        working-directory: backend
+      - name: Install frontend deps
+        run: npm install
+        working-directory: frontend
+      - name: Backend lint
+        run: npm run lint
+        working-directory: backend
+      - name: Frontend lint
+        run: npm run lint
+        working-directory: frontend
+
+  typecheck:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install backend deps
+        run: npm install
+        working-directory: backend
+      - name: Install frontend deps
+        run: npm install
+        working-directory: frontend
+      - name: Backend typecheck
+        run: npm run typecheck
+        working-directory: backend
+      - name: Generate frontend typed client
+        run: npm run openapi:generate
+        working-directory: frontend
+      - name: Frontend typecheck
+        run: npm run typecheck
+        working-directory: frontend
+
+  test:
+    runs-on: ubuntu-latest
+    needs: typecheck
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install backend deps
+        run: npm install
+        working-directory: backend
+      - name: Install frontend deps
+        run: npm install
+        working-directory: frontend
+      - name: Validate OpenAPI
+        run: npm run openapi:validate
+        working-directory: backend
+      - name: Backend tests
+        run: npm run test
+        working-directory: backend
+      - name: Generate frontend typed client
+        run: npm run openapi:generate
+        working-directory: frontend
+      - name: Frontend tests
+        run: npm run test
+        working-directory: frontend

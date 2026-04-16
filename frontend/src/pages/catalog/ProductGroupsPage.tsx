@@ -9,6 +9,7 @@ import type { ProductGroup } from '../../types/catalog';
 import { useToast } from '../../components/ui/ToastProvider';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useHasPermission } from '../../store/auth';
+import { Modal } from '../../components/ui/Modal';
 
 const schema = z.object({
   name: z.string().trim().min(1, 'Required'),
@@ -185,6 +186,14 @@ export function ProductGroupsPage(): JSX.Element {
     );
   }
 
+  const modalOpen = isFormOpen && canWriteCatalog;
+  const handleModalClose = () => {
+    if (createMutation.isPending || updateMutation.isPending) {
+      return;
+    }
+    closeForm();
+  };
+
   return (
     <div className="card">
       <div className="toolbar">
@@ -212,34 +221,38 @@ export function ProductGroupsPage(): JSX.Element {
         <tbody>{rows}</tbody>
       </table>
 
-      {isFormOpen && canWriteCatalog && (
-        <div className="card" style={{ marginTop: '1.5rem' }}>
-          <form onSubmit={onSubmit}>
-            <h3>{editing ? t('productGroups.editTitle') : t('productGroups.addTitle')}</h3>
-            <div className="form-grid">
-              <div className="form-group">
-                <label htmlFor="group-name">
-                  {t('productGroups.heading')}*
-                </label>
-                <input id="group-name" {...form.register('name')} />
-                {form.formState.errors.name && <small style={{ color: '#dc2626' }}>{form.formState.errors.name.message}</small>}
-              </div>
-              <div className="form-group">
-                <label htmlFor="group-legacy">{t('products.legacyCode')}</label>
-                <input id="group-legacy" {...form.register('legacy_code')} />
-              </div>
+      <Modal
+        open={modalOpen}
+        onClose={handleModalClose}
+        title={editing ? t('productGroups.editTitle') : t('productGroups.addTitle')}
+        width="520px"
+      >
+        <form onSubmit={onSubmit}>
+          <div className="form-grid">
+            <div className="form-group">
+              <label htmlFor="group-name">
+                {t('productGroups.heading')}*
+              </label>
+              <input id="group-name" {...form.register('name')} />
+              {form.formState.errors.name && (
+                <small style={{ color: '#dc2626' }}>{form.formState.errors.name.message}</small>
+              )}
             </div>
-            <div className="form-actions">
-              <button type="button" className="button secondary" onClick={closeForm} disabled={isSubmitting}>
-                {t('common.cancel')}
-              </button>
-              <button type="submit" className="button primary" disabled={isSubmitting}>
-                {isSubmitting ? t('common.loading') : t('common.save')}
-              </button>
+            <div className="form-group">
+              <label htmlFor="group-legacy">{t('products.legacyCode')}</label>
+              <input id="group-legacy" {...form.register('legacy_code')} />
             </div>
-          </form>
-        </div>
-      )}
+          </div>
+          <div className="form-actions">
+            <button type="button" className="button secondary" onClick={handleModalClose} disabled={isSubmitting}>
+              {t('common.cancel')}
+            </button>
+            <button type="submit" className="button primary" disabled={isSubmitting}>
+              {isSubmitting ? t('common.loading') : t('common.save')}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

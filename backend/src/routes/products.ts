@@ -16,12 +16,42 @@ const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(500).optional(),
 });
 
+function parseDecimalInput(value: unknown) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value === 'number') return value;
+  if (typeof value !== 'string') return value;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  let normalized = trimmed.replace(/\s+/g, '');
+  normalized = normalized.replace(/[^0-9.,+-]/g, '');
+
+  const commaPos = normalized.lastIndexOf(',');
+  const dotPos = normalized.lastIndexOf('.');
+  if (commaPos > -1 && dotPos > -1) {
+    if (commaPos > dotPos) {
+      normalized = normalized.replace(/\./g, '');
+    } else {
+      normalized = normalized.replace(/,/g, '');
+    }
+  }
+
+  normalized = normalized.replace(',', '.');
+  const parsed = Number(normalized);
+  return Number.isNaN(parsed) ? value : parsed;
+}
+
+const numericField = z.preprocess(parseDecimalInput, z.number().nonnegative().nullable().optional());
+
 const baseSchema = z.object({
   legacy_code: z
     .string()
     .trim()
     .min(1)
-    .optional(),
+    .optional()
+    .nullable(),
   name: z
     .string()
     .trim()
@@ -30,16 +60,18 @@ const baseSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .optional(),
+    .optional()
+    .nullable(),
   group_id: z.string().uuid().nullable().optional(),
   reference: z
     .string()
     .trim()
     .min(1)
-    .optional(),
-  min_stock: z.number().nonnegative().nullable().optional(),
-  price_cash: z.number().nonnegative().nullable().optional(),
-  price_base: z.number().nonnegative().nullable().optional(),
+    .optional()
+    .nullable(),
+  min_stock: numericField,
+  price_cash: numericField,
+  price_base: numericField,
 });
 
 type ProductRow = {

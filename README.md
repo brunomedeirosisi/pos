@@ -37,6 +37,16 @@ Then open: `https://pos.localhost/`
 - `GET /api/v1/products/:id` – get product
 - `PATCH /api/v1/products/:id` – update product
 
+### Customer Payment & Debt Management
+
+- Register customer payments with balance validation, view history with filters/sorting, and print receipts or full history reports from the frontend.
+- API additions:
+  - `GET /api/v1/customers/{id}/payments` – history + summary (supports `start_date`, `end_date`, `method`, `sort`)
+  - `POST /api/v1/customers/{id}/payments` – registers payment and returns updated balances
+  - `GET /api/v1/customers/{id}/payments/report` – printable history with totals/company header
+  - `GET /api/v1/customers/{customerId}/payments/{paymentId}/receipt` – receipt payload with previous/new balance
+- Configure company header on receipts/reports via `COMPANY_NAME`, `COMPANY_ADDRESS`, `COMPANY_TAX_ID` in your environment.
+
 ### PWA & Offline
 
 This starter registers a basic service worker and includes a `manifest.webmanifest`. Extend `src/sw.ts` and caching strategy.

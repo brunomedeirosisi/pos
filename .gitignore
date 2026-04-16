@@ -1,8 +1,34 @@
-# Ignore all .log files
 *.log
+*.tmp
+*.cache
+.DS_Store
+Thumbs.db
 
-# Ignore a specific folder
+# Runtime env files
+.env
+.env.local
+.env.*.local
+
+# Build artifacts
+dist/
+coverage/
+tmp/
+
+# Node.js
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# TypeScript build metadata
+*.tsbuildinfo
+
+# Project-specific generated folders
+backend/dist/
+backend/node_modules/
+frontend/dist/
+frontend/node_modules/
+
+# Local playground / assets
 demo2/
-
-# Ignore a specific file
 BARCEST.ARJ

@@ -21,7 +21,8 @@ const baseSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .optional(),
+    .optional()
+    .nullable(),
   name: z
     .string()
     .trim()

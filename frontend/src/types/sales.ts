@@ -3,6 +3,7 @@ export type SaleStatus = 'draft' | 'completed' | 'cancelled';
 export type SaleItem = {
   id: string;
   product_id: string;
+  product_name?: string | null;
   quantity: number;
   unit_price: number | null;
   total: number | null;

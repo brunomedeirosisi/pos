@@ -1,4 +1,5 @@
 import { http } from '../api';
+import { typedClient, unwrapOpenApiResponse } from '../api/openapi-client';
 import type {
   Product,
   ProductInput,
@@ -6,6 +7,15 @@ import type {
   ProductGroupInput,
   Customer,
   CustomerInput,
+  CustomerDetails,
+  CustomerPayment,
+  CustomerPaymentInput,
+  CustomerPaymentsFilters,
+  CustomerPaymentsResponse,
+  CustomerPaymentRegisterResponse,
+  CustomerPaymentReceipt,
+  CustomerPaymentHistoryReport,
+  CustomerSale,
   Seller,
   SellerInput,
   PaymentTerm,
@@ -28,6 +38,25 @@ export const customersService = {
   list: (search?: string) => http.get<Customer[]>('/customers', search ? { search } : undefined),
   create: (data: CustomerInput) => http.post<Customer>('/customers', data),
   update: (id: string, data: Partial<CustomerInput>) => http.patch<Customer>(`/customers/${id}`, data),
+  get: (id: string) => http.get<CustomerDetails>(`/customers/${id}`),
+  listPayments: (id: string, filters?: CustomerPaymentsFilters) =>
+    unwrapOpenApiResponse(
+      typedClient.GET('/api/v1/customers/{id}/payments', {
+        params: { path: { id }, query: filters },
+      })
+    ) as Promise<CustomerPaymentsResponse>,
+  registerPayment: (id: string, data: CustomerPaymentInput) =>
+    unwrapOpenApiResponse(
+      typedClient.POST('/api/v1/customers/{id}/payments', {
+        params: { path: { id } },
+        body: data,
+      })
+    ) as Promise<CustomerPaymentRegisterResponse>,
+  getPaymentReceipt: (customerId: string, paymentId: string) =>
+    http.get<CustomerPaymentReceipt>(`/customers/${customerId}/payments/${paymentId}/receipt`),
+  getPaymentHistoryReport: (id: string, filters?: CustomerPaymentsFilters) =>
+    http.get<CustomerPaymentHistoryReport>(`/customers/${id}/payments/report`, filters),
+  listSales: (id: string) => http.get<CustomerSale[]>(`/customers/${id}/sales`),
 };
 
 export const sellersService = {

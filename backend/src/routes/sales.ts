@@ -10,6 +10,7 @@ type SaleStatus = 'draft' | 'completed' | 'cancelled';
 type SaleItemRow = {
   id: string;
   product_id: string;
+  product_name?: string | null;
   quantity: string;
   unit_price: string | null;
   total: string | null;
@@ -56,6 +57,7 @@ function mapSaleItem(row: SaleItemRow) {
   return {
     id: row.id,
     product_id: row.product_id,
+    product_name: row.product_name ?? null,
     quantity: toNumericOrZero(row.quantity),
     unit_price: toNumeric(row.unit_price),
     total: toNumeric(row.total),
@@ -221,6 +223,7 @@ router.get(
              json_build_object(
                'id', si.id,
                'product_id', si.product_id,
+               'product_name', p.name,
                'quantity', si.quantity,
                'unit_price', si.unit_price,
                'total', si.total
@@ -230,6 +233,7 @@ router.get(
          ) as items
        from sale s
        left join sale_item si on si.sale_id = s.id
+       left join product p on p.id = si.product_id
        ${whereClause}
        group by s.id
        order by s.emission_date desc, s.id desc
@@ -336,6 +340,7 @@ router.get(
              json_build_object(
                'id', si.id,
                'product_id', si.product_id,
+               'product_name', p.name,
                'quantity', si.quantity,
                'unit_price', si.unit_price,
                'total', si.total
@@ -345,6 +350,7 @@ router.get(
          ) as items
        from sale s
        left join sale_item si on si.sale_id = s.id
+       left join product p on p.id = si.product_id
        where s.id = $1
        group by s.id`,
       [req.params.id]
@@ -354,7 +360,16 @@ router.get(
       throw notFound('sale not found');
     }
     const { rows: itemRows } = await query<SaleItemRow>(
-      `select id, product_id, quantity, unit_price, total from sale_item where sale_id = $1`,
+      `select
+         si.id,
+         si.product_id,
+         p.name as product_name,
+         si.quantity,
+         si.unit_price,
+         si.total
+       from sale_item si
+       left join product p on p.id = si.product_id
+       where si.sale_id = $1`,
       [sale.id]
     );
     res.json(mapSale({ ...sale, items: itemRows }));

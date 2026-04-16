@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link, Outlet, useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { salesService } from '../services/sales';
 import { customersService, sellersService, paymentTermsService } from '../services/catalog';
@@ -32,7 +32,7 @@ const defaultFilters: FiltersState = {
 };
 
 export function SalesListPage(): JSX.Element {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const toast = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -181,6 +181,7 @@ export function SalesListPage(): JSX.Element {
           <thead>
             <tr>
               <th>{t('sales.emission')}</th>
+              <th>{t('sales.item')}</th>
               <th>{t('sales.customer')}</th>
               <th>{t('sales.seller')}</th>
               <th>{t('sales.paymentTerm')}</th>
@@ -192,28 +193,29 @@ export function SalesListPage(): JSX.Element {
           <tbody>
             {salesQuery.isLoading && (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={8}>
                   <div className="empty-state">{t('common.loading')}</div>
                 </td>
               </tr>
             )}
             {salesQuery.isError && (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={8}>
                   <div className="empty-state">{(salesQuery.error as Error)?.message ?? 'Error'}</div>
                 </td>
               </tr>
             )}
             {!salesQuery.isLoading && !salesQuery.isError && sales.length === 0 && (
               <tr>
-                <td colSpan={7}>
+                <td colSpan={8}>
                   <div className="empty-state">{t('common.empty')}</div>
                 </td>
               </tr>
             )}
             {sales.map((sale) => (
               <tr key={sale.id}>
-                <td>{sale.emission_date}</td>
+                <td>{formatSaleDateTime(sale.emission_date, i18n.language)}</td>
+                <td>{getSalePrimaryItemName(sale)}</td>
                 <td>{customerMap.get(sale.customer_id ?? '') ?? '-'}</td>
                 <td>{sellerMap.get(sale.seller_id ?? '') ?? '-'}</td>
                 <td>{paymentTermMap.get(sale.payment_term_id ?? '') ?? '-'}</td>
@@ -241,9 +243,41 @@ export function SalesListPage(): JSX.Element {
           </tbody>
         </table>
       </div>
-
-      <Outlet />
     </div>
   );
+}
+
+function formatSaleDateTime(value: string, locale?: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  try {
+    return date.toLocaleString(locale ?? 'pt-BR', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    });
+  } catch {
+    return date.toLocaleString('pt-BR', {
+      dateStyle: 'short',
+      timeStyle: 'short',
+    });
+  }
+}
+
+function getSalePrimaryItemName(sale: Sale) {
+  const items = Array.isArray(sale.items) ? sale.items : [];
+  if (items.length === 0) {
+    return '--';
+  }
+
+  const [first, ...rest] = items;
+  const base = first.product_name ?? first.product_id;
+  if (rest.length === 0) {
+    return base;
+  }
+
+  return `${base} (+${rest.length})`;
 }
 

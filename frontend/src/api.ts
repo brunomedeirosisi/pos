@@ -87,13 +87,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
     }
 
     if (response.status === 401) {
-      unauthorizedListeners.forEach((listener) => {
-        try {
-          listener();
-        } catch (err) {
-          // swallow listener errors
-        }
-      });
+      emitUnauthorized();
     }
 
     throw new ApiError(response.status, message, errorBody);
@@ -135,4 +129,14 @@ export function getAuthToken(): string | null {
 export function onUnauthorized(listener: () => void): () => void {
   unauthorizedListeners.add(listener);
   return () => unauthorizedListeners.delete(listener);
+}
+
+export function emitUnauthorized() {
+  unauthorizedListeners.forEach((listener) => {
+    try {
+      listener();
+    } catch (_err) {
+      // ignore listener failures
+    }
+  });
 }

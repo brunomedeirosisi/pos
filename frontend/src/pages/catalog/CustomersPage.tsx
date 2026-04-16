@@ -4,18 +4,16 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { customersService } from '../../services/catalog';
 import type { Customer, CustomerStatus } from '../../types/catalog';
 import { useToast } from '../../components/ui/ToastProvider';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useHasPermission } from '../../store/auth';
+import { parseLocaleNumericInput } from '../../utils/number';
+import { Modal } from '../../components/ui/Modal';
 
-const nullableNumberSchema = z.preprocess((value) => {
-  if (value === '' || value === undefined || value === null) return null;
-  if (typeof value === 'number') return value;
-  const parsed = Number(value);
-  return Number.isNaN(parsed) ? value : parsed;
-}, z.number().nonnegative().nullable());
+const nullableNumberSchema = z.preprocess(parseLocaleNumericInput, z.number().nonnegative().nullable());
 
 const schema = z.object({
   name: z.string().trim().min(1, 'Required'),
@@ -63,6 +61,7 @@ export function CustomersPage(): JSX.Element {
   const { t } = useTranslation();
   const toast = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const debouncedSearch = useDebouncedValue(search, 400);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -232,11 +231,20 @@ export function CustomersPage(): JSX.Element {
           <span className={`badge ${statusClasses[customer.status]}`}>{statusTexts[customer.status]}</span>
         </td>
         <td>
-          {canWriteCatalog && (
-            <button type="button" className="button secondary" onClick={() => openEditForm(customer)}>
-              {t('common.edit')}
+          <div className="table-actions">
+            <button
+              type="button"
+              className="button"
+              onClick={() => navigate(`/catalog/customers/${customer.id}`)}
+            >
+              {t('common.details')}
             </button>
-          )}
+            {canWriteCatalog && (
+              <button type="button" className="button secondary" onClick={() => openEditForm(customer)}>
+                {t('common.edit')}
+              </button>
+            )}
+          </div>
         </td>
       </tr>
     ));
@@ -250,6 +258,12 @@ export function CustomersPage(): JSX.Element {
       </div>
     );
   }
+
+  const modalOpen = isFormOpen && canWriteCatalog;
+  const handleModalClose = () => {
+    if (isSubmitting) return;
+    closeForm();
+  };
 
   return (
     <div className="card">
@@ -282,78 +296,84 @@ export function CustomersPage(): JSX.Element {
         <tbody>{rows}</tbody>
       </table>
 
-      {isFormOpen && canWriteCatalog && (
-        <div className="card" style={{ marginTop: '1.5rem' }}>
-          <form onSubmit={onSubmit}>
-            <h3>{editing ? t('customers.editTitle') : t('customers.addTitle')}</h3>
-            <div className="form-grid">
-              <div className="form-group">
-                <label htmlFor="customer-name">
-                  {t('customers.heading')}*
-                </label>
-                <input id="customer-name" {...form.register('name')} />
-                {form.formState.errors.name && <small style={{ color: '#dc2626' }}>{form.formState.errors.name.message}</small>}
-              </div>
-              <div className="form-group">
-                <label htmlFor="customer-legacy">{t('products.legacyCode')}</label>
-                <input id="customer-legacy" {...form.register('legacy_code')} />
-              </div>
-              <div className="form-group">
-                <label htmlFor="customer-cpf">{t('customers.cpf')}</label>
-                <input id="customer-cpf" {...form.register('cpf')} />
-              </div>
-              <div className="form-group">
-                <label htmlFor="customer-address">{t('customers.address')}</label>
-                <input id="customer-address" {...form.register('address')} />
-              </div>
-              <div className="form-group">
-                <label htmlFor="customer-city">{t('customers.city')}</label>
-                <input id="customer-city" {...form.register('city')} />
-              </div>
-              <div className="form-group">
-                <label htmlFor="customer-uf">{t('customers.uf')}</label>
-                <input id="customer-uf" maxLength={2} {...form.register('uf')} />
-                {form.formState.errors.uf && <small style={{ color: '#dc2626' }}>{form.formState.errors.uf.message}</small>}
-              </div>
-              <div className="form-group">
-                <label htmlFor="customer-cep">{t('customers.cep')}</label>
-                <input id="customer-cep" {...form.register('cep')} />
-              </div>
-              <div className="form-group">
-                <label htmlFor="customer-phone">{t('customers.phone')}</label>
-                <input id="customer-phone" {...form.register('phone')} />
-              </div>
-              <div className="form-group">
-                <label htmlFor="customer-status">{t('customers.status')}</label>
-                <select id="customer-status" {...form.register('status')}>
-                  <option value="active">{t('customers.statusActive')}</option>
-                  <option value="delinquent">{t('customers.statusDelinquent')}</option>
-                  <option value="inactive">{t('customers.statusInactive')}</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="customer-credit">{t('customers.creditLimit')}</label>
-                <input id="customer-credit" type="number" step="0.01" {...form.register('credit_limit')} />
-                {form.formState.errors.credit_limit && (
-                  <small style={{ color: '#dc2626' }}>{form.formState.errors.credit_limit.message as string}</small>
-                )}
-              </div>
-              <div className="form-group" style={{ gridColumn: '1/-1' }}>
-                <label htmlFor="customer-notes">{t('customers.notes')}</label>
-                <textarea id="customer-notes" rows={3} {...form.register('notes')} />
-              </div>
+      <Modal
+        open={modalOpen}
+        onClose={handleModalClose}
+        title={editing ? t('customers.editTitle') : t('customers.addTitle')}
+        width="860px"
+      >
+        <form onSubmit={onSubmit}>
+          <div className="form-grid">
+            <div className="form-group">
+              <label htmlFor="customer-name">
+                {t('customers.heading')}*
+              </label>
+              <input id="customer-name" {...form.register('name')} />
+              {form.formState.errors.name && (
+                <small style={{ color: '#dc2626' }}>{form.formState.errors.name.message}</small>
+              )}
             </div>
-            <div className="form-actions">
-              <button type="button" className="button secondary" onClick={closeForm} disabled={isSubmitting}>
-                {t('common.cancel')}
-              </button>
-              <button type="submit" className="button primary" disabled={isSubmitting}>
-                {isSubmitting ? t('common.loading') : t('common.save')}
-              </button>
+            <div className="form-group">
+              <label htmlFor="customer-legacy">{t('products.legacyCode')}</label>
+              <input id="customer-legacy" {...form.register('legacy_code')} />
             </div>
-          </form>
-        </div>
-      )}
+            <div className="form-group">
+              <label htmlFor="customer-cpf">{t('customers.cpf')}</label>
+              <input id="customer-cpf" {...form.register('cpf')} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="customer-address">{t('customers.address')}</label>
+              <input id="customer-address" {...form.register('address')} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="customer-city">{t('customers.city')}</label>
+              <input id="customer-city" {...form.register('city')} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="customer-uf">{t('customers.uf')}</label>
+              <input id="customer-uf" maxLength={2} {...form.register('uf')} />
+              {form.formState.errors.uf && (
+                <small style={{ color: '#dc2626' }}>{form.formState.errors.uf.message}</small>
+              )}
+            </div>
+            <div className="form-group">
+              <label htmlFor="customer-cep">{t('customers.cep')}</label>
+              <input id="customer-cep" {...form.register('cep')} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="customer-phone">{t('customers.phone')}</label>
+              <input id="customer-phone" {...form.register('phone')} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="customer-status">{t('customers.status')}</label>
+              <select id="customer-status" {...form.register('status')}>
+                <option value="active">{t('customers.statusActive')}</option>
+                <option value="delinquent">{t('customers.statusDelinquent')}</option>
+                <option value="inactive">{t('customers.statusInactive')}</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label htmlFor="customer-credit">{t('customers.creditLimit')}</label>
+              <input id="customer-credit" type="number" step="0.01" {...form.register('credit_limit')} />
+              {form.formState.errors.credit_limit && (
+                <small style={{ color: '#dc2626' }}>{form.formState.errors.credit_limit.message as string}</small>
+              )}
+            </div>
+            <div className="form-group" style={{ gridColumn: '1/-1' }}>
+              <label htmlFor="customer-notes">{t('customers.notes')}</label>
+              <textarea id="customer-notes" rows={3} {...form.register('notes')} />
+            </div>
+          </div>
+          <div className="form-actions">
+            <button type="button" className="button secondary" onClick={handleModalClose} disabled={isSubmitting}>
+              {t('common.cancel')}
+            </button>
+            <button type="submit" className="button primary" disabled={isSubmitting}>
+              {isSubmitting ? t('common.loading') : t('common.save')}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }
