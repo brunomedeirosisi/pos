@@ -37,7 +37,9 @@ create table if not exists product (
   reference text,
   min_stock numeric(14,3),
   price_cash numeric(14,2),
-  price_base numeric(14,2)
+  price_base numeric(14,2),
+  cost_price numeric(14,2),
+  average_cost numeric(14,2)
 );
 
 create table if not exists customer (
@@ -66,16 +68,20 @@ create table if not exists payment_term (
 create table if not exists sale (
   id uuid primary key default gen_random_uuid(),
   emission_date date not null default now(),
+  paid_at timestamptz,
   order_number text,
   seller_id uuid references seller(id),
   customer_id uuid references customer(id),
   payment_term_id uuid references payment_term(id),
   subtotal numeric(14,2),
   discount numeric(14,2),
+  refund_amount numeric(14,2) not null default 0,
   total numeric(14,2),
   status text not null default 'completed' check (status in ('draft','completed','cancelled')),
   cancelled_at timestamptz,
   cancellation_reason text,
+  store_id text not null default 'main',
+  channel text not null default 'pos' check (channel in ('pos','ecommerce','whatsapp','marketplace')),
   source text,
   source_key text,
   unique(source, source_key)
@@ -91,12 +97,28 @@ create table if not exists sale_item (
 );
 
 create index if not exists idx_sale_emission_id on sale(emission_date desc, id desc);
+create index if not exists idx_sale_store_paid_status on sale(store_id, emission_date desc, status);
+create index if not exists idx_sale_channel_paid on sale(channel, emission_date desc);
 create index if not exists idx_sale_status_emission on sale(status, emission_date desc, id desc);
 create index if not exists idx_sale_seller_emission on sale(seller_id, emission_date desc, id desc);
 create index if not exists idx_sale_customer_status_emission on sale(customer_id, status, emission_date desc, id desc);
 create index if not exists idx_sale_payment_term_emission on sale(payment_term_id, emission_date desc, id desc);
 create index if not exists idx_sale_item_sale on sale_item(sale_id);
 create index if not exists idx_sale_item_product on sale_item(product_id);
+
+create table if not exists stock_movement (
+  id uuid primary key default gen_random_uuid(),
+  product_id uuid not null references product(id) on delete cascade,
+  date date not null default now(),
+  type text not null,
+  quantity numeric(14,3) not null,
+  unit_value numeric(14,2),
+  total numeric(14,2),
+  note_number text
+);
+
+create index if not exists idx_stock_movement_product on stock_movement(product_id);
+create index if not exists idx_stock_movement_product_date on stock_movement(product_id, date desc);
 
 create index if not exists idx_product_name_trgm on product using gin (name gin_trgm_ops);
 create index if not exists idx_product_legacy_code_trgm on product using gin (legacy_code gin_trgm_ops);

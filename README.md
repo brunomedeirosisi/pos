@@ -56,6 +56,13 @@ Then open: `https://pos.localhost/`
   - `GET /api/v1/admin/import/legacy/{sessionId}/report.json` (JSON v1)
 - Legacy import schema must be applied via versioned migrations (`backend/sql/migrations`), not by runtime table creation.
 
+### Executive Dashboard KPIs
+
+- New management dashboard API under `GET /api/v1/dashboard/*` with global filters and widget-oriented endpoints.
+- Includes summary KPIs, customer KPIs, critical stock, top product, categories, sales-by-day, peak hours, seller ranking, and product ABC.
+- Implementation and formulas documented in:
+  - `docs/dashboard-executive-kpis.md`
+
 ### PWA & Offline
 
 This starter registers a basic service worker and includes a `manifest.webmanifest`. Extend `src/sw.ts` and caching strategy.

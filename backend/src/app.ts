@@ -20,6 +20,7 @@ import { router as usersRouter } from './routes/users.js';
 import { router as rolesRouter } from './routes/roles.js';
 import { router as adminBackupsRouter } from './routes/admin-backups.js';
 import { router as adminLegacyImportRouter } from './routes/admin-legacy-import.js';
+import { dashboardRouter } from './modules/dashboard/http/dashboard-router.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { requireAuth } from './middleware/auth.js';
 
@@ -69,6 +70,7 @@ app.use('/api/v1/customers', customersRouter);
 app.use('/api/v1/sellers', sellersRouter);
 app.use('/api/v1/payment-terms', paymentTermsRouter);
 app.use('/api/v1/sales', salesRouter);
+app.use('/api/v1/dashboard', dashboardRouter);
 app.use('/api/v1/users', usersRouter);
 app.use('/api/v1/roles', rolesRouter);
 app.use('/api/v1/admin', adminBackupsRouter);
