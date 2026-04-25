@@ -4,24 +4,27 @@ import { query } from '../db.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { notFound } from '../errors.js';
 import { requirePermission } from '../middleware/auth.js';
+import { paginationQuerySchema, resolvePagination } from '../utils/pagination.js';
 
 export const router = Router();
 
-const listQuerySchema = z.object({
-  search: z
-    .string()
-    .transform((value) => value.trim())
-    .pipe(z.string().min(1))
-    .optional(),
-  limit: z.coerce.number().int().min(1).max(500).optional(),
-});
+const listQuerySchema = z
+  .object({
+    search: z
+      .string()
+      .transform((value) => value.trim())
+      .pipe(z.string().min(1))
+      .optional(),
+  })
+  .merge(paginationQuerySchema);
 
 const baseSchema = z.object({
   legacy_code: z
     .string()
     .trim()
     .min(1)
-    .optional(),
+    .optional()
+    .nullable(),
   name: z
     .string()
     .trim()
@@ -32,7 +35,8 @@ router.get(
   '/',
   requirePermission('catalog:read'),
   asyncHandler(async (req, res) => {
-    const { search, limit = 100 } = listQuerySchema.parse(req.query);
+    const { search, ...paginationInput } = listQuerySchema.parse(req.query);
+    const pagination = resolvePagination(paginationInput, { defaultPageSize: 100, maxPageSize: 200 });
     const params: unknown[] = [];
     let whereClause = '';
 
@@ -44,15 +48,18 @@ router.get(
       whereClause = `where name ilike $${nameParam} or coalesce(legacy_code, '') ilike $${legacyParam}`;
     }
 
-    params.push(limit);
+    params.push(pagination.limit);
     const limitParam = params.length;
+    params.push(pagination.offset);
+    const offsetParam = params.length;
 
     const { rows } = await query(
       `select id, legacy_code, name
        from seller
        ${whereClause}
        order by name asc
-       limit $${limitParam}`,
+       limit $${limitParam}
+       offset $${offsetParam}`,
       params
     );
     res.json(rows);

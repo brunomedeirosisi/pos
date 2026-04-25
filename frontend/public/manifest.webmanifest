@@ -1,9 +1,16 @@
 {
-  "name": "POS Starter",
-  "short_name": "POS",
+  "name": "Magazine Medeiros POS",
+  "short_name": "Medeiros POS",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#0f172a",
-  "icons": []
+  "background_color": "#F1F5F9",
+  "theme_color": "#1F4EEB",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
 }

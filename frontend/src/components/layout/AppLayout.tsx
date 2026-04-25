@@ -4,32 +4,76 @@ import { useTranslation } from 'react-i18next';
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { useAuthStore, useHasPermission, hasPermission } from '../../store/auth';
 
-const navItems = [
-  { to: '/', labelKey: 'nav.dashboard' },
-  { to: '/pos', labelKey: 'nav.pos' },
-  { to: '/sales', labelKey: 'nav.sales' },
-];
+type IconName =
+  | 'dashboard'
+  | 'pos'
+  | 'sales'
+  | 'payments'
+  | 'products'
+  | 'groups'
+  | 'customers'
+  | 'sellers'
+  | 'terms'
+  | 'users'
+  | 'roles'
+  | 'backup'
+  | 'import';
 
-const catalogItems = [
-  { to: '/catalog/products', labelKey: 'nav.products' },
-  { to: '/catalog/product-groups', labelKey: 'nav.productGroups' },
-  { to: '/catalog/customers', labelKey: 'nav.customers' },
-  { to: '/catalog/sellers', labelKey: 'nav.sellers' },
-  { to: '/catalog/payment-terms', labelKey: 'nav.paymentTerms' },
-];
-
-type AdminItem = {
+type SidebarItem = {
   to: string;
   labelKey: string;
+  icon: IconName;
+};
+
+const primaryItems: SidebarItem[] = [
+  { to: '/', labelKey: 'nav.dashboard', icon: 'dashboard' },
+  { to: '/pos', labelKey: 'nav.pos', icon: 'pos' },
+  { to: '/sales', labelKey: 'nav.sales', icon: 'sales' },
+  { to: '/payments', labelKey: 'nav.payments', icon: 'payments' },
+];
+
+const catalogItems: SidebarItem[] = [
+  { to: '/catalog/products', labelKey: 'nav.products', icon: 'products' },
+  { to: '/catalog/product-groups', labelKey: 'nav.productGroups', icon: 'groups' },
+  { to: '/catalog/customers', labelKey: 'nav.customers', icon: 'customers' },
+  { to: '/catalog/sellers', labelKey: 'nav.sellers', icon: 'sellers' },
+  { to: '/catalog/payment-terms', labelKey: 'nav.paymentTerms', icon: 'terms' },
+];
+
+type AdminItem = SidebarItem & {
   permissions: string[];
   section: 'management' | 'system';
 };
 
 const adminItems: AdminItem[] = [
-  { to: '/admin/users', labelKey: 'nav.users', permissions: ['users:read', 'users:write'], section: 'management' },
-  { to: '/admin/roles', labelKey: 'nav.roles', permissions: ['roles:read', 'roles:write'], section: 'management' },
-  { to: '/admin/system/backup', labelKey: 'nav.backupRestore', permissions: ['system:backup:read'], section: 'system' },
-  { to: '/admin/system/import', labelKey: 'nav.dataImport', permissions: ['system:import:legacy'], section: 'system' },
+  {
+    to: '/admin/users',
+    labelKey: 'nav.users',
+    permissions: ['users:read', 'users:write'],
+    section: 'management',
+    icon: 'users',
+  },
+  {
+    to: '/admin/roles',
+    labelKey: 'nav.roles',
+    permissions: ['roles:read', 'roles:write'],
+    section: 'management',
+    icon: 'roles',
+  },
+  {
+    to: '/admin/system/backup',
+    labelKey: 'nav.backupRestore',
+    permissions: ['system:backup:read'],
+    section: 'system',
+    icon: 'backup',
+  },
+  {
+    to: '/admin/system/import',
+    labelKey: 'nav.dataImport',
+    permissions: ['system:import:legacy'],
+    section: 'system',
+    icon: 'import',
+  },
 ];
 
 const pageTitleRules: Array<{ pattern: RegExp; labelKey: string }> = [
@@ -45,6 +89,7 @@ const pageTitleRules: Array<{ pattern: RegExp; labelKey: string }> = [
   { pattern: /^\/admin\/system\/import/, labelKey: 'nav.dataImport' },
   { pattern: /^\/admin/, labelKey: 'nav.administration' },
   { pattern: /^\/sales/, labelKey: 'nav.sales' },
+  { pattern: /^\/payments/, labelKey: 'nav.payments' },
   { pattern: /^\/pos/, labelKey: 'nav.pos' },
   { pattern: /^\/$/, labelKey: 'nav.dashboard' },
 ];
@@ -55,12 +100,10 @@ export function AppLayout(): JSX.Element {
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
+  const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
 
   const canReadCatalog = useHasPermission('catalog:read');
-  const catalogLinks = React.useMemo(
-    () => (canReadCatalog ? catalogItems : []),
-    [canReadCatalog]
-  );
+  const catalogLinks = React.useMemo(() => (canReadCatalog ? catalogItems : []), [canReadCatalog]);
 
   const { adminLinksBySection, hasAdminLinks } = React.useMemo(() => {
     if (!user) {
@@ -79,141 +122,221 @@ export function AppLayout(): JSX.Element {
     return { adminLinksBySection: grouped, hasAdminLinks: available.length > 0 };
   }, [user]);
 
+  React.useEffect(() => {
+    setIsSidebarOpen(false);
+  }, [location.pathname]);
+
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
   };
-
-  const isCatalogActive = React.useMemo(
-    () => location.pathname.startsWith('/catalog'),
-    [location.pathname]
-  );
-  const isAdminActive = React.useMemo(
-    () => location.pathname.startsWith('/admin'),
-    [location.pathname]
-  );
 
   const pageTitleKey = React.useMemo(() => {
     const rule = pageTitleRules.find(({ pattern }) => pattern.test(location.pathname));
     return rule?.labelKey ?? 'nav.dashboard';
   }, [location.pathname]);
 
-  const renderNavLink = (to: string, labelKey: string) => (
-    <NavLink key={to} to={to} className={({ isActive }) => `kt-menu__link${isActive ? ' is-active' : ''}`}>
-      <span className="kt-menu__text">{t(labelKey)}</span>
+  const renderNavLink = (item: SidebarItem) => (
+    <NavLink
+      key={item.to}
+      to={item.to}
+      className={({ isActive }) => `kt-sidebar__link${isActive ? ' is-active' : ''}`}
+    >
+      <NavIcon name={item.icon} />
+      <span className="kt-sidebar__link-text">{t(item.labelKey)}</span>
     </NavLink>
   );
 
   return (
-    <div className="kt-body">
-      <div className="kt-page" id="kt_wrapper">
-        <header className="kt-header" id="kt_header">
-          <div className="kt-container">
-            <div className="kt-header__brand">
-              <span className="kt-logo">POS</span>
-              <span className="kt-logo__subtitle">{t('brand')}</span>
+    <div className="kt-shell">
+      <aside className={`kt-sidebar${isSidebarOpen ? ' is-open' : ''}`}>
+        <div className="kt-sidebar__brand">
+          <div className="kt-sidebar__brand-lockup">
+            <img src="/favicon.svg" alt={t('brand')} className="kt-sidebar__brand-icon" />
+            <div className="kt-sidebar__brand-text">
+              <span className="kt-sidebar__brand-title">{t('brand')}</span>
+              <span className="kt-sidebar__brand-subtitle">POS</span>
             </div>
+          </div>
+        </div>
 
-            <nav className="kt-header__menu" aria-label={t('common.navigation')}>
-              <div className="kt-menu kt-menu--primary">
-                {navItems.map((item) => renderNavLink(item.to, item.labelKey))}
-                {catalogLinks.length > 0 && (
-                  <div className={`kt-menu__item kt-menu__item--mega${isCatalogActive ? ' is-active' : ''}`}>
-                    <span className="kt-menu__toggle">
-                      <span className="kt-menu__text">{t('nav.catalogs')}</span>
-                      <span className="kt-menu__arrow" aria-hidden="true">v</span>
-                    </span>
-                    <div className="kt-menu__dropdown" role="menu">
-                      {catalogLinks.map((item) => (
-                        <NavLink
-                          key={item.to}
-                          to={item.to}
-                          className={({ isActive }) =>
-                            `kt-menu__dropdown-link${isActive ? ' is-active' : ''}`
-                          }
-                        >
-                          {t(item.labelKey)}
-                        </NavLink>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {hasAdminLinks && (
-                  <div className={`kt-menu__item kt-menu__item--mega${isAdminActive ? ' is-active' : ''}`}>
-                    <span className="kt-menu__toggle">
-                      <span className="kt-menu__text">{t('nav.administration')}</span>
-                      <span className="kt-menu__arrow" aria-hidden="true">v</span>
-                    </span>
-                    <div className="kt-menu__dropdown" role="menu">
-                      {(['management', 'system'] as const).map((section) => {
-                        const links = adminLinksBySection[section];
-                        if (!links || links.length === 0) {
-                          return null;
-                        }
-                        const label = section === 'system' ? t('nav.system') : t('nav.management');
-                        return (
-                          <div key={section} className="kt-menu__group">
-                            <div className="kt-menu__section-label">{label}</div>
-                            {links.map((item) => (
-                              <NavLink
-                                key={item.to}
-                                to={item.to}
-                                className={({ isActive }) =>
-                                  `kt-menu__dropdown-link${isActive ? ' is-active' : ''}`
-                                }
-                              >
-                                {t(item.labelKey)}
-                              </NavLink>
-                            ))}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </nav>
+        <nav className="kt-sidebar__nav" aria-label={t('common.navigation')}>
+          <div className="kt-sidebar__section">{primaryItems.map(renderNavLink)}</div>
 
-            <div className="kt-header__topbar">
-              <LanguageSwitcher />
-              <div className="kt-user">
-                {user && (
-                  <div className="kt-user__info">
-                    <span className="kt-user__name">{user.fullName}</span>
-                    <br />
-                    <span className="kt-user__role">{user.role}</span>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  className="kt-btn kt-btn--light"
-                  onClick={handleLogout}
-                  disabled={!user}
-                >
-                  {t('common.logout')}
-                </button>
-              </div>
+          {catalogLinks.length > 0 && (
+            <div className="kt-sidebar__section">
+              <p className="kt-sidebar__section-title">{t('nav.catalogs')}</p>
+              {catalogLinks.map(renderNavLink)}
             </div>
+          )}
+
+          {hasAdminLinks && (
+            <div className="kt-sidebar__section">
+              <p className="kt-sidebar__section-title">{t('nav.administration')}</p>
+              {(['management', 'system'] as const).map((section) => {
+                const links = adminLinksBySection[section];
+                if (!links || links.length === 0) {
+                  return null;
+                }
+                const sectionLabel = section === 'system' ? t('nav.system') : t('nav.management');
+                return (
+                  <div key={section} className="kt-sidebar__subsection">
+                    <p className="kt-sidebar__subsection-title">{sectionLabel}</p>
+                    {links.map(renderNavLink)}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </nav>
+      </aside>
+
+      <button
+        type="button"
+        className={`kt-sidebar-backdrop${isSidebarOpen ? ' is-visible' : ''}`}
+        onClick={() => setIsSidebarOpen(false)}
+        aria-label={t('common.close')}
+      />
+
+      <div className="kt-workspace">
+        <header className="kt-topbar">
+          <div className="kt-topbar__left">
+            <button
+              type="button"
+              className="kt-sidebar-toggle"
+              onClick={() => setIsSidebarOpen((current) => !current)}
+              aria-label={t('common.navigation')}
+            >
+              <span />
+              <span />
+              <span />
+            </button>
+            <div>
+              <h1 className="kt-topbar__title">{t(pageTitleKey)}</h1>
+              <p className="kt-topbar__subtitle">{t('nav.subtitle')}</p>
+            </div>
+          </div>
+
+          <div className="kt-topbar__right">
+            <LanguageSwitcher />
+
+            {user && (
+              <div className="kt-user__info">
+                <span className="kt-user__name">{user.fullName}</span>
+                <span className="kt-user__role">{user.role}</span>
+              </div>
+            )}
+
+            <button type="button" className="kt-btn kt-btn--primary" onClick={handleLogout} disabled={!user}>
+              {t('common.logout')}
+            </button>
           </div>
         </header>
 
-        <section className="kt-subheader" role="presentation">
-          <div className="kt-container">
-            <div>
-              <h1 className="kt-subheader__title">{t(pageTitleKey)}</h1>
-              <p className="kt-subheader__subtitle">{t('nav.subtitle')}</p>
-            </div>
-          </div>
-        </section>
-
         <div className="kt-content">
-          <div className="kt-container">
-            <main className="kt-main">
-              <Outlet />
-            </main>
-          </div>
+          <main className="kt-main">
+            <Outlet />
+          </main>
         </div>
       </div>
     </div>
+  );
+}
+
+type NavIconProps = {
+  name: IconName;
+};
+
+function NavIcon({ name }: NavIconProps): JSX.Element {
+  const iconMap: Record<IconName, JSX.Element> = {
+    dashboard: (
+      <>
+        <path d="M4 4h7v7H4zM13 4h7v4h-7zM13 10h7v10h-7zM4 13h7v7H4z" />
+      </>
+    ),
+    pos: (
+      <>
+        <path d="M4 7h16v10H4z" />
+        <path d="M8 7V4h8v3" />
+      </>
+    ),
+    sales: (
+      <>
+        <path d="M4 20h16" />
+        <path d="M7 16v-4" />
+        <path d="M12 16V8" />
+        <path d="M17 16v-7" />
+      </>
+    ),
+    payments: (
+      <>
+        <path d="M3 7h18v10H3z" />
+        <path d="M3 11h18" />
+        <path d="M7 15h4" />
+      </>
+    ),
+    products: (
+      <>
+        <path d="M3 7 12 3l9 4-9 4z" />
+        <path d="M3 7v10l9 4 9-4V7" />
+      </>
+    ),
+    groups: (
+      <>
+        <path d="M3 6h8v5H3zM13 6h8v5h-8zM3 13h8v5H3zM13 13h8v5h-8z" />
+      </>
+    ),
+    customers: (
+      <>
+        <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" />
+        <path d="M5 20a7 7 0 0 1 14 0" />
+      </>
+    ),
+    sellers: (
+      <>
+        <path d="M4 19a8 8 0 0 1 16 0" />
+        <path d="M8 11a4 4 0 1 0 8 0 4 4 0 0 0-8 0z" />
+      </>
+    ),
+    terms: (
+      <>
+        <path d="M7 3h10v18H7z" />
+        <path d="M10 7h4M10 11h4M10 15h4" />
+      </>
+    ),
+    users: (
+      <>
+        <path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+        <path d="M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6z" />
+        <path d="M2 20a6 6 0 0 1 12 0" />
+        <path d="M10 20a6 6 0 0 1 12 0" />
+      </>
+    ),
+    roles: (
+      <>
+        <path d="M12 3 4 7v6c0 5 3.5 7.5 8 8 4.5-.5 8-3 8-8V7z" />
+        <path d="m9 12 2 2 4-4" />
+      </>
+    ),
+    backup: (
+      <>
+        <path d="M4 14h16v6H4z" />
+        <path d="M12 4v10" />
+        <path d="m8 8 4-4 4 4" />
+      </>
+    ),
+    import: (
+      <>
+        <path d="M4 14h16v6H4z" />
+        <path d="M12 4v10" />
+        <path d="m8 10 4 4 4-4" />
+      </>
+    ),
+  };
+
+  return (
+    <svg className="kt-menu__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      {iconMap[name]}
+    </svg>
   );
 }

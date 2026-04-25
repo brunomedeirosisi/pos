@@ -3,6 +3,7 @@ export type SaleStatus = 'draft' | 'completed' | 'cancelled';
 export type SaleItem = {
   id: string;
   product_id: string;
+  product_name?: string | null;
   quantity: number;
   unit_price: number | null;
   total: number | null;
@@ -32,6 +33,9 @@ export type SaleListFilters = {
   seller_id?: string;
   customer_id?: string;
   payment_term_id?: string;
+  page?: number;
+  page_size?: number;
+  limit?: number;
 };
 
 export type SaleItemInput = {

@@ -7,10 +7,10 @@ const languages: { code: string; label: string }[] = [
 ];
 
 export function LanguageSwitcher(): JSX.Element {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
 
   return (
-    <div className="kt-language-switcher" role="group" aria-label="Language switcher">
+    <div className="kt-language-switcher" role="group" aria-label={t('common.languageSwitcher')}>
       {languages.map((lang) => (
         <button
           key={lang.code}

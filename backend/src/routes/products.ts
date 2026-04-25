@@ -4,24 +4,56 @@ import { query } from '../db.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { notFound } from '../errors.js';
 import { requirePermission } from '../middleware/auth.js';
+import { paginationQuerySchema, resolvePagination } from '../utils/pagination.js';
 
 export const router = Router();
 
-const listQuerySchema = z.object({
-  search: z
-    .string()
-    .transform((value) => value.trim())
-    .pipe(z.string().min(1))
-    .optional(),
-  limit: z.coerce.number().int().min(1).max(500).optional(),
-});
+const listQuerySchema = z
+  .object({
+    search: z
+      .string()
+      .transform((value) => value.trim())
+      .pipe(z.string().min(1))
+      .optional(),
+  })
+  .merge(paginationQuerySchema);
+
+function parseDecimalInput(value: unknown) {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value === 'number') return value;
+  if (typeof value !== 'string') return value;
+
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+
+  let normalized = trimmed.replace(/\s+/g, '');
+  normalized = normalized.replace(/[^0-9.,+-]/g, '');
+
+  const commaPos = normalized.lastIndexOf(',');
+  const dotPos = normalized.lastIndexOf('.');
+  if (commaPos > -1 && dotPos > -1) {
+    if (commaPos > dotPos) {
+      normalized = normalized.replace(/\./g, '');
+    } else {
+      normalized = normalized.replace(/,/g, '');
+    }
+  }
+
+  normalized = normalized.replace(',', '.');
+  const parsed = Number(normalized);
+  return Number.isNaN(parsed) ? value : parsed;
+}
+
+const numericField = z.preprocess(parseDecimalInput, z.number().nonnegative().nullable().optional());
 
 const baseSchema = z.object({
   legacy_code: z
     .string()
     .trim()
     .min(1)
-    .optional(),
+    .optional()
+    .nullable(),
   name: z
     .string()
     .trim()
@@ -30,16 +62,18 @@ const baseSchema = z.object({
     .string()
     .trim()
     .min(1)
-    .optional(),
+    .optional()
+    .nullable(),
   group_id: z.string().uuid().nullable().optional(),
   reference: z
     .string()
     .trim()
     .min(1)
-    .optional(),
-  min_stock: z.number().nonnegative().nullable().optional(),
-  price_cash: z.number().nonnegative().nullable().optional(),
-  price_base: z.number().nonnegative().nullable().optional(),
+    .optional()
+    .nullable(),
+  min_stock: numericField,
+  price_cash: numericField,
+  price_base: numericField,
 });
 
 type ProductRow = {
@@ -78,7 +112,8 @@ router.get(
   '/',
   requirePermission('catalog:read'),
   asyncHandler(async (req, res) => {
-    const { search, limit = 100 } = listQuerySchema.parse(req.query);
+    const { search, ...paginationInput } = listQuerySchema.parse(req.query);
+    const pagination = resolvePagination(paginationInput, { defaultPageSize: 100, maxPageSize: 200 });
     const params: unknown[] = [];
     let whereClause = '';
 
@@ -91,15 +126,18 @@ router.get(
       whereClause = `where name ilike $${nameParam} or legacy_code ilike $${legacyParam} or coalesce(barcode, '') ilike $${barcodeParam}`;
     }
 
-    params.push(limit);
+    params.push(pagination.limit);
     const limitParam = params.length;
+    params.push(pagination.offset);
+    const offsetParam = params.length;
 
     const { rows } = await query<ProductRow>(
       `select id, legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base
        from product
        ${whereClause}
        order by name asc
-       limit $${limitParam}`,
+       limit $${limitParam}
+       offset $${offsetParam}`,
       params
     );
     res.json(rows.map(mapProduct));

@@ -5,6 +5,7 @@ import { randomUUID, createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import archiver from 'archiver';
 import extract from 'extract-zip';
+import { getEnv } from '../config/env.js';
 
 type DbConfig = {
   host: string;
@@ -14,10 +15,21 @@ type DbConfig = {
   database: string;
 };
 
-const DEFAULT_BACKUP_DIR = path.resolve(process.cwd(), 'backups');
-const backupDir = process.env.BACKUP_PATH ? path.resolve(process.env.BACKUP_PATH) : DEFAULT_BACKUP_DIR;
+type CommandOptions = {
+  timeoutMs?: number;
+};
 
-export const BACKUP_RETENTION_COUNT = Number(process.env.BACKUP_RETENTION_COUNT ?? '7');
+export type BackupValidationResult = {
+  filename: string;
+  fullPath: string;
+  checksum: string;
+  metadata: BackupMetadata | null;
+};
+
+const env = getEnv();
+const backupDir = path.resolve(env.BACKUP_PATH);
+
+export const BACKUP_RETENTION_COUNT = env.BACKUP_RETENTION_COUNT;
 
 export function getBackupDirectory(): string {
   return backupDir;
@@ -52,31 +64,73 @@ export function generateBackupFilename(prefix = 'backup'): string {
 
 export function getDatabaseConfig(): DbConfig {
   return {
-    host: process.env.POSTGRES_HOST || 'localhost',
-    port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
-    user: process.env.POSTGRES_USER || 'pos',
-    password: process.env.POSTGRES_PASSWORD || 'pospass',
-    database: process.env.POSTGRES_DB || 'posdb',
+    host: env.POSTGRES_HOST,
+    port: env.POSTGRES_PORT,
+    user: env.POSTGRES_USER,
+    password: env.POSTGRES_PASSWORD,
+    database: env.POSTGRES_DB,
   };
 }
 
-function runCommand(command: string, args: string[], env?: NodeJS.ProcessEnv): Promise<void> {
+function assertSafeDbName(databaseName: string): string {
+  if (!/^[a-zA-Z0-9_]+$/.test(databaseName)) {
+    throw new Error('unsafe database name');
+  }
+  return databaseName;
+}
+
+function runCommand(
+  command: string,
+  args: string[],
+  envOverrides?: NodeJS.ProcessEnv,
+  options: CommandOptions = {}
+): Promise<void> {
+  const timeoutMs = options.timeoutMs ?? env.BACKUP_OPERATION_TIMEOUT_MS;
+
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
-      stdio: 'inherit',
+      stdio: ['ignore', 'pipe', 'pipe'],
       env: {
         ...process.env,
-        ...env,
+        ...envOverrides,
       },
     });
 
-    child.on('error', reject);
+    let stderr = '';
+    let stdout = '';
+    let timeoutTriggered = false;
+
+    const timer = setTimeout(() => {
+      timeoutTriggered = true;
+      child.kill('SIGKILL');
+    }, timeoutMs);
+
+    child.stdout.on('data', (chunk) => {
+      stdout += String(chunk);
+    });
+
+    child.stderr.on('data', (chunk) => {
+      stderr += String(chunk);
+    });
+
+    child.on('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+
     child.on('exit', (code) => {
+      clearTimeout(timer);
+      if (timeoutTriggered) {
+        reject(new Error(`${command} timed out after ${timeoutMs}ms`));
+        return;
+      }
       if (code === 0) {
         resolve();
-      } else {
-        reject(new Error(`${command} exited with code ${code}`));
+        return;
       }
+
+      const message = stderr.trim() || stdout.trim() || `${command} exited with code ${code}`;
+      reject(new Error(message));
     });
   });
 }
@@ -117,7 +171,41 @@ export type BackupCreateResult = {
   metadata: BackupMetadata;
 };
 
-export async function createBackupArchive(prefix = 'backup'): Promise<BackupCreateResult> {
+async function extractBackupArchive(fullPath: string): Promise<{ tempDir: string; sqlPath: string; metadata: BackupMetadata | null }> {
+  const tempDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'pos-archive-'));
+  try {
+    await extract(fullPath, { dir: tempDir });
+    const sqlPath = path.join(tempDir, 'backup.sql');
+    const metadataPath = path.join(tempDir, 'backup.json');
+
+    await fsp.access(sqlPath);
+
+    let metadata: BackupMetadata | null = null;
+    try {
+      const metadataRaw = await fsp.readFile(metadataPath, 'utf8');
+      const parsed = JSON.parse(metadataRaw) as BackupMetadata;
+      if (
+        typeof parsed?.createdAt === 'string' &&
+        typeof parsed?.schemaVersion === 'string' &&
+        typeof parsed?.generatedBy === 'string' &&
+        typeof parsed?.id === 'string'
+      ) {
+        metadata = parsed;
+      } else {
+        throw new Error('backup.json has invalid shape');
+      }
+    } catch (error) {
+      throw new Error('backup archive metadata is invalid');
+    }
+
+    return { tempDir, sqlPath, metadata };
+  } catch (error) {
+    await fsp.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+    throw error;
+  }
+}
+
+export async function createBackupArchive(prefix = 'backup', timeoutMs = env.BACKUP_OPERATION_TIMEOUT_MS): Promise<BackupCreateResult> {
   const dir = await ensureBackupDirectory();
   const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'pos-backup-'));
   const sqlPath = path.join(tmpDir, 'backup.sql');
@@ -145,7 +233,8 @@ export async function createBackupArchive(prefix = 'backup'): Promise<BackupCrea
       ],
       {
         PGPASSWORD: db.password,
-      }
+      },
+      { timeoutMs }
     );
 
     const metadata: BackupMetadata = {
@@ -191,44 +280,211 @@ export async function computeChecksum(filePath: string): Promise<string> {
   });
 }
 
-export type RestoreOptions = {
+export async function validateBackupArchive({
+  filename,
+  expectedChecksum,
+}: {
   filename: string;
-};
-
-export async function restoreBackupArchive({ filename }: RestoreOptions): Promise<void> {
+  expectedChecksum?: string | null;
+}): Promise<BackupValidationResult> {
   const dir = await ensureBackupDirectory();
   const safeName = sanitizeBackupFilename(filename);
   const fullPath = path.join(dir, safeName);
   await fsp.access(fullPath);
 
-  const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), 'pos-restore-'));
+  const checksum = await computeChecksum(fullPath);
+  if (expectedChecksum && checksum !== expectedChecksum) {
+    throw new Error('backup checksum mismatch');
+  }
+
+  const extracted = await extractBackupArchive(fullPath);
+  await fsp.rm(extracted.tempDir, { recursive: true, force: true }).catch(() => {});
+
+  return {
+    filename: safeName,
+    fullPath,
+    checksum,
+    metadata: extracted.metadata,
+  };
+}
+
+export async function simulateRestoreArchive({
+  filename,
+  timeoutMs = env.BACKUP_SIMULATION_TIMEOUT_MS,
+}: {
+  filename: string;
+  timeoutMs?: number;
+}): Promise<void> {
+  const dir = await ensureBackupDirectory();
+  const safeName = sanitizeBackupFilename(filename);
+  const fullPath = path.join(dir, safeName);
+  await fsp.access(fullPath);
+
+  const extracted = await extractBackupArchive(fullPath);
+  const db = getDatabaseConfig();
+  const simulationDb = assertSafeDbName(`pos_restore_sim_${Date.now()}_${randomUUID().replace(/-/g, '').slice(0, 8)}`);
 
   try {
-    await extract(fullPath, { dir: tmpDir });
-    const sqlPath = path.join(tmpDir, 'backup.sql');
-    await fsp.access(sqlPath);
+    await runCommand(
+      'psql',
+      [
+        '--host',
+        db.host,
+        '--port',
+        String(db.port),
+        '--username',
+        db.user,
+        '--dbname',
+        'postgres',
+        '--set',
+        'ON_ERROR_STOP=1',
+        '--command',
+        `CREATE DATABASE "${simulationDb}"`,
+      ],
+      { PGPASSWORD: db.password },
+      { timeoutMs }
+    );
 
+    await runCommand(
+      'psql',
+      [
+        '--host',
+        db.host,
+        '--port',
+        String(db.port),
+        '--username',
+        db.user,
+        '--dbname',
+        simulationDb,
+        '--set',
+        'ON_ERROR_STOP=1',
+        '--file',
+        extracted.sqlPath,
+      ],
+      { PGPASSWORD: db.password },
+      { timeoutMs }
+    );
+
+    await runCommand(
+      'psql',
+      [
+        '--host',
+        db.host,
+        '--port',
+        String(db.port),
+        '--username',
+        db.user,
+        '--dbname',
+        simulationDb,
+        '--set',
+        'ON_ERROR_STOP=1',
+        '--command',
+        "DO $$ BEGIN IF to_regclass('public.app_user') IS NULL OR to_regclass('public.app_role') IS NULL THEN RAISE EXCEPTION 'missing required tables'; END IF; END $$;",
+      ],
+      { PGPASSWORD: db.password },
+      { timeoutMs }
+    );
+  } finally {
+    await runCommand(
+      'psql',
+      [
+        '--host',
+        db.host,
+        '--port',
+        String(db.port),
+        '--username',
+        db.user,
+        '--dbname',
+        'postgres',
+        '--set',
+        'ON_ERROR_STOP=1',
+        '--command',
+        `DROP DATABASE IF EXISTS "${simulationDb}"`,
+      ],
+      { PGPASSWORD: db.password },
+      { timeoutMs: Math.max(30_000, Math.floor(timeoutMs / 2)) }
+    ).catch(() => {});
+    await fsp.rm(extracted.tempDir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+export type RestoreOptions = {
+  filename: string;
+  timeoutMs?: number;
+};
+
+export async function restoreBackupArchive({ filename, timeoutMs = env.BACKUP_OPERATION_TIMEOUT_MS }: RestoreOptions): Promise<void> {
+  const dir = await ensureBackupDirectory();
+  const safeName = sanitizeBackupFilename(filename);
+  const fullPath = path.join(dir, safeName);
+  await fsp.access(fullPath);
+
+  const extracted = await extractBackupArchive(fullPath);
+
+  try {
     const db = getDatabaseConfig();
 
     await runCommand(
       'psql',
-      ['--host', db.host, '--port', String(db.port), '--username', db.user, '--dbname', db.database, '--command', 'DROP SCHEMA public CASCADE;'],
-      { PGPASSWORD: db.password }
+      [
+        '--host',
+        db.host,
+        '--port',
+        String(db.port),
+        '--username',
+        db.user,
+        '--dbname',
+        db.database,
+        '--set',
+        'ON_ERROR_STOP=1',
+        '--command',
+        'DROP SCHEMA public CASCADE;',
+      ],
+      { PGPASSWORD: db.password },
+      { timeoutMs }
     );
 
     await runCommand(
       'psql',
-      ['--host', db.host, '--port', String(db.port), '--username', db.user, '--dbname', db.database, '--command', 'CREATE SCHEMA public;'],
-      { PGPASSWORD: db.password }
+      [
+        '--host',
+        db.host,
+        '--port',
+        String(db.port),
+        '--username',
+        db.user,
+        '--dbname',
+        db.database,
+        '--set',
+        'ON_ERROR_STOP=1',
+        '--command',
+        'CREATE SCHEMA public;',
+      ],
+      { PGPASSWORD: db.password },
+      { timeoutMs }
     );
 
     await runCommand(
       'psql',
-      ['--host', db.host, '--port', String(db.port), '--username', db.user, '--dbname', db.database, '--file', sqlPath],
-      { PGPASSWORD: db.password }
+      [
+        '--host',
+        db.host,
+        '--port',
+        String(db.port),
+        '--username',
+        db.user,
+        '--dbname',
+        db.database,
+        '--set',
+        'ON_ERROR_STOP=1',
+        '--file',
+        extracted.sqlPath,
+      ],
+      { PGPASSWORD: db.password },
+      { timeoutMs }
     );
   } finally {
-    await fsp.rm(tmpDir, { recursive: true, force: true });
+    await fsp.rm(extracted.tempDir, { recursive: true, force: true }).catch(() => {});
   }
 }
 

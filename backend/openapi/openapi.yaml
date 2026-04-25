@@ -336,7 +336,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Customer'
+                $ref: '#/components/schemas/CustomerDetails'
         '404':
           $ref: '#/components/responses/NotFoundError'
         '401':
@@ -372,6 +372,194 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
         '403':
           $ref: '#/components/responses/ForbiddenError'
+  /api/v1/customers/{id}/payments:
+    get:
+      tags:
+        - Customers
+      summary: List customer payments
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - in: query
+          name: start_date
+          required: false
+          description: Filter payments from this date (inclusive).
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: end_date
+          required: false
+          description: Filter payments until this date (inclusive).
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: method
+          required: false
+          description: Filter by payment method.
+          schema:
+            type: string
+            enum:
+              - cash
+              - card
+              - bank
+              - other
+              - legacy
+        - in: query
+          name: sort
+          required: false
+          description: Sort direction (payment_date then created_at).
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+      responses:
+        '200':
+          description: Payment history ordered by date with summary totals.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerPaymentsResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+    post:
+      tags:
+        - Customers
+      summary: Register customer payment
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CustomerPaymentWrite'
+      responses:
+        '201':
+          description: Payment recorded with updated balances.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerPaymentCreatedResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /api/v1/customers/{id}/payments/report:
+    get:
+      tags:
+        - Customers
+      summary: Payment history report
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - in: query
+          name: start_date
+          required: false
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: end_date
+          required: false
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: method
+          required: false
+          schema:
+            type: string
+            enum:
+              - cash
+              - card
+              - bank
+              - other
+              - legacy
+        - in: query
+          name: sort
+          required: false
+          schema:
+            type: string
+            enum:
+              - asc
+              - desc
+      responses:
+        '200':
+          description: Payment history, totals and company header ready for printing.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerPaymentHistoryReport'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /api/v1/customers/{customerId}/payments/{paymentId}/receipt:
+    get:
+      tags:
+        - Customers
+      summary: Payment receipt
+      parameters:
+        - in: path
+          name: customerId
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: path
+          name: paymentId
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Receipt payload including balances.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerPaymentReceipt'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /api/v1/customers/{id}/sales:
+    get:
+      tags:
+        - Customers
+      summary: List customer sales history
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      responses:
+        '200':
+          description: Recent sales for the customer.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CustomerSale'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
   /api/v1/sellers:
     get:
       tags:
@@ -981,6 +1169,8 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
         '404':
           $ref: '#/components/responses/NotFoundError'
+        '500':
+          $ref: '#/components/responses/InternalError'
   /api/v1/admin/import/legacy:
     post:
       tags:
@@ -1093,6 +1283,16 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ValidationError'
+    BadRequestError:
+      description: Request is syntactically valid but semantically invalid.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              value:
+                message: bad request
     NotFoundError:
       description: Resource not found.
       content:
@@ -1133,6 +1333,16 @@ components:
             default:
               value:
                 message: forbidden
+    InternalError:
+      description: Unexpected server-side failure.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          examples:
+            default:
+              value:
+                message: internal_error
   schemas:
     ProductGroup:
       type: object
@@ -1325,6 +1535,341 @@ components:
     CustomerPatch:
       allOf:
         - $ref: '#/components/schemas/CustomerWrite'
+    CustomerDetails:
+      allOf:
+        - $ref: '#/components/schemas/Customer'
+        - type: object
+          properties:
+            totals:
+              type: object
+              properties:
+                total_charges:
+                  type: number
+                  format: float
+                total_payments:
+                  type: number
+                  format: float
+                current_balance:
+                  type: number
+                  format: float
+                last_payment_date:
+                  type: string
+                  format: date
+                  nullable: true
+              required:
+                - total_charges
+                - total_payments
+                - current_balance
+          required:
+            - totals
+    CustomerPayment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        amount:
+          type: number
+          format: float
+        payment_date:
+          type: string
+          format: date
+          nullable: true
+        method:
+          type: string
+          enum:
+            - cash
+            - card
+            - bank
+            - other
+            - legacy
+        reference:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+        received_by:
+          type: string
+          format: uuid
+          nullable: true
+        received_by_name:
+          type: string
+          nullable: true
+        source:
+          type: string
+          enum:
+            - manual
+            - legacy
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+      required:
+        - id
+        - amount
+        - method
+        - source
+    CustomerPaymentWrite:
+      type: object
+      properties:
+        amount:
+          type: number
+          format: float
+          exclusiveMinimum: 0
+        payment_date:
+          type: string
+          format: date
+          nullable: true
+        method:
+          type: string
+          enum:
+            - cash
+            - card
+            - bank
+            - other
+        reference:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+      required:
+        - amount
+    CustomerPaymentsSummary:
+      type: object
+      properties:
+        total_debt:
+          type: number
+          format: float
+        total_paid:
+          type: number
+          format: float
+        current_balance:
+          type: number
+          format: float
+        filtered_total_paid:
+          type: number
+          format: float
+        filtered_count:
+          type: integer
+        applied_filters:
+          type: object
+          properties:
+            start_date:
+              type: string
+              format: date
+              nullable: true
+            end_date:
+              type: string
+              format: date
+              nullable: true
+            method:
+              type: string
+              enum:
+                - cash
+                - card
+                - bank
+                - other
+                - legacy
+              nullable: true
+            sort:
+              type: string
+              enum:
+                - asc
+                - desc
+          required:
+            - sort
+      required:
+        - total_debt
+        - total_paid
+        - current_balance
+        - filtered_total_paid
+        - filtered_count
+        - applied_filters
+    CustomerPaymentsResponse:
+      type: object
+      properties:
+        payments:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomerPayment'
+        summary:
+          $ref: '#/components/schemas/CustomerPaymentsSummary'
+      required:
+        - payments
+        - summary
+    CustomerPaymentCreatedResponse:
+      type: object
+      properties:
+        payment:
+          $ref: '#/components/schemas/CustomerPayment'
+        summary:
+          type: object
+          properties:
+            total_debt:
+              type: number
+              format: float
+            total_paid:
+              type: number
+              format: float
+            previous_balance:
+              type: number
+              format: float
+            new_balance:
+              type: number
+              format: float
+          required:
+            - total_debt
+            - total_paid
+            - previous_balance
+            - new_balance
+        receipt_hint:
+          type: string
+          nullable: true
+      required:
+        - payment
+        - summary
+    CompanyInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+        tax_id:
+          type: string
+      required:
+        - name
+        - address
+        - tax_id
+    CustomerSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        legacy_code:
+          type: string
+          nullable: true
+        name:
+          type: string
+        cpf:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        uf:
+          type: string
+          nullable: true
+        cep:
+          type: string
+          nullable: true
+        phone:
+          type: string
+          nullable: true
+      required:
+        - id
+        - name
+    CustomerPaymentReceipt:
+      type: object
+      properties:
+        company:
+          $ref: '#/components/schemas/CompanyInfo'
+        customer:
+          $ref: '#/components/schemas/CustomerSummary'
+        payment:
+          allOf:
+            - $ref: '#/components/schemas/CustomerPayment'
+            - type: object
+              properties:
+                code:
+                  type: string
+        balances:
+          type: object
+          properties:
+            total_debt:
+              type: number
+              format: float
+            total_paid:
+              type: number
+              format: float
+            previous_balance:
+              type: number
+              format: float
+            payment_amount:
+              type: number
+              format: float
+            new_balance:
+              type: number
+              format: float
+          required:
+            - total_debt
+            - total_paid
+            - previous_balance
+            - payment_amount
+            - new_balance
+        generated_at:
+          type: string
+          format: date-time
+      required:
+        - company
+        - customer
+        - payment
+        - balances
+        - generated_at
+    CustomerPaymentHistoryReport:
+      type: object
+      properties:
+        generated_at:
+          type: string
+          format: date-time
+        company:
+          $ref: '#/components/schemas/CompanyInfo'
+        customer:
+          $ref: '#/components/schemas/CustomerSummary'
+        payments:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomerPayment'
+        summary:
+          $ref: '#/components/schemas/CustomerPaymentsSummary'
+      required:
+        - generated_at
+        - company
+        - customer
+        - payments
+        - summary
+    CustomerSale:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        emission_date:
+          type: string
+          format: date
+          nullable: true
+        order_number:
+          type: string
+          nullable: true
+        total:
+          type: number
+          format: float
+          nullable: true
+        status:
+          type: string
+          enum:
+            - draft
+            - completed
+            - cancelled
+      required:
+        - id
+        - status
     Seller:
       type: object
       properties:
@@ -1776,11 +2321,24 @@ components:
       properties:
         status:
           type: string
+          enum:
+            - ok
+            - rolled_back
         restored:
           type: boolean
+        rollbackApplied:
+          type: boolean
+        snapshot:
+          type: string
+        operationId:
+          type: string
+          format: uuid
       required:
         - status
         - restored
+        - rollbackApplied
+        - snapshot
+        - operationId
     LegacyImportRequest:
       type: object
       properties:

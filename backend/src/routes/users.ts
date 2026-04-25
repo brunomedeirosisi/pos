@@ -5,6 +5,7 @@ import { asyncHandler } from '../utils/async-handler.js';
 import { query } from '../db.js';
 import { requirePermission } from '../middleware/auth.js';
 import { badRequest, notFound } from '../errors.js';
+import { paginationQuerySchema, resolvePagination } from '../utils/pagination.js';
 
 type UserRow = {
   id: string;
@@ -31,6 +32,15 @@ const createUserSchema = z.object({
   roleId: z.string().uuid(),
   status: statusSchema.optional(),
 });
+
+const listUsersQuerySchema = z
+  .object({
+    search: z
+      .string()
+      .transform((value) => value.trim())
+      .optional(),
+  })
+  .merge(paginationQuerySchema);
 
 const updateUserSchema = z
   .object({
@@ -120,8 +130,11 @@ router.get(
   '/',
   requirePermission('users:read'),
   asyncHandler(async (req, res) => {
-    const search = typeof req.query.search === 'string' ? req.query.search.trim().toLowerCase() : '';
-    const params: string[] = [];
+    const { search: rawSearch, ...paginationInput } = listUsersQuerySchema.parse(req.query);
+    const search = rawSearch ? rawSearch.toLowerCase() : '';
+    const pagination = resolvePagination(paginationInput, { defaultPageSize: 100, maxPageSize: 200 });
+
+    const params: unknown[] = [];
     let whereClause = '';
 
     if (search) {
@@ -129,7 +142,12 @@ router.get(
       whereClause = `where lower(u.email) like $1 or lower(u.full_name) like $1`;
     }
 
-    const sql = `${baseSelect} ${whereClause} order by lower(u.full_name) asc, lower(u.email) asc`;
+    params.push(pagination.limit);
+    const limitParam = params.length;
+    params.push(pagination.offset);
+    const offsetParam = params.length;
+
+    const sql = `${baseSelect} ${whereClause} order by lower(u.full_name) asc, lower(u.email) asc limit $${limitParam} offset $${offsetParam}`;
     const { rows } = await query<UserRow>(sql, params);
     res.json(rows.map(mapUser));
   })

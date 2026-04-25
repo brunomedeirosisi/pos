@@ -58,36 +58,33 @@ export function LoginPage(): JSX.Element {
       await login(values);
     } catch (error) {
       if (error instanceof ApiError) {
-        toast.show(error.message || 'Invalid credentials', 'error');
+        toast.show(error.message || t('login.invalidCredentials'), 'error');
         return;
       }
-      toast.show('Unable to login', 'error');
+      toast.show(t('login.unableToLogin'), 'error');
     }
   });
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: '#0f172a',
-      }}
-    >
-      <div className="card" style={{ width: 360 }}>
-        <h1 style={{ textAlign: 'center' }}>{t('brand')}</h1>
-        <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+    <div className="login-page">
+      <div className="login-card card">
+        <img src="/assets/branding/logo.png" alt={t('brand')} className="login-card__logo" />
+        <h1 className="login-card__title">{t('login.heading')}</h1>
+        <p className="login-card__subtitle">{t('login.subtitle')}</p>
+
+        <form onSubmit={onSubmit} className="login-form">
           <div className="form-group">
-            <label htmlFor="email">Email</label>
+            <label htmlFor="email">{t('login.emailLabel')}</label>
             <input id="email" type="email" autoComplete="email" {...register('email')} />
-            {errors.email && <small style={{ color: '#dc2626' }}>{errors.email.message}</small>}
+            {errors.email && <small className="form-error">{errors.email.message}</small>}
           </div>
+
           <div className="form-group">
-            <label htmlFor="password">Password</label>
+            <label htmlFor="password">{t('login.passwordLabel')}</label>
             <input id="password" type="password" autoComplete="current-password" {...register('password')} />
-            {errors.password && <small style={{ color: '#dc2626' }}>{errors.password.message}</small>}
+            {errors.password && <small className="form-error">{errors.password.message}</small>}
           </div>
+
           <button type="submit" className="button primary" disabled={isSubmitting || initializing}>
             {isSubmitting ? t('common.loading') : t('common.login')}
           </button>

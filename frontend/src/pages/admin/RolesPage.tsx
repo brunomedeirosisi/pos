@@ -8,18 +8,11 @@ import { rolesService } from '../../services/admin';
 import type { Role } from '../../types/admin';
 import { useToast } from '../../components/ui/ToastProvider';
 import { useHasPermission } from '../../store/auth';
+import { parseLocaleNumericInput } from '../../utils/number';
 
 const numericField = z.preprocess(
-  (value) => {
-    if (value === '' || value === undefined || value === null) return null;
-    const parsed = Number(value);
-    return Number.isNaN(parsed) ? value : parsed;
-  },
-  z
-    .number({ invalid_type_error: 'Invalid number' })
-    .nonnegative()
-    .max(1000)
-    .nullable()
+  parseLocaleNumericInput,
+  z.number({ invalid_type_error: 'Invalid number' }).nonnegative().max(1000).nullable()
 );
 
 const roleSchema = z.object({

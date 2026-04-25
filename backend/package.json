@@ -7,7 +7,12 @@
                     "dev":  "tsx watch src/server.ts",
                     "build":  "tsc -p tsconfig.json",
                     "start":  "node dist/server.js",
-                    "db:init":  "psql \"$POSTGRES_URL\" -f sql/init.sql"
+                    "db:init":  "psql \"$POSTGRES_URL\" -f sql/init.sql",
+                    "migrate":  "tsx src/scripts/run-migrations.ts",
+                    "lint":  "eslint \"src/**/*.ts\"",
+                    "format":  "prettier --check \"src/**/*.ts\" \"openapi/**/*.yaml\" \"sql/**/*.sql\"",
+                    "typecheck":  "tsc --noEmit -p tsconfig.json",
+                    "test":  "vitest run --passWithNoTests"
                 },
     "dependencies":  {
                          "archiver":  "^6.0.2",
@@ -25,7 +30,9 @@
                          "extract-zip":  "^2.0.1",
                          "jsonwebtoken":  "^9.0.2",
                          "dbffile":  "^1.12.0",
-                         "iconv-lite":  "^0.6.3"
+                         "iconv-lite":  "^0.6.3",
+                         "bullmq":  "^5.61.0",
+                         "ioredis":  "^5.8.2"
                      },
     "devDependencies":  {
                             "@types/express":  "^4.17.21",
@@ -39,6 +46,12 @@
                             "@types/archiver":  "^5.3.4",
                             "tsx":  "^4.19.0",
                             "typescript":  "^5.6.3",
-                            "@types/bcryptjs":  "^2.4.2"
+                            "@types/bcryptjs":  "^2.4.2",
+                            "@typescript-eslint/parser":  "^8.46.1",
+                            "eslint":  "^8.57.1",
+                            "prettier":  "^3.6.2",
+                            "supertest":  "^7.1.1",
+                            "@types/supertest":  "^6.0.3",
+                            "vitest":  "^2.1.9"
                         }
 }

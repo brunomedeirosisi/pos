@@ -9,22 +9,46 @@ export class HttpError extends Error {
   }
 }
 
+export type DomainErrorCode = 'validation' | 'not_found' | 'conflict' | 'unauthorized' | 'forbidden' | 'invariant';
+
+const domainStatusCodeMap: Record<DomainErrorCode, number> = {
+  validation: 400,
+  unauthorized: 401,
+  forbidden: 403,
+  not_found: 404,
+  conflict: 409,
+  invariant: 422,
+};
+
+export class DomainError extends HttpError {
+  readonly code: DomainErrorCode;
+
+  constructor(code: DomainErrorCode, message: string, details?: unknown) {
+    super(domainStatusCodeMap[code], message, details);
+    this.code = code;
+  }
+}
+
+export function domainError(code: DomainErrorCode, message: string, details?: unknown): DomainError {
+  return new DomainError(code, message, details);
+}
+
 export function notFound(message = 'not found'): HttpError {
-  return new HttpError(404, message);
+  return domainError('not_found', message);
 }
 
 export function badRequest(message: string, details?: unknown): HttpError {
-  return new HttpError(400, message, details);
+  return domainError('validation', message, details);
 }
 
 export function conflict(message: string, details?: unknown): HttpError {
-  return new HttpError(409, message, details);
+  return domainError('conflict', message, details);
 }
 
 export function unauthorized(message = 'unauthorized'): HttpError {
-  return new HttpError(401, message);
+  return domainError('unauthorized', message);
 }
 
 export function forbidden(message = 'forbidden'): HttpError {
-  return new HttpError(403, message);
+  return domainError('forbidden', message);
 }

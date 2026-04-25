@@ -1,11 +1,13 @@
 import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from 'pg';
+import { getEnv } from './config/env.js';
 
+const env = getEnv();
 const pool = new Pool({
-  host: process.env.POSTGRES_HOST || 'localhost',
-  port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
-  user: process.env.POSTGRES_USER || 'pos',
-  password: process.env.POSTGRES_PASSWORD || 'pospass',
-  database: process.env.POSTGRES_DB || 'posdb',
+  host: env.POSTGRES_HOST,
+  port: env.POSTGRES_PORT,
+  user: env.POSTGRES_USER,
+  password: env.POSTGRES_PASSWORD,
+  database: env.POSTGRES_DB,
 });
 
 export async function query<T extends QueryResultRow = QueryResultRow>(

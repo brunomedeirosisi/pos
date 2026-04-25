@@ -9,6 +9,7 @@ import {
 } from '../../services/legacyImport';
 import { useToast } from '../../components/ui/ToastProvider';
 import { useHasPermission } from '../../store/auth';
+import { ApiError } from '../../api';
 
 const CONFIRMATION_PHRASE = 'IMPORT LEGACY DATA NOW';
 const POLL_INTERVAL_MS = 5_000;
@@ -30,6 +31,25 @@ function formatDate(value: string | null | undefined): string {
   return date.toLocaleString();
 }
 
+function normalizeConfirmationPhrase(value: string): string {
+  return value.normalize('NFKC').replace(/\s+/g, ' ').trim().toUpperCase();
+}
+
+function resolveImportErrorMessage(error: Error, t: (key: string) => string): string {
+  if (error instanceof ApiError) {
+    if (error.message === 'file_too_large') {
+      return t('legacyImport.fileTooLarge');
+    }
+    if (error.message === 'invalid_upload') {
+      return t('legacyImport.fileTooLarge');
+    }
+  }
+  if (error.message === 'file_too_large' || error.message === 'invalid_upload') {
+    return t('legacyImport.fileTooLarge');
+  }
+  return error.message;
+}
+
 export function LegacyImportPage(): JSX.Element {
   const { t } = useTranslation();
   const toast = useToast();
@@ -41,6 +61,8 @@ export function LegacyImportPage(): JSX.Element {
   const [password, setPassword] = useState('');
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [initialResponse, setInitialResponse] = useState<LegacyImportResponse | null>(null);
+  const normalizedConfirmation = normalizeConfirmationPhrase(confirmation);
+  const expectedConfirmation = normalizeConfirmationPhrase(CONFIRMATION_PHRASE);
 
   const importMutation = useMutation({
     mutationFn: legacyImportService.run,
@@ -50,7 +72,7 @@ export function LegacyImportPage(): JSX.Element {
       toast.show(t('legacyImport.queued', { session: response.sessionId }), 'success');
     },
     onError: (error: Error) => {
-      toast.show(error.message, 'error');
+      toast.show(resolveImportErrorMessage(error, t), 'error');
     },
   });
 
@@ -101,7 +123,7 @@ export function LegacyImportPage(): JSX.Element {
       toast.show(t('legacyImport.noFilesSelected'), 'error');
       return;
     }
-    if (confirmation.trim() !== CONFIRMATION_PHRASE) {
+    if (normalizedConfirmation !== expectedConfirmation) {
       toast.show(t('legacyImport.confirmationRequired'), 'error');
       return;
     }
@@ -114,7 +136,7 @@ export function LegacyImportPage(): JSX.Element {
       files,
       overwrite,
       password,
-      confirmation,
+      confirmation: normalizedConfirmation,
     });
   };
 
@@ -227,8 +249,9 @@ export function LegacyImportPage(): JSX.Element {
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            autoComplete="new-password"
+            autoComplete="current-password"
           />
+          <small style={{ color: '#64748b' }}>{t('legacyImport.passwordHint')}</small>
         </div>
       </div>
 

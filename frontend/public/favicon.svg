@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Magazine Medeiros Favicon</title>
+  <desc id="desc">Blue circular icon with M letter, shirt and folded towels.</desc>
+  <defs>
+    <style>
+      .blue{fill:#0B3F91}.blue-stroke{stroke:#0B3F91;stroke-width:18;fill:none;stroke-linecap:round}.white{fill:#FFFFFF}
+    </style>
+  </defs>
+
+  <circle cx="256" cy="256" r="220" class="blue-stroke"/>
+  <path class="blue" d="M72 378V138c0-12 9-21 21-21h28l64 126 65-126h29c12 0 21 9 21 21v240h-47V205l-51 98h-34l-50-98v173H72z"/>
+  <path class="blue" d="M238 146c46 18 102 11 153 4 23-3 40 9 44 31l30 151c5 26-13 48-39 50-55 4-111 11-165-5-14-4-23-16-23-31V146z"/>
+  <path d="M238 150c-28 54-31 124-9 206" fill="none" stroke="#FFFFFF" stroke-width="16" stroke-linecap="round"/>
+  <path class="white" d="M315 194l-22 20-36-13 14-35 30-12h47l30 12 14 35-36 13-22-20v82h-59v-82z"/>
+  <path d="M304 162c7 15 30 15 37 0" fill="none" stroke="#0B3F91" stroke-width="7" stroke-linecap="round"/>
+  <path class="white" d="M374 231h63c14 0 25 11 25 25s-11 25-25 25h-63c-14 0-25-11-25-25s11-25 25-25z"/>
+  <path class="white" d="M355 282h74c14 0 25 11 25 25s-11 25-25 25h-74c-14 0-25-11-25-25s11-25 25-25z"/>
+  <path class="white" d="M374 333h63c14 0 25 11 25 25s-11 25-25 25h-63c-14 0-25-11-25-25s11-25 25-25z"/>
+  <path d="M378 256h50M360 307h58M378 358h50" fill="none" stroke="#0B3F91" stroke-width="9" stroke-linecap="round"/>
+</svg>

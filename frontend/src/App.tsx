@@ -8,12 +8,16 @@ import { SaleDetailsPage } from './pages/SaleDetailsPage';
 import { ProductsPage } from './pages/catalog/ProductsPage';
 import { ProductGroupsPage } from './pages/catalog/ProductGroupsPage';
 import { CustomersPage } from './pages/catalog/CustomersPage';
+import { CustomerDetailsPage } from './pages/catalog/CustomerDetailsPage';
 import { SellersPage } from './pages/catalog/SellersPage';
 import { PaymentTermsPage } from './pages/catalog/PaymentTermsPage';
+import { PaymentsPage } from './pages/PaymentsPage';
 import { UsersPage } from './pages/admin/UsersPage';
 import { RolesPage } from './pages/admin/RolesPage';
 import { BackupRestorePage } from './pages/admin/BackupRestorePage';
 import { LegacyImportPage } from './pages/admin/LegacyImportPage';
+import { CustomerPaymentReceiptPage } from './pages/catalog/CustomerPaymentReceiptPage';
+import { CustomerPaymentHistoryReportPage } from './pages/catalog/CustomerPaymentHistoryReportPage';
 import { LoginPage } from './pages/LoginPage';
 import { RequireAuth } from './components/auth/RequireAuth';
 
@@ -24,13 +28,16 @@ export function App(): JSX.Element {
       <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
         <Route index element={<DashboardPage />} />
         <Route path="pos" element={<PosPage />} />
-        <Route path="sales" element={<SalesListPage />}>
-          <Route path=":id" element={<SaleDetailsPage />} />
-        </Route>
+        <Route path="sales" element={<SalesListPage />} />
+        <Route path="sales/:id" element={<SaleDetailsPage />} />
+        <Route path="payments" element={<PaymentsPage />} />
         <Route path="catalog">
           <Route path="products" element={<ProductsPage />} />
           <Route path="product-groups" element={<ProductGroupsPage />} />
           <Route path="customers" element={<CustomersPage />} />
+          <Route path="customers/:id" element={<CustomerDetailsPage />} />
+          <Route path="customers/:id/payments/history" element={<CustomerPaymentHistoryReportPage />} />
+          <Route path="customers/:customerId/payments/:paymentId/receipt" element={<CustomerPaymentReceiptPage />} />
           <Route path="sellers" element={<SellersPage />} />
           <Route path="payment-terms" element={<PaymentTermsPage />} />
           <Route index element={<Navigate to="products" replace />} />

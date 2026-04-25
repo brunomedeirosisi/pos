@@ -1,0 +1,3 @@
+docker compose up -d reverse-proxy
+docker compose cp reverse-proxy:/data/caddy/pki/authorities/local/root.crt .\infra\caddy-local-root.crt
+Import-Certificate -FilePath .\infra\caddy-local-root.crt -CertStoreLocation Cert:\CurrentUser\Root

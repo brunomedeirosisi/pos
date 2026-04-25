@@ -4,6 +4,7 @@ import { asyncHandler } from '../utils/async-handler.js';
 import { query } from '../db.js';
 import { requirePermission } from '../middleware/auth.js';
 import { badRequest, conflict, notFound } from '../errors.js';
+import { paginationQuerySchema, resolvePagination } from '../utils/pagination.js';
 
 type RoleRow = {
   id: string;
@@ -43,6 +44,15 @@ const createRoleSchema = z.object({
     .max(1000)
     .optional(),
 });
+
+const listRolesQuerySchema = z
+  .object({
+    search: z
+      .string()
+      .transform((value) => value.trim())
+      .optional(),
+  })
+  .merge(paginationQuerySchema);
 
 const updateRoleSchema = z
   .object({
@@ -93,8 +103,26 @@ async function ensureRoleExists(id: string) {
 router.get(
   '/',
   requirePermission('roles:read', 'users:read'),
-  asyncHandler(async (_req, res) => {
-    const { rows } = await query<RoleRow>(`${baseSelect} order by lower(name) asc`);
+  asyncHandler(async (req, res) => {
+    const { search, ...paginationInput } = listRolesQuerySchema.parse(req.query);
+    const pagination = resolvePagination(paginationInput, { defaultPageSize: 100, maxPageSize: 200 });
+
+    const params: unknown[] = [];
+    let whereClause = '';
+    if (search) {
+      params.push(`%${search.toLowerCase()}%`);
+      whereClause = 'where lower(name) like $1';
+    }
+
+    params.push(pagination.limit);
+    const limitParam = params.length;
+    params.push(pagination.offset);
+    const offsetParam = params.length;
+
+    const { rows } = await query<RoleRow>(
+      `${baseSelect} ${whereClause} order by lower(name) asc limit $${limitParam} offset $${offsetParam}`,
+      params
+    );
     res.json(rows.map(mapRole));
   })
 );

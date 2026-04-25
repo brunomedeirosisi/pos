@@ -139,7 +139,7 @@ export function SaleDetailsPage(): JSX.Element | null {
             )}
             {sale.items.map((item) => (
               <tr key={item.id}>
-                <td>{item.product_id}</td>
+                <td>{item.product_name ?? item.product_id}</td>
                 <td>{item.quantity}</td>
                 <td>R$ {(item.unit_price ?? 0).toFixed(2)}</td>
                 <td>R$ {(item.total ?? item.quantity * (item.unit_price ?? 0)).toFixed(2)}</td>

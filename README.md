@@ -37,9 +37,37 @@ Then open: `https://pos.localhost/`
 - `GET /api/v1/products/:id` – get product
 - `PATCH /api/v1/products/:id` – update product
 
+### Customer Payment & Debt Management
+
+- Register customer payments with balance validation, view history with filters/sorting, and print receipts or full history reports from the frontend.
+- API additions:
+  - `GET /api/v1/customers/{id}/payments` – history + summary (supports `start_date`, `end_date`, `method`, `sort`)
+  - `POST /api/v1/customers/{id}/payments` – registers payment and returns updated balances
+  - `GET /api/v1/customers/{id}/payments/report` – printable history with totals/company header
+  - `GET /api/v1/customers/{customerId}/payments/{paymentId}/receipt` – receipt payload with previous/new balance
+- Configure company header on receipts/reports via `COMPANY_NAME`, `COMPANY_ADDRESS`, `COMPANY_TAX_ID` in your environment.
+
+### Legacy Import (Phase 5)
+
+- Queue is persistent (`Redis + BullMQ`) with retry and DLQ.
+- Import status now includes stage checkpoints.
+- Versioned reconciliation reports:
+  - `GET /api/v1/admin/import/legacy/{sessionId}/report` (CSV)
+  - `GET /api/v1/admin/import/legacy/{sessionId}/report.json` (JSON v1)
+- Legacy import schema must be applied via versioned migrations (`backend/sql/migrations`), not by runtime table creation.
+
 ### PWA & Offline
 
 This starter registers a basic service worker and includes a `manifest.webmanifest`. Extend `src/sw.ts` and caching strategy.
+
+### Visual Design System
+
+- The application now follows the Magazine Medeiros visual baseline (sidebar/topbar shell, brand palette, Inter typography, standardized UI primitives).
+- Reference implementation details: `docs/design-system-visual-remodel.md`.
+- Brand assets in use:
+  - `frontend/public/assets/branding/logo.png`
+  - `frontend/public/favicon.svg`
+
 
 ### Migration (DBF → Staging → Core)
 
@@ -56,6 +84,7 @@ cd backend
 npm i
 npm run dev          # local dev outside docker
 npm run db:init      # apply init.sql to local DB (requires POSTGRES_* envs)
+npm run migrate      # apply versioned migrations from backend/sql/migrations
 
 # frontend
 cd frontend
