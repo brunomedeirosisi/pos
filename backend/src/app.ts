@@ -1,6 +1,5 @@
 import express from 'express';
 import helmet from 'helmet';
-import morgan from 'morgan';
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
 import { readFileSync } from 'node:fs';
@@ -23,6 +22,8 @@ import { router as adminLegacyImportRouter } from './routes/admin-legacy-import.
 import { dashboardRouter } from './modules/dashboard/http/dashboard-router.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { requireAuth } from './middleware/auth.js';
+import { attachRequestId, requestLoggingMiddleware } from './observability/request-context.js';
+import { metricsHandler, metricsMiddleware } from './observability/metrics.js';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const openApiPath = path.resolve(currentDir, '../openapi/openapi.yaml');
@@ -49,13 +50,16 @@ const corsOptions: cors.CorsOptions = {
 export const app = express();
 app.set('trust proxy', true);
 app.disable('x-powered-by');
+app.use(attachRequestId);
+app.use(metricsMiddleware);
 app.use(helmet());
 app.use(cors(corsOptions));
 app.use(express.json());
-app.use(morgan('combined'));
+app.use(requestLoggingMiddleware);
 
 app.use('/api/v1/health', healthRouter);
 app.use('/api/v1/auth', authRouter);
+app.get('/api/v1/metrics', metricsHandler);
 
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
 app.get('/api/v1/openapi.json', (_req, res) => {

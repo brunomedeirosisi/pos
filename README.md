@@ -32,10 +32,18 @@ Then open: `https://pos.localhost/`
 ### Endpoints
 
 - `GET /api/v1/health` – health check
+- `GET /api/v1/metrics` – Prometheus metrics (requires `x-metrics-token` in production when `METRICS_TOKEN` is configured)
 - `GET /api/v1/products` – list products
 - `POST /api/v1/products` – create product
 - `GET /api/v1/products/:id` – get product
 - `PATCH /api/v1/products/:id` – update product
+
+### Observability
+
+- Each request now receives an `x-request-id` correlation id (reused when client sends one).
+- API logs are structured (JSON via `pino`) and include request id, route template, latency, and status code.
+- Prometheus metrics are exposed on `/api/v1/metrics` with default process/runtime counters plus HTTP request metrics.
+- In production, set `METRICS_TOKEN` and send it through header `x-metrics-token`.
 
 ### Customer Payment & Debt Management
 

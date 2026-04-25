@@ -43,6 +43,29 @@ paths:
                 required:
                   - status
                   - time
+  /api/v1/metrics:
+    get:
+      tags:
+        - Health
+      summary: Prometheus metrics endpoint
+      description: Returns service/process metrics for observability tooling.
+      security: []
+      parameters:
+        - in: header
+          name: x-metrics-token
+          required: false
+          description: Required in production when METRICS_TOKEN is configured.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Prometheus metrics payload.
+          content:
+            text/plain:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
   /api/v1/auth/login:
     post:
       tags:

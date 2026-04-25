@@ -34,6 +34,21 @@ function buildUrl(path: string, query?: ApiOptions['query']) {
   return queryString ? `${API_BASE}${path}?${queryString}` : `${API_BASE}${path}`;
 }
 
+export function parseApiErrorMessage(statusText: string, body: unknown): string {
+  if (body && typeof body === 'object') {
+    const message = (body as { message?: unknown }).message;
+    if (typeof message === 'string' && message.trim().length > 0) {
+      return message;
+    }
+  }
+
+  if (typeof body === 'string' && body.trim().length > 0) {
+    return body;
+  }
+
+  return statusText;
+}
+
 export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
   const { query, json, formData, headers, responseType = 'json', ...rest } = options;
   const url = buildUrl(path, query);
@@ -71,16 +86,14 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
     if (errorContentType?.includes('application/json')) {
       try {
         errorBody = await response.json();
-        message = (errorBody as any)?.message ?? message;
+        message = parseApiErrorMessage(message, errorBody);
       } catch {
         // ignore parse errors
       }
     } else {
       try {
         errorBody = await response.text();
-        if (typeof errorBody === 'string' && errorBody.length > 0) {
-          message = errorBody;
-        }
+        message = parseApiErrorMessage(message, errorBody);
       } catch {
         // ignore
       }
