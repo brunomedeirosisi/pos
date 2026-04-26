@@ -182,6 +182,18 @@ export type CustomerSale = {
   order_number: string | null;
   total: number | null;
   status: 'draft' | 'completed' | 'cancelled';
+  seller_id: string | null;
+  seller_name: string | null;
+  items: CustomerSaleItem[];
+};
+
+export type CustomerSaleItem = {
+  id: string;
+  product_id: string | null;
+  product_name: string | null;
+  quantity: number;
+  unit_price: number | null;
+  total: number | null;
 };
 
 export type Seller = {

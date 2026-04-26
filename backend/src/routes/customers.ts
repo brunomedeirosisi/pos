@@ -63,6 +63,15 @@ type CustomerDetailsRow = {
   last_payment_date: string | null;
 };
 
+type CustomerSaleItem = {
+  id: string;
+  product_id: string | null;
+  product_name: string | null;
+  quantity: number;
+  unit_price: number | null;
+  total: number | null;
+};
+
 function toNumber(value: string | number | null | undefined): number {
   if (value == null) return 0;
   if (typeof value === 'number') {
@@ -87,6 +96,38 @@ function toDateOnly(value: unknown): string | null {
     return Number.isNaN(parsed.getTime()) ? null : (parsed.toISOString().split('T')[0] ?? null);
   }
   return null;
+}
+
+function toNullableString(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+function parseCustomerSaleItems(value: unknown): CustomerSaleItem[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') {
+      return [];
+    }
+
+    const item = entry as Record<string, unknown>;
+    if (typeof item.id !== 'string') {
+      return [];
+    }
+
+    return [
+      {
+        id: item.id,
+        product_id: toNullableString(item.product_id),
+        product_name: toNullableString(item.product_name),
+        quantity: toNumber(item.quantity as string | number | null | undefined),
+        unit_price: item.unit_price == null ? null : toNumber(item.unit_price as string | number | null | undefined),
+        total: item.total == null ? null : toNumber(item.total as string | number | null | undefined),
+      },
+    ];
+  });
 }
 
 router.get(
@@ -233,11 +274,39 @@ router.get(
       order_number: string | null;
       total: string | number | null;
       status: string;
+      seller_id: string | null;
+      seller_name: string | null;
+      items: unknown;
     }>(
-      `select id, emission_date, order_number, total, status
-       from sale
-       where customer_id = $1 and status != 'draft'
-       order by emission_date desc, id desc
+      `select
+         s.id,
+         s.emission_date,
+         s.order_number,
+         s.total,
+         s.status,
+         s.seller_id,
+         seller_ref.name as seller_name,
+         coalesce(items_agg.items, '[]'::json) as items
+       from sale s
+       left join seller seller_ref on seller_ref.id = s.seller_id
+       left join lateral (
+         select json_agg(
+           json_build_object(
+             'id', si.id,
+             'product_id', si.product_id,
+             'product_name', p.name,
+             'quantity', si.quantity,
+             'unit_price', si.unit_price,
+             'total', si.total
+           )
+           order by p.name asc nulls last, si.id asc
+         ) as items
+         from sale_item si
+         left join product p on p.id = si.product_id
+         where si.sale_id = s.id
+       ) as items_agg on true
+       where s.customer_id = $1 and s.status != 'draft'
+       order by s.emission_date desc, s.id desc
        limit $2
        offset $3`,
       [req.params.id, pagination.limit, pagination.offset]
@@ -249,6 +318,9 @@ router.get(
       order_number: row.order_number ?? null,
       total: toNumber(row.total),
       status: row.status as 'draft' | 'completed' | 'cancelled',
+      seller_id: row.seller_id ?? null,
+      seller_name: row.seller_name ?? null,
+      items: parseCustomerSaleItems(row.items),
     }));
 
     res.json(formatted);

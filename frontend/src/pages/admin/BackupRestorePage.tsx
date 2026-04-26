@@ -5,6 +5,7 @@ import { backupService } from '../../services/backup';
 import type { BackupRecord } from '../../types/backup';
 import { useToast } from '../../components/ui/ToastProvider';
 import { useHasPermission } from '../../store/auth';
+import { formatDateTimeDdMmYyyy } from '../../utils/date';
 
 function formatBytes(bytes: number): string {
   if (!bytes || bytes <= 0) return '0 B';
@@ -12,14 +13,6 @@ function formatBytes(bytes: number): string {
   const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   const value = bytes / 1024 ** exponent;
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${units[exponent]}`;
-}
-
-function formatDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleString();
 }
 
 export function BackupRestorePage(): JSX.Element {
@@ -309,7 +302,7 @@ export function BackupRestorePage(): JSX.Element {
               {sortedBackups.map((backup) => (
                 <tr key={backup.id}>
                   <td>{backup.filename}</td>
-                  <td>{formatDate(backup.createdAt)}</td>
+                  <td>{formatDateTimeDdMmYyyy(backup.createdAt)}</td>
                   <td>{formatBytes(backup.sizeBytes)}</td>
                   <td>{backup.createdBy?.fullName ?? t('common.none')}</td>
                   <td>

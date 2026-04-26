@@ -10,6 +10,7 @@ import IORedis from 'ioredis';
 import type { PoolClient } from 'pg';
 import { query, withTransaction } from '../../db.js';
 import { getEnv } from '../../config/env.js';
+import { formatDateOnly, normalizeLegacyDate } from './date-utils.js';
 
 type LegacyImportJob = {
   id: string;
@@ -271,15 +272,6 @@ function normalizeNumber(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function normalizeDate(value: unknown): Date | null {
-  if (value instanceof Date) return value;
-  if (typeof value === 'string' && value.trim().length) {
-    const parsed = new Date(value);
-    if (!Number.isNaN(parsed.getTime())) return parsed;
-  }
-  return null;
-}
-
 function normalizeLegacyCodeNumber(value: string): string | null {
   const parsed = normalizeNumber(value);
   if (parsed == null || !Number.isFinite(parsed) || !Number.isInteger(parsed)) {
@@ -478,7 +470,7 @@ async function loadDbfIntoStaging(
       config.columns.map((column) => {
         const value = record[column.field];
         if (value instanceof Date) {
-          return value.toISOString();
+          return formatDateOnly(value);
         }
         if (value === null || value === undefined) return null;
         return String(value).trim();
@@ -809,10 +801,12 @@ async function migrateCustomerPayments(client?: PoolClient): Promise<number> {
       }
     }
     if (!amount || amount <= 0) continue;
+    const paymentDate = normalizeLegacyDate(row.pagamento);
+    if (!paymentDate) continue;
     batch.push([
       customerId,
       amount,
-      normalizeDate(row.pagamento) ?? new Date(),
+      paymentDate,
       'legacy',
       null,
       null,
@@ -854,7 +848,7 @@ async function migrateStockMovements(client?: PoolClient): Promise<number> {
     if (!productId) continue;
     batch.push([
       productId,
-      normalizeDate(row.data),
+      normalizeLegacyDate(row.data),
       normalizeString(row.tip_mov),
       normalizeNumber(row.qtde),
       normalizeNumber(row.valor),
@@ -1070,7 +1064,7 @@ async function migrateSales(overwrite: boolean, client?: PoolClient): Promise<Sa
       if (!sourceNumber) continue;
       const sourceKey = buildDeduplicatedSourceKey(sourceNumber, salesSourceCount);
 
-      const emission = normalizeDate(row.emissao);
+      const emission = normalizeLegacyDate(row.emissao);
       const sellerId = resolveLegacyId(sellerMap, row.cod_vend);
       let customerId = row.cod_cli ? resolveCustomerId(customerMap, row.cod_cli) : null;
       let paymentTermId = resolveLegacyId(paymentTermMap, row.cod_fpg);
@@ -1133,7 +1127,7 @@ async function migrateSales(overwrite: boolean, client?: PoolClient): Promise<Sa
       if (!sourceNumber) continue;
       const sourceKey = buildDeduplicatedSourceKey(sourceNumber, ordersSourceCount);
 
-      const emission = normalizeDate(row.emissao);
+      const emission = normalizeLegacyDate(row.emissao);
       const sellerId = resolveLegacyId(sellerMap, row.cod_vend);
       let customerId = row.cod_cli ? resolveCustomerId(customerMap, row.cod_cli) : null;
       let paymentTermId = resolveLegacyId(paymentTermMap, row.cod_fpg);
@@ -1194,7 +1188,7 @@ async function migrateSales(overwrite: boolean, client?: PoolClient): Promise<Sa
     if (!sourceNumber) continue;
     const sourceKey = buildDeduplicatedSourceKey(sourceNumber, salesSourceCount);
 
-    const emission = normalizeDate(row.emissao);
+    const emission = normalizeLegacyDate(row.emissao);
     const sellerId = resolveLegacyId(sellerMap, row.cod_vend);
     let customerId = row.cod_cli ? resolveCustomerId(customerMap, row.cod_cli) : null;
     let paymentTermId = resolveLegacyId(paymentTermMap, row.cod_fpg);
@@ -1266,7 +1260,7 @@ discount, total, status, source, source_key)
     if (!sourceNumber) continue;
     const sourceKey = buildDeduplicatedSourceKey(sourceNumber, ordersSourceCount);
 
-    const emission = normalizeDate(row.emissao);
+    const emission = normalizeLegacyDate(row.emissao);
     const sellerId = resolveLegacyId(sellerMap, row.cod_vend);
     let customerId = row.cod_cli ? resolveCustomerId(customerMap, row.cod_cli) : null;
     let paymentTermId = resolveLegacyId(paymentTermMap, row.cod_fpg);

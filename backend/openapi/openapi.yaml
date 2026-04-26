@@ -1867,6 +1867,33 @@ components:
         - customer
         - payments
         - summary
+    CustomerSaleItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        product_id:
+          type: string
+          format: uuid
+          nullable: true
+        product_name:
+          type: string
+          nullable: true
+        quantity:
+          type: number
+          format: float
+        unit_price:
+          type: number
+          format: float
+          nullable: true
+        total:
+          type: number
+          format: float
+          nullable: true
+      required:
+        - id
+        - quantity
     CustomerSale:
       type: object
       properties:
@@ -1880,6 +1907,13 @@ components:
         order_number:
           type: string
           nullable: true
+        seller_id:
+          type: string
+          format: uuid
+          nullable: true
+        seller_name:
+          type: string
+          nullable: true
         total:
           type: number
           format: float
@@ -1890,9 +1924,14 @@ components:
             - draft
             - completed
             - cancelled
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CustomerSaleItem'
       required:
         - id
         - status
+        - items
     Seller:
       type: object
       properties:

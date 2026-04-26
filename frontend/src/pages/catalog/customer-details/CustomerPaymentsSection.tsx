@@ -15,7 +15,6 @@ type PaymentFormValues = {
 
 type CustomerPaymentsSectionProps = {
   t: TFunction;
-  language: string;
   canWriteCatalog: boolean;
   currentBalance: number;
   isRegisterDisabled: boolean;
@@ -48,7 +47,6 @@ type CustomerPaymentsSectionProps = {
 export function CustomerPaymentsSection(props: CustomerPaymentsSectionProps): JSX.Element {
   const {
     t,
-    language,
     canWriteCatalog,
     currentBalance,
     isRegisterDisabled,
@@ -106,7 +104,7 @@ export function CustomerPaymentsSection(props: CustomerPaymentsSectionProps): JS
 
     return payments.map((payment) => (
       <tr key={payment.id}>
-        <td>{formatDate(payment.payment_date, language)}</td>
+        <td>{formatDate(payment.payment_date)}</td>
         <td>{formatCurrency(payment.amount)}</td>
         <td>
           {payment.received_by_name ?? '-'}

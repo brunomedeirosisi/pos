@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { dashboardService } from '../services/dashboard';
 import { useHasPermission } from '../store/auth';
+import { formatDateDdMmYyyy, getTodayIsoDate } from '../utils/date';
 import type {
   CategoriesMetric,
   DashboardFilters,
@@ -28,8 +29,8 @@ function getDefaultDateRange() {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
   return {
-    startDate: start.toISOString().slice(0, 10),
-    endDate: now.toISOString().slice(0, 10),
+    startDate: getTodayIsoDate(start),
+    endDate: getTodayIsoDate(now),
   };
 }
 
@@ -517,7 +518,7 @@ export function DashboardPage(): JSX.Element {
                   <tbody>
                     {salesSeries.map((item, index) => (
                       <tr key={item.date}>
-                        <td>{item.date}</td>
+                        <td>{formatDateDdMmYyyy(item.date)}</td>
                         <td>{formatCurrency(item.revenue, i18n.language)}</td>
                         <td>{formatCurrency(cumulativeLineValues[index] ?? 0, i18n.language)}</td>
                         <td>{item.orders}</td>

@@ -10,6 +10,7 @@ import {
 import { useToast } from '../../components/ui/ToastProvider';
 import { useHasPermission } from '../../store/auth';
 import { ApiError } from '../../api';
+import { formatDateTimeDdMmYyyy } from '../../utils/date';
 
 const CONFIRMATION_PHRASE = 'IMPORT LEGACY DATA NOW';
 const POLL_INTERVAL_MS = 5_000;
@@ -25,10 +26,7 @@ const FALLBACK_LOGS = [
 ];
 
 function formatDate(value: string | null | undefined): string {
-  if (!value) return 'N/A';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return formatDateTimeDdMmYyyy(value, 'N/A');
 }
 
 function normalizeConfirmationPhrase(value: string): string {

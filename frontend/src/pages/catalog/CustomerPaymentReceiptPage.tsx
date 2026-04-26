@@ -4,6 +4,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { customersService } from '../../services/catalog';
 import type { CustomerPaymentReceipt } from '../../types/catalog';
+import { formatDateTimeDdMmYyyy } from '../../utils/date';
 
 const currencyFormatter = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'BRL' });
 
@@ -12,15 +13,8 @@ function formatCurrency(value: number | null | undefined): string {
   return currencyFormatter.format(value);
 }
 
-function formatDateTime(value: string | null | undefined, locale: string): string {
-  if (!value) return '-';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString(locale);
-}
-
 export function CustomerPaymentReceiptPage(): JSX.Element {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { customerId, paymentId } = useParams<{ customerId: string; paymentId: string }>();
   const navigate = useNavigate();
   const paymentMethodLabels = React.useMemo(
@@ -87,8 +81,8 @@ export function CustomerPaymentReceiptPage(): JSX.Element {
           </div>
           <div className="text-right">
             <div className="receipt-code">{payment.code}</div>
-            <div>{t('customers.paymentDateTime')}: {formatDateTime(payment.created_at, i18n.language)}</div>
-            <div>{t('customers.generatedAt')}: {formatDateTime(generated_at, i18n.language)}</div>
+            <div>{t('customers.paymentDateTime')}: {formatDateTimeDdMmYyyy(payment.created_at)}</div>
+            <div>{t('customers.generatedAt')}: {formatDateTimeDdMmYyyy(generated_at)}</div>
           </div>
         </div>
 

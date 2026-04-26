@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { customersService } from '../../services/catalog';
 import type { CustomerPaymentHistoryReport, CustomerPaymentMethod } from '../../types/catalog';
+import { formatDateDdMmYyyy, formatDateTimeDdMmYyyy } from '../../utils/date';
 
 const currencyFormatter = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'BRL' });
 
@@ -12,22 +13,8 @@ function formatCurrency(value: number | null | undefined): string {
   return currencyFormatter.format(value);
 }
 
-function formatDate(value: string | null | undefined, locale: string): string {
-  if (!value) return '-';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString(locale);
-}
-
-function formatDateTime(value: string | null | undefined, locale: string): string {
-  if (!value) return '-';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleString(locale);
-}
-
 export function CustomerPaymentHistoryReportPage(): JSX.Element {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -98,7 +85,7 @@ export function CustomerPaymentHistoryReportPage(): JSX.Element {
           </div>
           <div className="text-right">
             <div className="receipt-code">{t('customers.paymentHistoryReportTitle')}</div>
-            <div>{t('customers.generatedAt')}: {formatDateTime(generated_at, i18n.language)}</div>
+            <div>{t('customers.generatedAt')}: {formatDateTimeDdMmYyyy(generated_at)}</div>
           </div>
         </div>
 
@@ -135,8 +122,12 @@ export function CustomerPaymentHistoryReportPage(): JSX.Element {
         <div className="printable-section">
           <p className="text-muted">
             {t('customers.appliedFilters', {
-              start: summary.applied_filters.start_date ?? t('customers.notInformed'),
-              end: summary.applied_filters.end_date ?? t('customers.notInformed'),
+              start: summary.applied_filters.start_date
+                ? formatDateDdMmYyyy(summary.applied_filters.start_date)
+                : t('customers.notInformed'),
+              end: summary.applied_filters.end_date
+                ? formatDateDdMmYyyy(summary.applied_filters.end_date)
+                : t('customers.notInformed'),
               method: summary.applied_filters.method
                 ? paymentMethodLabels[summary.applied_filters.method]
                 : t('customers.paymentMethodAll'),
@@ -166,7 +157,7 @@ export function CustomerPaymentHistoryReportPage(): JSX.Element {
               ) : (
                 payments.map((payment) => (
                   <tr key={payment.id}>
-                    <td>{formatDate(payment.payment_date, i18n.language)}</td>
+                    <td>{formatDateDdMmYyyy(payment.payment_date)}</td>
                     <td>{formatCurrency(payment.amount)}</td>
                     <td>{paymentMethodLabels[payment.method]}</td>
                     <td>{payment.received_by_name ?? '-'}</td>

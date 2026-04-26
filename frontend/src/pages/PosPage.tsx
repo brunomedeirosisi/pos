@@ -10,6 +10,7 @@ import { useToast } from '../components/ui/ToastProvider';
 import type { Product } from '../types/catalog';
 import type { SaleInput } from '../types/sales';
 import { useHasPermission } from '../store/auth';
+import { getTodayIsoDate } from '../utils/date';
 
 const MIN_SEARCH_LENGTH = 2;
 
@@ -100,7 +101,7 @@ export function PosPage(): JSX.Element {
     }
 
     const payload: SaleInput = {
-      emission_date: new Date().toISOString().slice(0, 10),
+      emission_date: getTodayIsoDate(),
       order_number: orderNumber ? orderNumber : null,
       customer_id: customerId,
       seller_id: sellerId,

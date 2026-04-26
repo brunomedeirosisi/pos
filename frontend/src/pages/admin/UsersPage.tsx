@@ -9,6 +9,7 @@ import type { User, Role } from '../../types/admin';
 import { useToast } from '../../components/ui/ToastProvider';
 import { useHasPermission } from '../../store/auth';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import { formatDateTimeDdMmYyyy } from '../../utils/date';
 
 const userFormSchema = z.object({
   fullName: z.string().trim().min(1, 'Required'),
@@ -199,7 +200,7 @@ export function UsersPage(): JSX.Element {
         <td>
           <span className="badge">{item.status === 'active' ? t('customers.statusActive') : t('customers.statusInactive')}</span>
         </td>
-        <td>{item.lastLoginAt ? new Date(item.lastLoginAt).toLocaleString() : '--'}</td>
+        <td>{item.lastLoginAt ? formatDateTimeDdMmYyyy(item.lastLoginAt) : '--'}</td>
         <td>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button type="button" className="button secondary" onClick={() => openEditForm(item)} disabled={!canManageUsers}>

@@ -6,6 +6,7 @@ import { salesService } from '../services/sales';
 import { useToast } from '../components/ui/ToastProvider';
 import type { SaleStatus } from '../types/sales';
 import type { Customer, Seller, PaymentTerm } from '../types/catalog';
+import { formatDateDdMmYyyy } from '../utils/date';
 
 const statusClasses: Record<SaleStatus, string> = {
   completed: 'status-completed',
@@ -90,7 +91,7 @@ export function SaleDetailsPage(): JSX.Element | null {
         <div>
           <h3>{t('sales.viewSale')}</h3>
           <p style={{ margin: 0 }}>
-            {t('sales.emission')}: {sale.emission_date} | {t('sales.total')}: R$ {totals.total.toFixed(2)}
+            {t('sales.emission')}: {formatDateDdMmYyyy(sale.emission_date)} | {t('sales.total')}: R$ {totals.total.toFixed(2)}
           </p>
         </div>
         <span className={`badge ${statusClasses[sale.status]}`}>{sale.status}</span>

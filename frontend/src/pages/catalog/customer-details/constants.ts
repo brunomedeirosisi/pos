@@ -1,3 +1,5 @@
+import { formatDateDdMmYyyy } from '../../../utils/date';
+
 export const paymentMethodOptions = ['cash', 'card', 'bank', 'other'] as const;
 export const paymentMethodFilterOptions = ['all', 'cash', 'card', 'bank', 'other', 'legacy'] as const;
 
@@ -15,11 +17,6 @@ export function formatCurrency(value: number | null | undefined): string {
   return currencyFormatter.format(value);
 }
 
-export function formatDate(value: string | null | undefined, locale: string): string {
-  if (!value) return '-';
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-  return parsed.toLocaleDateString(locale);
+export function formatDate(value: string | null | undefined): string {
+  return formatDateDdMmYyyy(value);
 }

@@ -16,6 +16,7 @@ import type {
 import { useToast } from '../../components/ui/ToastProvider';
 import { useHasPermission } from '../../store/auth';
 import { parseLocaleNumericInput } from '../../utils/number';
+import { getTodayIsoDate } from '../../utils/date';
 import { CustomerPaymentsSection } from './customer-details/CustomerPaymentsSection';
 import { CustomerSalesSection } from './customer-details/CustomerSalesSection';
 import { CustomerSummarySection } from './customer-details/CustomerSummarySection';
@@ -32,7 +33,7 @@ const paymentFormSchema = z.object({
 type PaymentFormValues = z.infer<typeof paymentFormSchema>;
 
 export function CustomerDetailsPage(): JSX.Element {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -46,7 +47,7 @@ export function CustomerDetailsPage(): JSX.Element {
   const [appliedPaymentFilters, setAppliedPaymentFilters] = useState(defaultPaymentFilters);
   const [recentPayment, setRecentPayment] = useState<CustomerPaymentRegisterResponse | null>(null);
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getTodayIsoDate();
 
   const normalizedPaymentFilters = useMemo(
     () => ({
@@ -264,7 +265,6 @@ export function CustomerDetailsPage(): JSX.Element {
     <div className="customer-details-page">
       <CustomerSummarySection
         t={t}
-        language={i18n.language}
         customer={customer}
         currentBalance={currentBalance}
         totalCharges={totalCharges}
@@ -275,18 +275,25 @@ export function CustomerDetailsPage(): JSX.Element {
 
       <CustomerSalesSection
         t={t}
-        language={i18n.language}
         canReadSales={canReadSales}
         sales={sales}
-        isLoading={salesQuery.isLoading}
-        isError={salesQuery.isError}
-        error={(salesQuery.error as Error | undefined) ?? undefined}
+        salesState={{
+          isLoading: salesQuery.isLoading,
+          isError: salesQuery.isError,
+          error: (salesQuery.error as Error | undefined) ?? undefined,
+        }}
+        payments={payments}
+        paymentsState={{
+          isLoading: paymentsQuery.isLoading,
+          isError: paymentsQuery.isError,
+          error: (paymentsQuery.error as Error | undefined) ?? undefined,
+        }}
+        paymentMethodLabels={paymentMethodLabels}
         purchaseStatusTexts={purchaseStatusTexts}
       />
 
       <CustomerPaymentsSection
         t={t}
-        language={i18n.language}
         canWriteCatalog={canWriteCatalog}
         currentBalance={currentBalance}
         isRegisterDisabled={isRegisterDisabled}

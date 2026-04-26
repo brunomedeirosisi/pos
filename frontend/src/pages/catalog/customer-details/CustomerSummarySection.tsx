@@ -5,7 +5,6 @@ import { formatCurrency, formatDate } from './constants';
 
 type CustomerSummarySectionProps = {
   t: TFunction;
-  language: string;
   customer: CustomerDetails;
   currentBalance: number;
   totalCharges: number;
@@ -15,7 +14,7 @@ type CustomerSummarySectionProps = {
 };
 
 export function CustomerSummarySection(props: CustomerSummarySectionProps): JSX.Element {
-  const { t, language, customer, currentBalance, totalCharges, totalPayments, statusLabel, onBack } = props;
+  const { t, customer, currentBalance, totalCharges, totalPayments, statusLabel, onBack } = props;
 
   return (
     <div className="card">
@@ -41,7 +40,7 @@ export function CustomerSummarySection(props: CustomerSummarySectionProps): JSX.
             <span>{t('customers.totalPayments')}</span>
             <strong>{formatCurrency(totalPayments)}</strong>
             <small>
-              {t('customers.lastPayment')}: {formatDate(customer.totals.last_payment_date, language)}
+              {t('customers.lastPayment')}: {formatDate(customer.totals.last_payment_date)}
             </small>
           </div>
         </div>
