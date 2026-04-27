@@ -202,16 +202,9 @@ export function SalesListPage(): JSX.Element {
             placeholder="dd/mm/yyyy"
             value={filters.from}
             onChange={(event) => updateFilter('from', event.target.value)}
-          />
-          <button
-            type="button"
-            className="button secondary"
+            onFocus={() => openDatePicker(fromDatePickerRef)}
             onClick={() => openDatePicker(fromDatePickerRef)}
-            aria-label="Selecionar data inicial"
-            title="Selecionar data inicial"
-          >
-            Calendario
-          </button>
+          />
           <input
             ref={fromDatePickerRef}
             type="date"
@@ -227,16 +220,9 @@ export function SalesListPage(): JSX.Element {
             placeholder="dd/mm/yyyy"
             value={filters.to}
             onChange={(event) => updateFilter('to', event.target.value)}
-          />
-          <button
-            type="button"
-            className="button secondary"
+            onFocus={() => openDatePicker(toDatePickerRef)}
             onClick={() => openDatePicker(toDatePickerRef)}
-            aria-label="Selecionar data final"
-            title="Selecionar data final"
-          >
-            Calendario
-          </button>
+          />
           <input
             ref={toDatePickerRef}
             type="date"
