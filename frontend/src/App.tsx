@@ -20,13 +20,32 @@ import { CustomerPaymentReceiptPage } from './pages/catalog/CustomerPaymentRecei
 import { CustomerPaymentHistoryReportPage } from './pages/catalog/CustomerPaymentHistoryReportPage';
 import { LoginPage } from './pages/LoginPage';
 import { RequireAuth } from './components/auth/RequireAuth';
+import { useAuthStore } from './store/auth';
+import { getDefaultAppRoute } from './lib/navigation';
+
+function HomeRoute(): JSX.Element {
+  const user = useAuthStore((state) => state.user);
+  const defaultRoute = getDefaultAppRoute(user);
+
+  if (defaultRoute === '/') {
+    return <DashboardPage />;
+  }
+
+  return <Navigate to={defaultRoute} replace />;
+}
+
+function FallbackRoute(): JSX.Element {
+  const user = useAuthStore((state) => state.user);
+  const defaultRoute = getDefaultAppRoute(user);
+  return <Navigate to={defaultRoute} replace />;
+}
 
 export function App(): JSX.Element {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
-        <Route index element={<DashboardPage />} />
+        <Route index element={<HomeRoute />} />
         <Route path="pos" element={<PosPage />} />
         <Route path="sales" element={<SalesListPage />} />
         <Route path="sales/:id" element={<SaleDetailsPage />} />
@@ -52,7 +71,7 @@ export function App(): JSX.Element {
           </Route>
           <Route index element={<Navigate to="users" replace />} />
         </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<FallbackRoute />} />
       </Route>
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>

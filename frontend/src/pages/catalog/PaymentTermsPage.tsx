@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -146,7 +146,7 @@ export function PaymentTermsPage(): JSX.Element {
       return (
         <tr>
           <td colSpan={3}>
-            <div className="empty-state">{error?.message ?? 'Error'}</div>
+            <div className="empty-state">{error?.message ?? t('common.error')}</div>
           </td>
         </tr>
       );
@@ -210,16 +210,18 @@ export function PaymentTermsPage(): JSX.Element {
         )}
       </div>
 
-      <table className="table">
-        <thead>
-          <tr>
-            <th>{t('paymentTerms.heading')}</th>
-            <th>{t('products.legacyCode')}</th>
-            <th>{t('common.actions')}</th>
-          </tr>
-        </thead>
-        <tbody>{rows}</tbody>
-      </table>
+      <div className="table-wrapper">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>{t('paymentTerms.heading')}</th>
+              <th>{t('products.legacyCode')}</th>
+              <th>{t('common.actions')}</th>
+            </tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </div>
 
       <Modal
         open={modalOpen}
@@ -256,3 +258,4 @@ export function PaymentTermsPage(): JSX.Element {
     </div>
   );
 }
+

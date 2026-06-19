@@ -144,32 +144,34 @@ export function CustomersPage(): JSX.Element {
         )}
       </div>
 
-      <table className="table">
-        <thead>
-          <tr>
-            <th>{t('customers.heading')}</th>
-            <th>{t('customers.cpf')}</th>
-            <th>{t('customers.city')}</th>
-            <th>{t('customers.uf')}</th>
-            <th>{t('customers.creditLimit')}</th>
-            <th>{t('customers.status')}</th>
-            <th>{t('common.actions')}</th>
-          </tr>
-        </thead>
-        <tbody>
-          <CustomersTableRows
-            customers={customersQuery.data ?? []}
-            canReadCatalog={canReadCatalog}
-            canWriteCatalog={canWriteCatalog}
-            isLoading={customersQuery.isLoading}
-            isError={customersQuery.isError}
-            error={(customersQuery.error as Error | undefined) ?? undefined}
-            t={t}
-            onOpenDetails={(customerId) => navigate(`/catalog/customers/${customerId}`)}
-            onEdit={openEditForm}
-          />
-        </tbody>
-      </table>
+      <div className="table-wrapper">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>{t('customers.heading')}</th>
+              <th>{t('customers.cpf')}</th>
+              <th>{t('customers.city')}</th>
+              <th>{t('customers.uf')}</th>
+              <th>{t('customers.creditLimit')}</th>
+              <th>{t('customers.status')}</th>
+              <th>{t('common.actions')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            <CustomersTableRows
+              customers={customersQuery.data ?? []}
+              canReadCatalog={canReadCatalog}
+              canWriteCatalog={canWriteCatalog}
+              isLoading={customersQuery.isLoading}
+              isError={customersQuery.isError}
+              error={(customersQuery.error as Error | undefined) ?? undefined}
+              t={t}
+              onOpenDetails={(customerId) => navigate(`/catalog/customers/${customerId}`)}
+              onEdit={openEditForm}
+            />
+          </tbody>
+        </table>
+      </div>
 
       <CustomerFormModal
         open={isFormOpen && canWriteCatalog}

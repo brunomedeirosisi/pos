@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import type { TFunction } from 'i18next';
 import type { UseFormReturn } from 'react-hook-form';
 import { Modal } from '../../../components/ui/Modal';
@@ -86,7 +86,7 @@ export function CustomerPaymentsSection(props: CustomerPaymentsSectionProps): JS
       return (
         <tr>
           <td colSpan={7}>
-            <div className="empty-state">{paymentsQueryState.error?.message ?? 'Error'}</div>
+            <div className="empty-state">{paymentsQueryState.error?.message ?? t('common.error')}</div>
           </td>
         </tr>
       );
@@ -296,3 +296,4 @@ export function CustomerPaymentsSection(props: CustomerPaymentsSectionProps): JS
     </>
   );
 }
+

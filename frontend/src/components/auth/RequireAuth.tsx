@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../store/auth';
 
 type Props = {
@@ -7,6 +8,7 @@ type Props = {
 };
 
 export function RequireAuth({ children }: Props): JSX.Element {
+  const { t } = useTranslation();
   const location = useLocation();
   const user = useAuthStore((state) => state.user);
   const initialized = useAuthStore((state) => state.initialized);
@@ -24,7 +26,7 @@ export function RequireAuth({ children }: Props): JSX.Element {
   if (!initialized || initializing) {
     return (
       <div className="card">
-        <p>Loading…</p>
+        <p>{t('common.loading')}</p>
       </div>
     );
   }

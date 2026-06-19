@@ -37,9 +37,9 @@ export function ToastProvider({ children }: Props): JSX.Element {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div className="toast-container">
+      <div className="toast-container" aria-live="polite" aria-atomic="true">
         {toasts.map((toast) => (
-          <div key={toast.id} className={`toast ${toast.variant !== 'default' ? toast.variant : ''}`}>
+          <div key={toast.id} role="status" className={`toast ${toast.variant !== 'default' ? toast.variant : ''}`}>
             {toast.message}
           </div>
         ))}

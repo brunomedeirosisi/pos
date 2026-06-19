@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import type { TFunction } from 'i18next';
 import type { CustomerPayment, CustomerPaymentMethod, CustomerSale } from '../../../types/catalog';
 import { formatCurrency, formatDate } from './constants';
@@ -50,6 +50,7 @@ function resolveSortDate(value: string | null | undefined): number {
 export function CustomerSalesSection(props: CustomerSalesSectionProps): JSX.Element {
   const { t, canReadSales, sales, salesState, payments, paymentsState, paymentMethodLabels, purchaseStatusTexts } = props;
   const [activeTab, setActiveTab] = React.useState<HistoryTab>('purchases');
+  const tabsetId = React.useId();
 
   const quantityFormatter = React.useMemo(
     () =>
@@ -85,7 +86,7 @@ export function CustomerSalesSection(props: CustomerSalesSectionProps): JSX.Elem
       return (
         <tr>
           <td colSpan={6}>
-            <div className="empty-state">{salesState.error?.message ?? 'Error'}</div>
+            <div className="empty-state">{salesState.error?.message ?? t('common.error')}</div>
           </td>
         </tr>
       );
@@ -143,7 +144,7 @@ export function CustomerSalesSection(props: CustomerSalesSectionProps): JSX.Elem
       return (
         <tr>
           <td colSpan={6}>
-            <div className="empty-state">{paymentsState.error?.message ?? 'Error'}</div>
+            <div className="empty-state">{paymentsState.error?.message ?? t('common.error')}</div>
           </td>
         </tr>
       );
@@ -234,7 +235,7 @@ export function CustomerSalesSection(props: CustomerSalesSectionProps): JSX.Elem
       return (
         <tr>
           <td colSpan={5}>
-            <div className="empty-state">{paymentsState.error?.message ?? salesState.error?.message ?? 'Error'}</div>
+            <div className="empty-state">{paymentsState.error?.message ?? salesState.error?.message ?? t('common.error')}</div>
           </td>
         </tr>
       );
@@ -269,8 +270,11 @@ export function CustomerSalesSection(props: CustomerSalesSectionProps): JSX.Elem
       <div className="history-tabs" role="tablist" aria-label={t('customers.customerHistory')}>
         <button
           type="button"
+          id={`${tabsetId}-tab-purchases`}
           role="tab"
           aria-selected={activeTab === 'purchases'}
+          aria-controls={`${tabsetId}-panel-purchases`}
+          tabIndex={activeTab === 'purchases' ? 0 : -1}
           className={`history-tab ${activeTab === 'purchases' ? 'is-active' : ''}`}
           onClick={() => setActiveTab('purchases')}
         >
@@ -278,8 +282,11 @@ export function CustomerSalesSection(props: CustomerSalesSectionProps): JSX.Elem
         </button>
         <button
           type="button"
+          id={`${tabsetId}-tab-payments`}
           role="tab"
           aria-selected={activeTab === 'payments'}
+          aria-controls={`${tabsetId}-panel-payments`}
+          tabIndex={activeTab === 'payments' ? 0 : -1}
           className={`history-tab ${activeTab === 'payments' ? 'is-active' : ''}`}
           onClick={() => setActiveTab('payments')}
         >
@@ -287,8 +294,11 @@ export function CustomerSalesSection(props: CustomerSalesSectionProps): JSX.Elem
         </button>
         <button
           type="button"
+          id={`${tabsetId}-tab-timeline`}
           role="tab"
           aria-selected={activeTab === 'timeline'}
+          aria-controls={`${tabsetId}-panel-timeline`}
+          tabIndex={activeTab === 'timeline' ? 0 : -1}
           className={`history-tab ${activeTab === 'timeline' ? 'is-active' : ''}`}
           onClick={() => setActiveTab('timeline')}
         >
@@ -296,7 +306,12 @@ export function CustomerSalesSection(props: CustomerSalesSectionProps): JSX.Elem
         </button>
       </div>
 
-      {activeTab === 'purchases' && (
+      <div
+        id={`${tabsetId}-panel-purchases`}
+        role="tabpanel"
+        aria-labelledby={`${tabsetId}-tab-purchases`}
+        hidden={activeTab !== 'purchases'}
+      >
         <div className="table-wrapper">
           <table className="table">
             <thead>
@@ -312,9 +327,14 @@ export function CustomerSalesSection(props: CustomerSalesSectionProps): JSX.Elem
             <tbody>{renderSales()}</tbody>
           </table>
         </div>
-      )}
+      </div>
 
-      {activeTab === 'payments' && (
+      <div
+        id={`${tabsetId}-panel-payments`}
+        role="tabpanel"
+        aria-labelledby={`${tabsetId}-tab-payments`}
+        hidden={activeTab !== 'payments'}
+      >
         <div className="table-wrapper">
           <table className="table">
             <thead>
@@ -330,9 +350,14 @@ export function CustomerSalesSection(props: CustomerSalesSectionProps): JSX.Elem
             <tbody>{renderPayments()}</tbody>
           </table>
         </div>
-      )}
+      </div>
 
-      {activeTab === 'timeline' && (
+      <div
+        id={`${tabsetId}-panel-timeline`}
+        role="tabpanel"
+        aria-labelledby={`${tabsetId}-tab-timeline`}
+        hidden={activeTab !== 'timeline'}
+      >
         <div className="table-wrapper">
           <table className="table">
             <thead>
@@ -347,7 +372,8 @@ export function CustomerSalesSection(props: CustomerSalesSectionProps): JSX.Elem
             <tbody>{renderTimeline()}</tbody>
           </table>
         </div>
-      )}
+      </div>
     </div>
   );
 }
+

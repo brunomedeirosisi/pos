@@ -35,6 +35,7 @@ const baseCommon = {
   languageSwitcher: 'Language switcher',
   noPermission: 'You do not have permission to view this content.',
   warning: 'Warning',
+  error: 'Error',
 };
 
 export const resources = {
@@ -301,6 +302,8 @@ export const resources = {
         emptyCart: 'Add products to start a sale.',
         checkout: 'Finalize sale',
         orderNumber: 'Order number (optional)',
+        fromDate: 'From date',
+        toDate: 'To date',
         saleCreated: 'Sale registered successfully!',
         saleCancelled: 'Sale cancelled.',
       },
@@ -695,6 +698,8 @@ export const resources = {
         emptyCart: 'Adicione produtos para iniciar uma venda.',
         checkout: 'Finalizar venda',
         orderNumber: 'Número do pedido (opcional)',
+        fromDate: 'Data inicial',
+        toDate: 'Data final',
         saleCreated: 'Venda registrada com sucesso!',
         saleCancelled: 'Venda cancelada.',
       },

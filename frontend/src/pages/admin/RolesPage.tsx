@@ -9,6 +9,8 @@ import type { Role } from '../../types/admin';
 import { useToast } from '../../components/ui/ToastProvider';
 import { useHasPermission } from '../../store/auth';
 import { parseLocaleNumericInput } from '../../utils/number';
+import { Modal } from '../../components/ui/Modal';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 
 const numericField = z.preprocess(
   parseLocaleNumericInput,
@@ -37,6 +39,7 @@ export function RolesPage(): JSX.Element {
   const queryClient = useQueryClient();
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editing, setEditing] = useState<Role | null>(null);
+  const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
 
   const canReadRoles = useHasPermission(['roles:read', 'roles:write', 'users:read', 'users:write']);
   const canManageRoles = useHasPermission('roles:write');
@@ -80,6 +83,7 @@ export function RolesPage(): JSX.Element {
     onSuccess: () => {
       toast.show(t('common.saved'), 'success');
       queryClient.invalidateQueries({ queryKey: ['roles'] });
+      setRoleToDelete(null);
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
   });
@@ -180,8 +184,8 @@ export function RolesPage(): JSX.Element {
         <td>{role.name}</td>
         <td>{role.description ?? '--'}</td>
         <td>{role.permissions.join(', ')}</td>
-        <td style={{ minWidth: '160px' }}>
-          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+        <td>
+          <div className="table-actions">
             <button type="button" className="button secondary" onClick={() => openEditForm(role)} disabled={!canManageRoles}>
               {t('common.edit')}
             </button>
@@ -204,10 +208,7 @@ export function RolesPage(): JSX.Element {
       toast.show(t('common.noPermission'), 'error');
       return;
     }
-    if (!window.confirm(t('roles.deleteConfirm'))) {
-      return;
-    }
-    deleteMutation.mutate(role.id);
+    setRoleToDelete(role);
   };
 
   if (!canReadRoles) {
@@ -244,53 +245,72 @@ export function RolesPage(): JSX.Element {
         </table>
       </div>
 
-      {isFormOpen && canManageRoles && (
-        <div className="card" style={{ marginTop: '1.5rem' }}>
-          <form onSubmit={onSubmit}>
-            <h3>{editing ? t('roles.editTitle') : t('roles.addTitle')}</h3>
-            <div className="form-grid">
-              <div className="form-group">
-                <label htmlFor="name">{t('roles.heading')}*</label>
-                <input id="name" {...form.register('name')} />
-                {form.formState.errors.name && (
-                  <small style={{ color: '#dc2626' }}>{form.formState.errors.name.message}</small>
-                )}
-              </div>
-              <div className="form-group">
-                <label htmlFor="description">{t('roles.description')}</label>
-                <input id="description" {...form.register('description')} />
-              </div>
-              <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                <label htmlFor="permissions">{t('roles.permissions')}*</label>
-                <textarea
-                  id="permissions"
-                  rows={4}
-                  {...form.register('permissions')}
-                  placeholder={t('roles.permissionsHint')}
-                />
-                {form.formState.errors.permissions && (
-                  <small style={{ color: '#dc2626' }}>{form.formState.errors.permissions.message}</small>
-                )}
-              </div>
-              <div className="form-group">
-                <label htmlFor="discountLimit">{t('roles.discountLimit')}</label>
-                <input id="discountLimit" type="number" step="0.01" {...form.register('discountLimit')} />
-                {form.formState.errors.discountLimit && (
-                  <small style={{ color: '#dc2626' }}>{form.formState.errors.discountLimit.message as string}</small>
-                )}
-              </div>
+      <Modal
+        open={isFormOpen && canManageRoles}
+        onClose={() => {
+          if (isSubmitting) return;
+          closeForm();
+        }}
+        title={editing ? t('roles.editTitle') : t('roles.addTitle')}
+        width="760px"
+      >
+        <form onSubmit={onSubmit}>
+          <div className="form-grid">
+            <div className="form-group">
+              <label htmlFor="name">{t('roles.heading')}*</label>
+              <input id="name" {...form.register('name')} />
+              {form.formState.errors.name && (
+                <small className="form-error">{form.formState.errors.name.message}</small>
+              )}
             </div>
-            <div className="form-actions">
-              <button type="button" className="button secondary" onClick={closeForm} disabled={isSubmitting}>
-                {t('common.cancel')}
-              </button>
-              <button type="submit" className="button primary" disabled={isSubmitting}>
-                {isSubmitting ? t('common.loading') : t('common.save')}
-              </button>
+            <div className="form-group">
+              <label htmlFor="description">{t('roles.description')}</label>
+              <input id="description" {...form.register('description')} />
             </div>
-          </form>
-        </div>
-      )}
+            <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+              <label htmlFor="permissions">{t('roles.permissions')}*</label>
+              <textarea
+                id="permissions"
+                rows={4}
+                {...form.register('permissions')}
+                placeholder={t('roles.permissionsHint')}
+              />
+              {form.formState.errors.permissions && (
+                <small className="form-error">{form.formState.errors.permissions.message}</small>
+              )}
+            </div>
+            <div className="form-group">
+              <label htmlFor="discountLimit">{t('roles.discountLimit')}</label>
+              <input id="discountLimit" type="number" step="0.01" {...form.register('discountLimit')} />
+              {form.formState.errors.discountLimit && (
+                <small className="form-error">{form.formState.errors.discountLimit.message as string}</small>
+              )}
+            </div>
+          </div>
+          <div className="form-actions">
+            <button type="button" className="button secondary" onClick={closeForm} disabled={isSubmitting}>
+              {t('common.cancel')}
+            </button>
+            <button type="submit" className="button primary" disabled={isSubmitting}>
+              {isSubmitting ? t('common.loading') : t('common.save')}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <ConfirmDialog
+        open={Boolean(roleToDelete)}
+        title={t('roles.deleteConfirm')}
+        description={roleToDelete?.name}
+        confirmLabel={t('common.delete')}
+        onClose={() => setRoleToDelete(null)}
+        onConfirm={() => {
+          if (!roleToDelete) return;
+          deleteMutation.mutate(roleToDelete.id);
+        }}
+        isPending={deleteMutation.isPending}
+        tone="danger"
+      />
     </div>
   );
 }

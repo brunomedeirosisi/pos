@@ -23,13 +23,14 @@ type SidebarItem = {
   to: string;
   labelKey: string;
   icon: IconName;
+  permissions?: string | string[];
 };
 
 const primaryItems: SidebarItem[] = [
-  { to: '/', labelKey: 'nav.dashboard', icon: 'dashboard' },
-  { to: '/pos', labelKey: 'nav.pos', icon: 'pos' },
-  { to: '/sales', labelKey: 'nav.sales', icon: 'sales' },
-  { to: '/payments', labelKey: 'nav.payments', icon: 'payments' },
+  { to: '/', labelKey: 'nav.dashboard', icon: 'dashboard', permissions: ['sales:read', 'reports:view'] },
+  { to: '/pos', labelKey: 'nav.pos', icon: 'pos', permissions: 'pos:checkout' },
+  { to: '/sales', labelKey: 'nav.sales', icon: 'sales', permissions: 'sales:read' },
+  { to: '/payments', labelKey: 'nav.payments', icon: 'payments', permissions: 'catalog:read' },
 ];
 
 const catalogItems: SidebarItem[] = [
@@ -104,6 +105,10 @@ export function AppLayout(): JSX.Element {
 
   const canReadCatalog = useHasPermission('catalog:read');
   const catalogLinks = React.useMemo(() => (canReadCatalog ? catalogItems : []), [canReadCatalog]);
+  const primaryLinks = React.useMemo(() => {
+    if (!user) return [];
+    return primaryItems.filter((item) => !item.permissions || hasPermission(user, item.permissions));
+  }, [user]);
 
   const { adminLinksBySection, hasAdminLinks } = React.useMemo(() => {
     if (!user) {
@@ -140,6 +145,7 @@ export function AppLayout(): JSX.Element {
     <NavLink
       key={item.to}
       to={item.to}
+      end={item.to === '/'}
       className={({ isActive }) => `kt-sidebar__link${isActive ? ' is-active' : ''}`}
     >
       <NavIcon name={item.icon} />
@@ -149,7 +155,7 @@ export function AppLayout(): JSX.Element {
 
   return (
     <div className="kt-shell">
-      <aside className={`kt-sidebar${isSidebarOpen ? ' is-open' : ''}`}>
+      <aside id="app-sidebar" className={`kt-sidebar${isSidebarOpen ? ' is-open' : ''}`}>
         <div className="kt-sidebar__brand">
           <div className="kt-sidebar__brand-lockup">
             <img src="/favicon.svg" alt={t('brand')} className="kt-sidebar__brand-icon" />
@@ -160,8 +166,8 @@ export function AppLayout(): JSX.Element {
           </div>
         </div>
 
-        <nav className="kt-sidebar__nav" aria-label={t('common.navigation')}>
-          <div className="kt-sidebar__section">{primaryItems.map(renderNavLink)}</div>
+        <nav id="app-sidebar-nav" className="kt-sidebar__nav" aria-label={t('common.navigation')}>
+          <div className="kt-sidebar__section">{primaryLinks.map(renderNavLink)}</div>
 
           {catalogLinks.length > 0 && (
             <div className="kt-sidebar__section">
@@ -206,6 +212,8 @@ export function AppLayout(): JSX.Element {
               className="kt-sidebar-toggle"
               onClick={() => setIsSidebarOpen((current) => !current)}
               aria-label={t('common.navigation')}
+              aria-expanded={isSidebarOpen}
+              aria-controls="app-sidebar-nav"
             >
               <span />
               <span />

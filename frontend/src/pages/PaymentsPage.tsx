@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+﻿import React, { useMemo, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -62,7 +62,7 @@ export function PaymentsPage(): JSX.Element {
       return (
         <tr>
           <td colSpan={4}>
-            <div className="empty-state">{error?.message ?? 'Error'}</div>
+            <div className="empty-state">{error?.message ?? t('common.error')}</div>
           </td>
         </tr>
       );
@@ -132,17 +132,19 @@ export function PaymentsPage(): JSX.Element {
         />
       </div>
 
-      <table className="table">
-        <thead>
-          <tr>
-            <th>{t('customers.clientCode')}</th>
-            <th>{t('customers.heading')}</th>
-            <th>{t('customers.cpf')}</th>
-            <th>{t('payments.register')}</th>
-          </tr>
-        </thead>
-        <tbody>{rows}</tbody>
-      </table>
+      <div className="table-wrapper">
+        <table className="table">
+          <thead>
+            <tr>
+              <th>{t('customers.clientCode')}</th>
+              <th>{t('customers.heading')}</th>
+              <th>{t('customers.cpf')}</th>
+              <th>{t('payments.register')}</th>
+            </tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </div>
 
       <Modal
         open={isModalOpen}
@@ -192,3 +194,4 @@ export function PaymentsPage(): JSX.Element {
 }
 
 export default PaymentsPage;
+

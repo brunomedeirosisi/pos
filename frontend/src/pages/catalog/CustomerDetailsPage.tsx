@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+﻿import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -258,7 +258,7 @@ export function CustomerDetailsPage(): JSX.Element {
 
   if (customerQuery.isError || !customer) {
     const error = customerQuery.error as Error | undefined;
-    return <div className="empty-state">{error?.message ?? 'Error'}</div>;
+    return <div className="empty-state">{error?.message ?? t('common.error')}</div>;
   }
 
   return (
@@ -325,3 +325,4 @@ export function CustomerDetailsPage(): JSX.Element {
     </div>
   );
 }
+

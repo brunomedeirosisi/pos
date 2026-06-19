@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import type { TFunction } from 'i18next';
 import type { Customer, CustomerStatus } from '../../../types/catalog';
 
@@ -47,7 +47,7 @@ export function CustomersTableRows(props: CustomersTableRowsProps): JSX.Element 
     return (
       <tr>
         <td colSpan={7}>
-          <div className="empty-state">{error?.message ?? 'Error'}</div>
+          <div className="empty-state">{error?.message ?? t('common.error')}</div>
         </td>
       </tr>
     );

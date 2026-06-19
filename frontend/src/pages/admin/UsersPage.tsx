@@ -10,6 +10,8 @@ import { useToast } from '../../components/ui/ToastProvider';
 import { useHasPermission } from '../../store/auth';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { formatDateTimeDdMmYyyy } from '../../utils/date';
+import { Modal } from '../../components/ui/Modal';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 
 const userFormSchema = z.object({
   fullName: z.string().trim().min(1, 'Required'),
@@ -41,6 +43,7 @@ export function UsersPage(): JSX.Element {
   const debouncedSearch = useDebouncedValue(search, 350);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
+  const [userToDisable, setUserToDisable] = useState<User | null>(null);
 
   const canReadUsers = useHasPermission(['users:read', 'users:write']);
   const canManageUsers = useHasPermission('users:write');
@@ -92,6 +95,7 @@ export function UsersPage(): JSX.Element {
     onSuccess: () => {
       toast.show(t('common.saved'), 'success');
       queryClient.invalidateQueries({ queryKey: ['users'] });
+      setUserToDisable(null);
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
   });
@@ -202,7 +206,7 @@ export function UsersPage(): JSX.Element {
         </td>
         <td>{item.lastLoginAt ? formatDateTimeDdMmYyyy(item.lastLoginAt) : '--'}</td>
         <td>
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <div className="table-actions">
             <button type="button" className="button secondary" onClick={() => openEditForm(item)} disabled={!canManageUsers}>
               {t('common.edit')}
             </button>
@@ -225,10 +229,7 @@ export function UsersPage(): JSX.Element {
       toast.show(t('common.noPermission'), 'error');
       return;
     }
-    if (!window.confirm(t('users.confirmDisable'))) {
-      return;
-    }
-    disableMutation.mutate(user.id);
+    setUserToDisable(user);
   };
 
   if (!canReadUsers) {
@@ -272,71 +273,88 @@ export function UsersPage(): JSX.Element {
         </table>
       </div>
 
-      {isFormOpen && canManageUsers && (
-        <div className="card" style={{ marginTop: '1.5rem' }}>
-          <form onSubmit={onSubmit}>
-            <h3>{editing ? t('users.editTitle') : t('users.addTitle')}</h3>
-            <div className="form-grid">
-              <div className="form-group">
-                <label htmlFor="fullName">{t('users.fullName')}*</label>
-                <input id="fullName" {...form.register('fullName')} />
-                {form.formState.errors.fullName && (
-                  <small style={{ color: '#dc2626' }}>{form.formState.errors.fullName.message}</small>
-                )}
-              </div>
-              <div className="form-group">
-                <label htmlFor="email">{t('users.email')}*</label>
-                <input id="email" type="email" {...form.register('email')} />
-                {form.formState.errors.email && (
-                  <small style={{ color: '#dc2626' }}>{form.formState.errors.email.message}</small>
-                )}
-              </div>
-              <div className="form-group">
-                <label htmlFor="password">
-                  {t('users.password')}
-                  {!editing && '*'}
-                </label>
-                <input id="password" type="password" {...form.register('password')} placeholder={editing ? t('users.passwordHint') : ''} />
-                {form.formState.errors.password && (
-                  <small style={{ color: '#dc2626' }}>{form.formState.errors.password.message}</small>
-                )}
-              </div>
-              <div className="form-group">
-                <label htmlFor="roleId">{t('users.role')}*</label>
-                <select id="roleId" {...form.register('roleId')}>
-                  <option value="">{t('common.none')}</option>
-                  {roles.map((role: Role) => (
-                    <option key={role.id} value={role.id}>
-                      {role.name}
-                    </option>
-                  ))}
-                </select>
-                {form.formState.errors.roleId && (
-                  <small style={{ color: '#dc2626' }}>{form.formState.errors.roleId.message}</small>
-                )}
-              </div>
-              <div className="form-group">
-                <label htmlFor="status">{t('users.status')}*</label>
-                <select id="status" {...form.register('status')}>
-                  <option value="active">{t('customers.statusActive')}</option>
-                  <option value="disabled">{t('customers.statusInactive')}</option>
-                </select>
-              </div>
+      <Modal
+        open={isFormOpen && canManageUsers}
+        onClose={() => {
+          if (isSubmitting) return;
+          closeForm();
+        }}
+        title={editing ? t('users.editTitle') : t('users.addTitle')}
+        width="760px"
+      >
+        <form onSubmit={onSubmit}>
+          <div className="form-grid">
+            <div className="form-group">
+              <label htmlFor="fullName">{t('users.fullName')}*</label>
+              <input id="fullName" {...form.register('fullName')} />
+              {form.formState.errors.fullName && (
+                <small className="form-error">{form.formState.errors.fullName.message}</small>
+              )}
             </div>
-            {editing && (
-              <p style={{ color: '#64748b', marginTop: '0.5rem' }}>{t('users.passwordHint')}</p>
-            )}
-            <div className="form-actions">
-              <button type="button" className="button secondary" onClick={closeForm} disabled={isSubmitting}>
-                {t('common.cancel')}
-              </button>
-              <button type="submit" className="button primary" disabled={isSubmitting}>
-                {isSubmitting ? t('common.loading') : t('common.save')}
-              </button>
+            <div className="form-group">
+              <label htmlFor="email">{t('users.email')}*</label>
+              <input id="email" type="email" {...form.register('email')} />
+              {form.formState.errors.email && (
+                <small className="form-error">{form.formState.errors.email.message}</small>
+              )}
             </div>
-          </form>
-        </div>
-      )}
+            <div className="form-group">
+              <label htmlFor="password">
+                {t('users.password')}
+                {!editing && '*'}
+              </label>
+              <input id="password" type="password" {...form.register('password')} placeholder={editing ? t('users.passwordHint') : ''} />
+              {form.formState.errors.password && (
+                <small className="form-error">{form.formState.errors.password.message}</small>
+              )}
+            </div>
+            <div className="form-group">
+              <label htmlFor="roleId">{t('users.role')}*</label>
+              <select id="roleId" {...form.register('roleId')}>
+                <option value="">{t('common.none')}</option>
+                {roles.map((role: Role) => (
+                  <option key={role.id} value={role.id}>
+                    {role.name}
+                  </option>
+                ))}
+              </select>
+              {form.formState.errors.roleId && (
+                <small className="form-error">{form.formState.errors.roleId.message}</small>
+              )}
+            </div>
+            <div className="form-group">
+              <label htmlFor="status">{t('users.status')}*</label>
+              <select id="status" {...form.register('status')}>
+                <option value="active">{t('customers.statusActive')}</option>
+                <option value="disabled">{t('customers.statusInactive')}</option>
+              </select>
+            </div>
+          </div>
+          {editing && <p className="text-muted">{t('users.passwordHint')}</p>}
+          <div className="form-actions">
+            <button type="button" className="button secondary" onClick={closeForm} disabled={isSubmitting}>
+              {t('common.cancel')}
+            </button>
+            <button type="submit" className="button primary" disabled={isSubmitting}>
+              {isSubmitting ? t('common.loading') : t('common.save')}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <ConfirmDialog
+        open={Boolean(userToDisable)}
+        title={t('users.confirmDisable')}
+        description={userToDisable ? `${userToDisable.fullName} (${userToDisable.email})` : undefined}
+        confirmLabel={t('common.disable')}
+        onClose={() => setUserToDisable(null)}
+        onConfirm={() => {
+          if (!userToDisable) return;
+          disableMutation.mutate(userToDisable.id);
+        }}
+        isPending={disableMutation.isPending}
+        tone="danger"
+      />
     </div>
   );
 }

@@ -780,6 +780,16 @@ textarea:disabled {
   background: rgba(61, 111, 194, 0.12);
 }
 
+.kt-btn--ghost {
+  background: transparent;
+  border-color: transparent;
+  color: #3d6fc2;
+}
+
+.kt-btn--ghost:not(:disabled):hover {
+  background: rgba(61, 111, 194, 0.12);
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -833,6 +843,19 @@ textarea:disabled {
   background: rgba(34, 197, 94, 0.1);
   border-color: rgba(34, 197, 94, 0.28);
   color: #166534;
+}
+
+.payment-receipt-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-12);
+}
+
+.banner-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-8);
 }
 
 .customer-details-page,
@@ -984,6 +1007,15 @@ textarea:disabled {
   display: flex;
   gap: 8px;
   margin-bottom: var(--space-12);
+}
+
+.printable-table {
+  table-layout: fixed;
+}
+
+.printable-table th,
+.printable-table td {
+  word-break: break-word;
 }
 
 .printable-header {
@@ -1657,6 +1689,16 @@ textarea:disabled {
 }
 
 @media (max-width: 768px) {
+  .payment-receipt-banner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .banner-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
   .payments-page .payments-header {
     flex-direction: column;
     align-items: stretch;
@@ -1703,6 +1745,11 @@ textarea:disabled {
   .button,
   .kt-btn {
     width: 100%;
+  }
+
+  .table-actions .button,
+  .banner-actions .button {
+    width: auto;
   }
 
   .table th,

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+﻿import React, { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -198,7 +198,7 @@ export function ProductsPage(): JSX.Element {
       return (
         <tr>
           <td colSpan={6}>
-            <div className="empty-state">{(productsQuery.error as Error)?.message ?? 'Error'}</div>
+            <div className="empty-state">{(productsQuery.error as Error)?.message ?? t('common.error')}</div>
           </td>
         </tr>
       );
@@ -373,4 +373,5 @@ export function ProductsPage(): JSX.Element {
     </div>
   );
 }
+
 

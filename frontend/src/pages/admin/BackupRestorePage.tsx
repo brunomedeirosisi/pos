@@ -6,6 +6,7 @@ import type { BackupRecord } from '../../types/backup';
 import { useToast } from '../../components/ui/ToastProvider';
 import { useHasPermission } from '../../store/auth';
 import { formatDateTimeDdMmYyyy } from '../../utils/date';
+import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 
 function formatBytes(bytes: number): string {
   if (!bytes || bytes <= 0) return '0 B';
@@ -29,6 +30,11 @@ export function BackupRestorePage(): JSX.Element {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [restorePassword, setRestorePassword] = useState('');
+  const [confirmCreateOpen, setConfirmCreateOpen] = useState(false);
+  const [backupToDelete, setBackupToDelete] = useState<BackupRecord | null>(null);
+  const [backupToRestore, setBackupToRestore] = useState<BackupRecord | null>(null);
+  const [existingRestorePassword, setExistingRestorePassword] = useState('');
+  const [confirmUploadRestoreOpen, setConfirmUploadRestoreOpen] = useState(false);
 
   const backupsQuery = useQuery({
     queryKey: ['admin', 'backups'],
@@ -40,6 +46,7 @@ export function BackupRestorePage(): JSX.Element {
     mutationFn: backupService.create,
     onSuccess: () => {
       toast.show(t('backups.createSuccess'), 'success');
+      setConfirmCreateOpen(false);
       queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
@@ -49,6 +56,7 @@ export function BackupRestorePage(): JSX.Element {
     mutationFn: (filename: string) => backupService.remove(filename),
     onSuccess: () => {
       toast.show(t('common.saved'), 'success');
+      setBackupToDelete(null);
       queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
@@ -60,6 +68,8 @@ export function BackupRestorePage(): JSX.Element {
     onSuccess: () => {
       toast.show(t('backups.restoreSuccess'), 'success');
       toast.show(t('backups.preRestoreSnapshot'));
+      setBackupToRestore(null);
+      setExistingRestorePassword('');
       queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
@@ -74,6 +84,7 @@ export function BackupRestorePage(): JSX.Element {
     onSuccess: () => {
       toast.show(t('backups.restoreSuccess'), 'success');
       toast.show(t('backups.preRestoreSnapshot'));
+      setConfirmUploadRestoreOpen(false);
       setSelectedFile(null);
       setRestorePassword('');
       if (fileInputRef.current) {
@@ -99,9 +110,7 @@ export function BackupRestorePage(): JSX.Element {
       toast.show(t('common.noPermission'), 'error');
       return;
     }
-    if (window.confirm(t('backups.confirmCreate'))) {
-      createMutation.mutate();
-    }
+    setConfirmCreateOpen(true);
   };
 
   const handleDownload = async (backup: BackupRecord) => {
@@ -129,9 +138,7 @@ export function BackupRestorePage(): JSX.Element {
       toast.show(t('common.noPermission'), 'error');
       return;
     }
-    if (window.confirm(t('backups.deleteConfirm'))) {
-      deleteMutation.mutate(backup.filename);
-    }
+    setBackupToDelete(backup);
   };
 
   const handleRestoreExisting = (backup: BackupRecord) => {
@@ -139,14 +146,8 @@ export function BackupRestorePage(): JSX.Element {
       toast.show(t('backups.noRestorePermission'), 'error');
       return;
     }
-    const password = window.prompt(t('backups.passwordLabel'));
-    if (!password) {
-      return;
-    }
-    if (!window.confirm(t('backups.confirmRestore'))) {
-      return;
-    }
-    restoreExistingMutation.mutate({ filename: backup.filename, password });
+    setExistingRestorePassword('');
+    setBackupToRestore(backup);
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -165,10 +166,7 @@ export function BackupRestorePage(): JSX.Element {
       toast.show(t('backups.passwordLabel'), 'error');
       return;
     }
-    if (!window.confirm(t('backups.confirmRestore'))) {
-      return;
-    }
-    uploadAndRestoreMutation.mutate({ file: selectedFile, password: restorePassword });
+    setConfirmUploadRestoreOpen(true);
   };
 
   if (!canReadBackups) {
@@ -181,7 +179,8 @@ export function BackupRestorePage(): JSX.Element {
   }
 
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <>
+      <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div style={{ display: 'grid', gap: '1.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
         <section style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
@@ -340,6 +339,82 @@ export function BackupRestorePage(): JSX.Element {
           </table>
         </section>
       </div>
-    </div>
+      </div>
+
+      <ConfirmDialog
+        open={confirmCreateOpen}
+        title={t('backups.confirmCreate')}
+        confirmLabel={t('backups.create')}
+        onClose={() => setConfirmCreateOpen(false)}
+        onConfirm={() => createMutation.mutate()}
+        isPending={createMutation.isPending}
+        tone="primary"
+      />
+
+      <ConfirmDialog
+        open={Boolean(backupToDelete)}
+        title={t('backups.deleteConfirm')}
+        description={backupToDelete?.filename}
+        confirmLabel={t('common.delete')}
+        onClose={() => setBackupToDelete(null)}
+        onConfirm={() => {
+          if (!backupToDelete) return;
+          deleteMutation.mutate(backupToDelete.filename);
+        }}
+        isPending={deleteMutation.isPending}
+        tone="danger"
+      />
+
+      <ConfirmDialog
+        open={Boolean(backupToRestore)}
+        title={t('backups.confirmRestore')}
+        description={backupToRestore?.filename}
+        confirmLabel={t('common.restore')}
+        onClose={() => {
+          if (restoreExistingMutation.isPending) return;
+          setBackupToRestore(null);
+        }}
+        onConfirm={() => {
+          if (!backupToRestore) return;
+          if (!existingRestorePassword.trim()) {
+            toast.show(t('backups.passwordLabel'), 'error');
+            return;
+          }
+          restoreExistingMutation.mutate({
+            filename: backupToRestore.filename,
+            password: existingRestorePassword.trim(),
+          });
+        }}
+        isPending={restoreExistingMutation.isPending}
+        confirmDisabled={!existingRestorePassword.trim()}
+        tone="danger"
+      >
+        <div className="form-group">
+          <label htmlFor="existing-restore-password">{t('backups.passwordLabel')}</label>
+          <input
+            id="existing-restore-password"
+            type="password"
+            value={existingRestorePassword}
+            onChange={(event) => setExistingRestorePassword(event.target.value)}
+            autoComplete="current-password"
+          />
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={confirmUploadRestoreOpen}
+        title={t('backups.confirmRestore')}
+        description={selectedFile?.name}
+        confirmLabel={t('common.restore')}
+        onClose={() => setConfirmUploadRestoreOpen(false)}
+        onConfirm={() => {
+          if (!selectedFile) return;
+          uploadAndRestoreMutation.mutate({ file: selectedFile, password: restorePassword });
+        }}
+        isPending={uploadAndRestoreMutation.isPending}
+        confirmDisabled={!selectedFile || !restorePassword.trim()}
+        tone="danger"
+      />
+    </>
   );
 }

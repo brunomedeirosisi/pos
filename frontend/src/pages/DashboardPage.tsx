@@ -123,11 +123,15 @@ function WidgetFrame({
   state,
   children,
   actions,
+  loadingText,
+  errorText,
 }: {
   title: string;
   state: QueryState;
   children: React.ReactNode;
   actions?: React.ReactNode;
+  loadingText: string;
+  errorText: string;
 }) {
   return (
     <section className="card dashboard-widget">
@@ -138,9 +142,9 @@ function WidgetFrame({
           {state.isFetching && <span className="badge">{'...'}</span>}
         </div>
       </div>
-      {state.isLoading && <div className="dashboard-widget__state">{'Loading...'}</div>}
+      {state.isLoading && <div className="dashboard-widget__state">{loadingText}</div>}
       {!state.isLoading && state.isError && (
-        <div className="dashboard-widget__state dashboard-widget__state--error">{(state.error as Error)?.message ?? 'Error'}</div>
+        <div className="dashboard-widget__state dashboard-widget__state--error">{(state.error as Error)?.message ?? errorText}</div>
       )}
       {!state.isLoading && !state.isError && children}
     </section>
@@ -160,6 +164,8 @@ export function DashboardPage(): JSX.Element {
   const [comparePrevious, setComparePrevious] = React.useState(false);
 
   const filters = React.useMemo(() => parseFilters(searchParams), [searchParams]);
+  const [draftFilters, setDraftFilters] = React.useState<DashboardFilters>(filters);
+  const filtersChanged = React.useMemo(() => JSON.stringify(filters) !== JSON.stringify(draftFilters), [filters, draftFilters]);
 
   React.useEffect(() => {
     const needsDefaults = !searchParams.get('startDate') || !searchParams.get('endDate');
@@ -167,12 +173,28 @@ export function DashboardPage(): JSX.Element {
     setSearchParams(buildFilterParams(filters), { replace: true });
   }, [filters, searchParams, setSearchParams]);
 
-  const updateFilters = React.useCallback(
+  React.useEffect(() => {
+    setDraftFilters(filters);
+  }, [filters]);
+
+  const updateDraftFilters = React.useCallback((patch: Partial<DashboardFilters>) => {
+    setDraftFilters((current) => ({
+      ...current,
+      ...patch,
+    }));
+  }, []);
+
+  const applyFilters = React.useCallback(() => {
+    setSearchParams(buildFilterParams(draftFilters), { replace: true });
+  }, [draftFilters, setSearchParams]);
+
+  const applySingleFilter = React.useCallback(
     (patch: Partial<DashboardFilters>) => {
       const nextFilters: DashboardFilters = {
         ...filters,
         ...patch,
       };
+      setDraftFilters(nextFilters);
       setSearchParams(buildFilterParams(nextFilters), { replace: true });
     },
     [filters, setSearchParams]
@@ -180,13 +202,12 @@ export function DashboardPage(): JSX.Element {
 
   const resetFilters = React.useCallback(() => {
     const defaults = getDefaultDateRange();
-    setSearchParams(
-      buildFilterParams({
-        ...defaults,
-        timezone: 'America/Sao_Paulo',
-      }),
-      { replace: true }
-    );
+    const nextDefaults: DashboardFilters = {
+      ...defaults,
+      timezone: 'America/Sao_Paulo',
+    };
+    setDraftFilters(nextDefaults);
+    setSearchParams(buildFilterParams(nextDefaults), { replace: true });
   }, [setSearchParams]);
 
   const optionsQuery = useQuery({
@@ -336,9 +357,14 @@ export function DashboardPage(): JSX.Element {
       <section className="card dashboard-filters">
         <div className="dashboard-filters__header">
           <h2>{t('dashboard.heading')}</h2>
-          <button type="button" className="kt-btn kt-btn--ghost" onClick={resetFilters}>
-            {t('common.reset')}
-          </button>
+          <div className="dashboard-widget__actions">
+            <button type="button" className="button secondary" onClick={resetFilters}>
+              {t('common.reset')}
+            </button>
+            <button type="button" className="button primary" onClick={applyFilters} disabled={!filtersChanged}>
+              {t('common.apply')}
+            </button>
+          </div>
         </div>
 
         <div className="dashboard-filters__grid">
@@ -346,19 +372,26 @@ export function DashboardPage(): JSX.Element {
             <span>{t('dashboard.filters.startDate')}</span>
             <input
               type="date"
-              value={filters.startDate}
-              onChange={(event) => updateFilters({ startDate: event.target.value })}
+              value={draftFilters.startDate}
+              onChange={(event) => updateDraftFilters({ startDate: event.target.value })}
             />
           </label>
 
           <label>
             <span>{t('dashboard.filters.endDate')}</span>
-            <input type="date" value={filters.endDate} onChange={(event) => updateFilters({ endDate: event.target.value })} />
+            <input
+              type="date"
+              value={draftFilters.endDate}
+              onChange={(event) => updateDraftFilters({ endDate: event.target.value })}
+            />
           </label>
 
           <label>
             <span>{t('dashboard.filters.store')}</span>
-            <select value={filters.storeId ?? ''} onChange={(event) => updateFilters({ storeId: event.target.value || undefined })}>
+            <select
+              value={draftFilters.storeId ?? ''}
+              onChange={(event) => updateDraftFilters({ storeId: event.target.value || undefined })}
+            >
               <option value="">{t('dashboard.filters.allStores')}</option>
               {(options?.stores ?? []).map((store) => (
                 <option key={store.id} value={store.id}>
@@ -371,8 +404,8 @@ export function DashboardPage(): JSX.Element {
           <label>
             <span>{t('dashboard.filters.seller')}</span>
             <select
-              value={filters.sellerId ?? ''}
-              onChange={(event) => updateFilters({ sellerId: event.target.value || undefined })}
+              value={draftFilters.sellerId ?? ''}
+              onChange={(event) => updateDraftFilters({ sellerId: event.target.value || undefined })}
             >
               <option value="">{t('dashboard.filters.allSellers')}</option>
               {(options?.sellers ?? []).map((seller) => (
@@ -386,8 +419,8 @@ export function DashboardPage(): JSX.Element {
           <label>
             <span>{t('dashboard.filters.category')}</span>
             <select
-              value={filters.categoryId ?? ''}
-              onChange={(event) => updateFilters({ categoryId: event.target.value || undefined })}
+              value={draftFilters.categoryId ?? ''}
+              onChange={(event) => updateDraftFilters({ categoryId: event.target.value || undefined })}
             >
               <option value="">{t('dashboard.filters.allCategories')}</option>
               {(options?.categories ?? []).map((category) => (
@@ -401,8 +434,10 @@ export function DashboardPage(): JSX.Element {
           <label>
             <span>{t('dashboard.filters.channel')}</span>
             <select
-              value={filters.channel ?? ''}
-              onChange={(event) => updateFilters({ channel: (event.target.value as DashboardFilters['channel']) || undefined })}
+              value={draftFilters.channel ?? ''}
+              onChange={(event) =>
+                updateDraftFilters({ channel: (event.target.value as DashboardFilters['channel']) || undefined })
+              }
             >
               <option value="">{t('dashboard.filters.allChannels')}</option>
               {channelOptions.map((channel) => (
@@ -416,8 +451,8 @@ export function DashboardPage(): JSX.Element {
           <label>
             <span>{t('dashboard.filters.paymentTerm')}</span>
             <select
-              value={filters.paymentTermId ?? ''}
-              onChange={(event) => updateFilters({ paymentTermId: event.target.value || undefined })}
+              value={draftFilters.paymentTermId ?? ''}
+              onChange={(event) => updateDraftFilters({ paymentTermId: event.target.value || undefined })}
             >
               <option value="">{t('dashboard.filters.allPaymentTerms')}</option>
               {(options?.paymentTerms ?? []).map((term) => (
@@ -470,6 +505,8 @@ export function DashboardPage(): JSX.Element {
         <WidgetFrame
           title={t('dashboard.widgets.salesByDay')}
           state={salesByDayQuery}
+          loadingText={t('common.loading')}
+          errorText={t('common.error')}
           actions={
             <label className="dashboard-inline-check">
               <input type="checkbox" checked={comparePrevious} onChange={(event) => setComparePrevious(event.target.checked)} />
@@ -535,6 +572,8 @@ export function DashboardPage(): JSX.Element {
         <WidgetFrame
           title={t('dashboard.widgets.categories')}
           state={categoriesQuery}
+          loadingText={t('common.loading')}
+          errorText={t('common.error')}
           actions={
             <select value={categoriesMetric} onChange={(event) => setCategoriesMetric(event.target.value as CategoriesMetric)}>
               <option value="revenue">{t('dashboard.metrics.revenue')}</option>
@@ -554,7 +593,7 @@ export function DashboardPage(): JSX.Element {
                     key={`${item.categoryName}-${index}`}
                     type="button"
                     className="dashboard-categories__legend-item"
-                    onClick={() => item.categoryId && updateFilters({ categoryId: item.categoryId })}
+                    onClick={() => item.categoryId && applySingleFilter({ categoryId: item.categoryId })}
                     disabled={!item.categoryId}
                   >
                     <span className="dashboard-categories__swatch" style={{ backgroundColor: chartPalette[index % chartPalette.length] }} />
@@ -572,6 +611,8 @@ export function DashboardPage(): JSX.Element {
         <WidgetFrame
           title={t('dashboard.widgets.peakHours')}
           state={peakHoursQuery}
+          loadingText={t('common.loading')}
+          errorText={t('common.error')}
           actions={
             <select value={peakHoursMetric} onChange={(event) => setPeakHoursMetric(event.target.value as PeakHoursMetric)}>
               <option value="orders">{t('dashboard.metrics.orders')}</option>
@@ -611,6 +652,8 @@ export function DashboardPage(): JSX.Element {
         <WidgetFrame
           title={t('dashboard.widgets.sellerRanking')}
           state={sellerRankingQuery}
+          loadingText={t('common.loading')}
+          errorText={t('common.error')}
           actions={
             <select value={sellerSort} onChange={(event) => setSellerSort(event.target.value as SellerRankingSort)}>
               <option value="revenue">{t('dashboard.metrics.revenue')}</option>
@@ -652,6 +695,8 @@ export function DashboardPage(): JSX.Element {
       <WidgetFrame
         title={t('dashboard.widgets.productAbc')}
         state={abcQuery}
+        loadingText={t('common.loading')}
+        errorText={t('common.error')}
         actions={
           <select value={abcMetric} onChange={(event) => setAbcMetric(event.target.value as ProductAbcMetric)}>
             <option value="revenue">{t('dashboard.metrics.revenue')}</option>
@@ -693,7 +738,12 @@ export function DashboardPage(): JSX.Element {
       </WidgetFrame>
 
       <div className="dashboard-grid-three">
-        <WidgetFrame title={t('dashboard.widgets.customerKpis')} state={customersQuery}>
+        <WidgetFrame
+          title={t('dashboard.widgets.customerKpis')}
+          state={customersQuery}
+          loadingText={t('common.loading')}
+          errorText={t('common.error')}
+        >
           <div className="dashboard-mini-kpis">
             <MiniKpi label={t('dashboard.kpis.newCustomers')} value={String(customers?.newCustomers ?? 0)} />
             <MiniKpi label={t('dashboard.kpis.returningCustomers')} value={String(customers?.returningCustomers ?? 0)} />
@@ -711,6 +761,8 @@ export function DashboardPage(): JSX.Element {
         <WidgetFrame
           title={t('dashboard.widgets.topProduct')}
           state={topProductQuery}
+          loadingText={t('common.loading')}
+          errorText={t('common.error')}
           actions={
             <select value={topProductMetric} onChange={(event) => setTopProductMetric(event.target.value as TopProductMetric)}>
               <option value="quantity">{t('dashboard.metrics.quantity')}</option>
@@ -730,7 +782,12 @@ export function DashboardPage(): JSX.Element {
           )}
         </WidgetFrame>
 
-        <WidgetFrame title={t('dashboard.widgets.criticalStock')} state={criticalStockQuery}>
+        <WidgetFrame
+          title={t('dashboard.widgets.criticalStock')}
+          state={criticalStockQuery}
+          loadingText={t('common.loading')}
+          errorText={t('common.error')}
+        >
           {(criticalStock?.items ?? []).length === 0 ? (
             <div className="empty-state">{t('common.empty')}</div>
           ) : (

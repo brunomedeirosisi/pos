@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+﻿import React, { useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -7,6 +7,7 @@ import { useToast } from '../components/ui/ToastProvider';
 import type { SaleStatus } from '../types/sales';
 import type { Customer, Seller, PaymentTerm } from '../types/catalog';
 import { formatDateDdMmYyyy } from '../utils/date';
+import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 
 const statusClasses: Record<SaleStatus, string> = {
   completed: 'status-completed',
@@ -20,6 +21,7 @@ export function SaleDetailsPage(): JSX.Element | null {
   const toast = useToast();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const [confirmCancelOpen, setConfirmCancelOpen] = React.useState(false);
 
   const saleQuery = useQuery({
     queryKey: ['sale', id],
@@ -34,6 +36,7 @@ export function SaleDetailsPage(): JSX.Element | null {
     mutationFn: (saleId: string) => salesService.cancel(saleId),
     onSuccess: (sale) => {
       toast.show(t('sales.saleCancelled'), 'success');
+      setConfirmCancelOpen(false);
       queryClient.invalidateQueries({ queryKey: ['sale', id] });
       queryClient.invalidateQueries({ queryKey: ['sales'] });
     },
@@ -44,6 +47,14 @@ export function SaleDetailsPage(): JSX.Element | null {
   const customersCache = (queryClient.getQueryData(['sales-customers']) as Customer[] | undefined) ?? [];
   const sellersCache = (queryClient.getQueryData(['sales-sellers']) as Seller[] | undefined) ?? [];
   const paymentTermsCache = (queryClient.getQueryData(['sales-payment-terms']) as PaymentTerm[] | undefined) ?? [];
+  const saleStatusLabels: Record<SaleStatus, string> = React.useMemo(
+    () => ({
+      completed: t('customers.purchaseStatusCompleted'),
+      cancelled: t('customers.purchaseStatusCancelled'),
+      draft: t('customers.purchaseStatusDraft'),
+    }),
+    [t]
+  );
 
   const customerMap = useMemo(() => new Map(customersCache.map((c) => [c.id, c.name])), [customersCache]);
   const sellerMap = useMemo(() => new Map(sellersCache.map((s) => [s.id, s.name])), [sellersCache]);
@@ -73,7 +84,7 @@ export function SaleDetailsPage(): JSX.Element | null {
   if (saleQuery.isError) {
     return (
       <div className="card" style={{ marginTop: '1.5rem' }}>
-        <p>{(saleQuery.error as Error)?.message ?? 'Error'}</p>
+        <p>{(saleQuery.error as Error)?.message ?? t('common.error')}</p>
       </div>
     );
   }
@@ -94,7 +105,7 @@ export function SaleDetailsPage(): JSX.Element | null {
             {t('sales.emission')}: {formatDateDdMmYyyy(sale.emission_date)} | {t('sales.total')}: R$ {totals.total.toFixed(2)}
           </p>
         </div>
-        <span className={`badge ${statusClasses[sale.status]}`}>{sale.status}</span>
+        <span className={`badge ${statusClasses[sale.status]}`}>{saleStatusLabels[sale.status]}</span>
       </div>
 
       <div style={{ marginTop: '1rem', display: 'grid', gap: '0.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
@@ -120,7 +131,7 @@ export function SaleDetailsPage(): JSX.Element | null {
         </div>
       </div>
 
-      <div style={{ overflowX: 'auto', marginTop: '1rem' }}>
+      <div className="table-wrapper" style={{ marginTop: '1rem' }}>
         <table className="table">
           <thead>
             <tr>
@@ -154,13 +165,25 @@ export function SaleDetailsPage(): JSX.Element | null {
         <button
           type="button"
           className="button danger"
-          onClick={() => cancelMutation.mutate(sale.id)}
+          onClick={() => setConfirmCancelOpen(true)}
           disabled={cancelMutation.isPending}
           style={{ marginTop: '1rem' }}
         >
           {cancelMutation.isPending ? t('common.loading') : t('sales.cancelSale')}
         </button>
       )}
+
+      <ConfirmDialog
+        open={confirmCancelOpen}
+        title={t('sales.cancelSale')}
+        description={`${formatDateDdMmYyyy(sale.emission_date)} - R$ ${totals.total.toFixed(2)}`}
+        confirmLabel={t('sales.cancelSale')}
+        onClose={() => setConfirmCancelOpen(false)}
+        onConfirm={() => cancelMutation.mutate(sale.id)}
+        isPending={cancelMutation.isPending}
+        tone="danger"
+      />
     </div>
   );
 }
+
