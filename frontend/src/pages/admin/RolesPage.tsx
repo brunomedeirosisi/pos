@@ -61,7 +61,8 @@ export function RolesPage(): JSX.Element {
     mutationFn: rolesService.create,
     onSuccess: () => {
       toast.show(t('common.saved'), 'success');
-      queryClient.invalidateQueries({ queryKey: ['roles'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['roles'] });
       closeForm();
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
@@ -72,7 +73,8 @@ export function RolesPage(): JSX.Element {
       rolesService.update(id, payload),
     onSuccess: () => {
       toast.show(t('common.saved'), 'success');
-      queryClient.invalidateQueries({ queryKey: ['roles'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['roles'] });
       closeForm();
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
@@ -82,7 +84,8 @@ export function RolesPage(): JSX.Element {
     mutationFn: (id: string) => rolesService.remove(id),
     onSuccess: () => {
       toast.show(t('common.saved'), 'success');
-      queryClient.invalidateQueries({ queryKey: ['roles'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['roles'] });
       setRoleToDelete(null);
     },
     onError: (error: Error) => toast.show(error.message, 'error'),

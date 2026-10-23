@@ -1,0 +1,80 @@
+# Homologação da instalação Windows
+
+Use este roteiro com o responsável da loja antes de liberar vendas reais. Registre data, versão do pacote, SHA256 do ZIP, versão do Windows/Docker, conta Windows, IP reservado, modelo/driver da impressora, destino do backup e responsáveis. Os dados do ensaio devem ser sintéticos.
+
+## Evidências automatizadas e seus limites
+
+O repositório oferece três camadas de validação reproduzíveis:
+
+1. `Test-Installer.ps1`: parser PowerShell, DPAPI real, ACL real em pasta temporária, argumentos de processo, manifesto/hashes/traversal, compilação e execução do launcher e construção oculta da interface. Instalação, reparo e Terminal usam simulações para Docker, certificados, firewall, atalhos e impressão.
+2. `infra/test-disposable.mjs --docker --images --backups --seeds`: lint, controles de lint, tipos, testes, builds, PostgreSQL/Redis descartáveis, imagens finais, autenticação, seed e backup/restore/recriação reais em ambiente isolado.
+3. `infra/installer/test-store.mjs`: imagens empacotadas e Compose de loja em projeto Docker isolado; HTTPS com CA fornecida apenas ao processo de teste, duas sessões, fila persistente e agente com saída física simulada. Não instala CA no Windows nem imprime papel.
+
+Os resultados de uma execução são registrados em `docs/test-evidence` e no registro técnico da implementação. Nenhum teste automatizado substitui a aceitação física abaixo. Atualizações futuras precisam de um ensaio de migração específico antes de declarar `CompatibleFrom`.
+
+## Caixa 1 Principal
+
+- [ ] Windows x64 atende aos requisitos atuais do Docker Desktop; virtualização e WSL funcionam. Licenciamento Docker validado pela organização.
+- [ ] Conta operacional definida; instalação, Docker, driver e inicialização usam essa mesma conta.
+- [ ] IP privado reservado no roteador e atribuído ao adaptador correto; perfil da LAN é Privado.
+- [ ] Não há conflito com `172.29.73.0/24` nem outra aplicação usando a porta 443 nesse IP.
+- [ ] Driver e nome da fila corretos; página de teste do Windows legível, acentos, corte/formulário e largura conferidos.
+- [ ] Backup em destino externo existente, com acesso do Docker, espaço e publicação exclusiva/hardlinks testados. Se UNC/NAS, conexão e credenciais validadas no contexto operacional.
+- [ ] Hash do pacote conferido por canal confiável; ZIP inteiro extraído; manifesto validado pelo EXE.
+- [ ] Instalação inicial termina com backup/réplica verificados e identidade HTTPS correta.
+- [ ] Primeiro administrador entra; dados da empresa corretos; usuários individuais e permissões dos dois operadores configurados.
+- [ ] Não há produtos/clientes/vendas demonstrativos no banco inicial.
+- [ ] Inicialização não mostra senhas/tokens; `secrets.bin` não é JSON e fica na pasta privada da conta.
+- [ ] Regra criada pelo instalador permite apenas TCP443 no IP selecionado, perfil Privado, origem LocalSubnet. Nenhuma publicação de banco/Redis/9222.
+
+## Caixa 2 Terminal e rede
+
+- [ ] Transferir somente `Terminal-POS` gerado após o Principal estar saudável.
+- [ ] Comparar o SHA256 da CA exibido nos dois caixas por canal independente; não aceitar CA de outra origem.
+- [ ] Instalar na conta Windows que usará o navegador; abrir pelo atalho POS sem alerta HTTPS.
+- [ ] Verificar que os dois caixas chegam à mesma loja/UUID e veem a mesma venda.
+- [ ] Confirmar que não há redirecionamento externo de portas no roteador. Testar regras com a rede e operadores reais.
+- [ ] Bloquear/confirmar isolamento de redes de visitantes conforme a infraestrutura, sem abrir outras portas do POS.
+
+## Impressão compartilhada
+
+- [ ] Criar uma venda sintética em cada caixa e solicitar uma impressão em cada uma; conferir ordem, conteúdo, cópias e estado apresentado.
+- [ ] Confirmar que todas saem somente na impressora escolhida no Principal.
+- [ ] Duplo clique/reenvio do mesmo identificador não cria outro trabalho; nova ação explícita de reimpressão cria uma nova solicitação.
+- [ ] Desconectar a impressora/colocar sem papel: conferir spooler e tela. “Enviado ao Windows” não confirma impressão física.
+- [ ] Parar o agente antes do envio: fila aguarda e retoma após inicialização.
+- [ ] Simular interrupção durante o envio: conferir estado incerto; não permitir repetição automática; operador verifica papel/spooler antes de nova ação.
+- [ ] Reiniciar o Windows durante ensaio controlado; confirmar journal e ausência de reimpressão automática de envio incerto.
+- [ ] Confirmar que não existe listener do agente na porta 9222 no modo instalado.
+
+## Continuidade e backup
+
+- [ ] Parar com `Parar-POS.ps1`: encerra agente e containers preservando dados.
+- [ ] Fazer logoff/login: parada manual persiste. Retomar com `Start-POS.ps1 -Resume`.
+- [ ] Reiniciar e entrar na conta: Docker, containers e agente iniciam; sem login o supervisor não opera.
+- [ ] Testar desligamento/rede indisponível/suspensão. Definir política operacional para que o Principal permaneça ligado e conectado durante o expediente.
+- [ ] Criar backup manual; conferir arquivo, metadados e SHA256 local/externo. Simular destino indisponível e confirmar falha visível sem declarar sucesso.
+- [ ] Observar backup automático vencido e nova tentativa após falha; conferir `backup-status.json` e capacidade do destino.
+- [ ] Restaurar uma cópia externa em projeto isolado e reconciliar vendas, itens, recebimentos, estoque, usuários e fila/journal. Nunca ensaiar sobre o banco operacional.
+- [ ] Registrar RPO/RTO medidos e procedimento assistido para perda do PC/perfil/DPAPI. Backup do banco não inclui CA, configurações nem segredos Windows.
+- [ ] Definir retenção, proteção e acesso às cópias externas; a aplicação não criptografa os ZIPs.
+
+## Atualização e retirada
+
+- [ ] Pacote de atualização declara explicitamente compatibilidade; ensaio usa cópia sintética/homologada da origem.
+- [ ] Backup prévio e réplica conferidos; parar operações dos dois caixas na janela de manutenção.
+- [ ] Atualizar, conferir identidade, dados, login, fila e impressão; semear dados demonstrativos não faz parte de atualizar.
+- [ ] Exercitar falha de atualização em ambiente isolado: `update_failed` impede reinício/“reparo” que contorne a investigação. Não restaurar automaticamente esquema/banco antigo.
+- [ ] Exercitar desativação: remove inicialização/regra própria, preserva dados/volumes e backups; remover CA somente após conferir sua identidade e dependências.
+
+## Gates de negócio que permanecem pendentes
+
+A infraestrutura não encerra o roadmap de produto. Antes de uso comercial, evidenciar os bloqueios de cliente inativo e limite de crédito, política de estoque não negativo e concorrência, fluxo autorizado/contábil de crédito ou reembolso, reconciliação de cancelamentos anteriores aos movimentos e política de KPIs sem custo. A topologia de impressão deve ser aceita pelos operadores. Restore e sobrescrita de importação permanecem desabilitados no pacote.
+
+Aprovação de infraestrutura: __________________ Data: __________
+
+Aprovação de impressão e operação: _____________ Data: __________
+
+Aprovação de recuperação e regras de negócio: ________________ Data: __________
+
+Guias: [uso](USO.md) e [técnico](TECNICO.md).

@@ -47,7 +47,8 @@ export function BackupRestorePage(): JSX.Element {
     onSuccess: () => {
       toast.show(t('backups.createSuccess'), 'success');
       setConfirmCreateOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
   });
@@ -57,7 +58,8 @@ export function BackupRestorePage(): JSX.Element {
     onSuccess: () => {
       toast.show(t('common.saved'), 'success');
       setBackupToDelete(null);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
   });
@@ -70,7 +72,8 @@ export function BackupRestorePage(): JSX.Element {
       toast.show(t('backups.preRestoreSnapshot'));
       setBackupToRestore(null);
       setExistingRestorePassword('');
-      queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
   });
@@ -90,7 +93,8 @@ export function BackupRestorePage(): JSX.Element {
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
-      queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
   });

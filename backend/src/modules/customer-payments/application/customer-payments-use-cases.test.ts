@@ -17,6 +17,7 @@ describe('register customer payment use-case', () => {
       insertPayment: vi.fn(),
       getPaymentById: vi.fn(),
       getPaidBefore: vi.fn(),
+      getSalesPaidBefore: vi.fn(),
     };
 
     const useCase = createRegisterCustomerPaymentUseCase(repository);
@@ -59,6 +60,7 @@ describe('register customer payment use-case', () => {
       }),
       getPaymentById: vi.fn(),
       getPaidBefore: vi.fn(),
+      getSalesPaidBefore: vi.fn(),
     };
 
     const useCase = createRegisterCustomerPaymentUseCase(repository);

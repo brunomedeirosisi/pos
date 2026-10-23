@@ -1,0 +1,101 @@
+[
+  {
+    "name": "two half-cent lines",
+    "lines": [
+      { "quantity": 0.5, "price": 0.01 },
+      { "quantity": 0.5, "price": 0.01 }
+    ],
+    "discount": 0,
+    "subtotal": 0.02,
+    "total": 0.02,
+    "paid": 0.05,
+    "change": 0.03
+  },
+  {
+    "name": "discount after rounding lines",
+    "lines": [
+      { "quantity": 0.5, "price": 0.01 },
+      { "quantity": 0.5, "price": 0.01 }
+    ],
+    "discount": 0.01,
+    "subtotal": 0.02,
+    "total": 0.01,
+    "paid": 0.1,
+    "change": 0.09
+  },
+  {
+    "name": "binary floating point half cent",
+    "lines": [{ "quantity": 0.3, "price": 0.05 }],
+    "discount": 0,
+    "subtotal": 0.02,
+    "total": 0.02,
+    "paid": 0.02,
+    "change": 0
+  },
+  {
+    "name": "10.075 rounds half up",
+    "lines": [{ "quantity": 0.5, "price": 20.15 }],
+    "discount": 0,
+    "subtotal": 10.08,
+    "total": 10.08,
+    "paid": 11,
+    "change": 0.92
+  },
+  {
+    "name": "decimal addition and subtraction",
+    "lines": [
+      { "quantity": 1, "price": 0.1 },
+      { "quantity": 1, "price": 0.2 }
+    ],
+    "discount": 0.1,
+    "subtotal": 0.3,
+    "total": 0.2,
+    "paid": 0.5,
+    "change": 0.3
+  },
+  {
+    "name": "minimum quantity",
+    "lines": [{ "quantity": 0.001, "price": 10 }],
+    "discount": 0,
+    "subtotal": 0.01,
+    "total": 0.01,
+    "paid": 0.01,
+    "change": 0
+  },
+  {
+    "name": "zero catalog price remains explicit",
+    "lines": [{ "quantity": 0.001, "price": 0 }],
+    "discount": 0,
+    "subtotal": 0,
+    "total": 0,
+    "paid": 0,
+    "change": 0
+  },
+  {
+    "name": "full discount",
+    "lines": [{ "quantity": 3, "price": 1.25 }],
+    "discount": 3.75,
+    "subtotal": 3.75,
+    "total": 0,
+    "paid": 0,
+    "change": 0
+  },
+  {
+    "name": "maximum money",
+    "lines": [{ "quantity": 1, "price": 999999999999.99 }],
+    "discount": 0,
+    "subtotal": 999999999999.99,
+    "total": 999999999999.99,
+    "paid": 999999999999.99,
+    "change": 0
+  },
+  {
+    "name": "large quantity within all storage bounds",
+    "lines": [{ "quantity": 99999999999.999, "price": 0.01 }],
+    "discount": 0,
+    "subtotal": 1000000000,
+    "total": 1000000000,
+    "paid": 1000000000,
+    "change": 0
+  }
+]

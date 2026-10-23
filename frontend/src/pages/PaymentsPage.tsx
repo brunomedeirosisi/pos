@@ -159,7 +159,8 @@ export function PaymentsPage(): JSX.Element {
             onSubmit={(event) => {
               event.preventDefault();
               if (!selectedCustomerId) return;
-              navigate(`/catalog/customers/${selectedCustomerId}?action=register-payment`);
+              // BrowserRouter: a navegação não bloqueia esta ação da interface.
+              void navigate(`/catalog/customers/${selectedCustomerId}?action=register-payment`);
               setModalOpen(false);
             }}
             className="form-grid vertical"

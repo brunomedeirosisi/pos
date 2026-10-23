@@ -16,12 +16,17 @@ async function loadAuthTestContext() {
   process.env.API_PORT = '8080';
   process.env.JWT_SECRET = 'test_secret_with_more_than_32_characters_123456';
   process.env.JWT_TTL = '12h';
+  process.env.AUTH_COOKIE_NAME = 'pos_auth';
+  process.env.AUTH_COOKIE_MAX_AGE_SECONDS = '43200';
   process.env.POSTGRES_HOST = 'localhost';
   process.env.POSTGRES_PORT = '5432';
   process.env.POSTGRES_USER = 'pos';
   process.env.POSTGRES_PASSWORD = 'StrongPassword123!';
   process.env.POSTGRES_DB = 'posdb';
   process.env.CORS_ALLOWED_ORIGINS = 'http://localhost:5173';
+
+  const { resetEnvForTests } = await import('../config/env.js');
+  resetEnvForTests();
 
   const [{ requireAuth }, { errorHandler }] = await Promise.all([import('./auth.js'), import('./error-handler.js')]);
   return { requireAuth, errorHandler };
@@ -79,7 +84,7 @@ describe('requireAuth integration', () => {
     const token = jwt.sign(
       { sub: '58f1dc97-11d5-4f6c-b462-a1fd7be458d2' },
       process.env.JWT_SECRET as string,
-      { expiresIn: '1h' }
+      { expiresIn: '1h', issuer: 'pos-api', audience: 'pos-web', jwtid: 'b8a1524f-1aca-468b-9128-2457fe9c51da', algorithm: 'HS256' }
     );
 
     const app = express();
@@ -90,5 +95,35 @@ describe('requireAuth integration', () => {
     expect(response.status).toBe(200);
     expect(response.body.userId).toBe('58f1dc97-11d5-4f6c-b462-a1fd7be458d2');
     expect(queryMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows request with valid auth cookie and active user', async () => {
+    queryMock.mockResolvedValue({
+      rows: [
+        {
+          id: '58f1dc97-11d5-4f6c-b462-a1fd7be458d2',
+          email: 'admin@localhost.com',
+          full_name: 'Admin',
+          role_name: 'admin',
+          permissions: ['*'],
+          discount_limit: '100',
+          status: 'active',
+        },
+      ],
+    });
+
+    const token = jwt.sign(
+      { sub: '58f1dc97-11d5-4f6c-b462-a1fd7be458d2' },
+      process.env.JWT_SECRET as string,
+      { expiresIn: '1h', issuer: 'pos-api', audience: 'pos-web', jwtid: 'b8a1524f-1aca-468b-9128-2457fe9c51da', algorithm: 'HS256' }
+    );
+
+    const app = express();
+    app.get('/secure', requireAuth, (req, res) => res.json({ userId: req.user?.id }));
+    app.use(errorHandler);
+
+    const response = await request(app).get('/secure').set('Cookie', `pos_auth=${token}`);
+    expect(response.status).toBe(200);
+    expect(response.body.userId).toBe('58f1dc97-11d5-4f6c-b462-a1fd7be458d2');
   });
 });

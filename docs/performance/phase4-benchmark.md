@@ -1,4 +1,8 @@
-# Fase 4 - Benchmark de Performance e Escalabilidade de Dados
+# Benchmark SQL histórico — anterior ao roadmap da auditoria
+
+**Revisão em 22/10/2026:** este documento preserva resultados históricos de microbenchmark SQL. A coluna calculada por `1000 / média_ms` não mede requisições HTTP concorrentes. As metas HTTP e a capacidade operacional não foram demonstradas por esses números. A expressão “Fase 4” original antecede o roadmap da auditoria e não representa a entrega da fase 4 atual. Consulte o [harness HTTP da fase 6](phase6-http-benchmark.md) para medições novas.
+
+**Correção do seed em 22/10/2026:** o seed histórico passou a reconciliar cabeçalhos e itens (R$ 30 por venda), registrar crédito explícito de cliente e limitar os recebimentos sintéticos ao saldo devedor. Também recusa banco/usuário fora do harness descartável. Os números históricos abaixo foram obtidos com a fixture anterior e não constituem comparação com a corrigida. [Validação dos dois seeds](../testing-docker.md).
 
 ## Escopo
 - Plano de consultas reais em `sale` e tabelas de alto volume.
@@ -24,12 +28,12 @@
   - `customer_payment`: 180.000
 - Banco isolado via docker compose (projeto `posphase4`).
 - Scripts usados:
-  - [phase4_seed.sql](/d:/Projects/pos/backend/sql/benchmarks/phase4_seed.sql)
-  - [phase4_before_after.sql](/d:/Projects/pos/backend/sql/benchmarks/phase4_before_after.sql)
+  - [phase4_seed.sql](../../backend/sql/benchmarks/phase4_seed.sql)
+  - [phase4_before_after.sql](../../backend/sql/benchmarks/phase4_before_after.sql)
 
 ## Resultado antes/depois
 
-| Cenário | avg (ms) | p95 (ms) | throughput (req/s) |
+| Cenário | avg (ms) | p95 (ms) | 1000 / média_ms (inverso da latência SQL) |
 |---|---:|---:|---:|
 | sales_list_legacy_no_index | 2038.847 | 3247.554 | 0.49 |
 | sales_list_optimized_with_index | 2.505 | 4.336 | 399.24 |
@@ -39,14 +43,13 @@
 | import_batch_500_10k | 15.910 | 15.910 | 62.85 |
 
 ## Ganhos consolidados
-- `sales list`: p95 caiu de 3247.554 ms para 4.336 ms (~749x melhor), throughput de 0.49 para 399.24 req/s.
-- `customer totals`: p95 caiu de 114.155 ms para 110.601 ms, throughput de 12.85 para 12.95 req/s.
+- `sales list`: p95 caiu de 3247.554 ms para 4.336 ms (~749x melhor), inverso da latência média SQL de 0.49 para 399.24 s⁻¹.
+- `customer totals`: p95 caiu de 114.155 ms para 110.601 ms, inverso da latência média SQL de 12.85 para 12.95 s⁻¹.
 - `import 10k`: batch 500 foi ~4.35x mais rápido que linha a linha.
 
-## Status das metas
-- `sales list`: atendido.
-- `customer totals`: atendido.
-- `import 10k`: atendido.
+## Limites da conclusão histórica
+
+Os números acima descrevem SQL executado em loops, com índices removidos/recriados e uma comparação simplificada de inserts. Não validam as metas de vazão HTTP, a API atual, a memória do importador real ou o desempenho do caixa. As medições de importação têm uma amostra por estratégia. Nenhuma meta atual é marcada como atendida com base neste registro.
 
 ## Consultas reais e racional de índice
 - `GET /sales`:
@@ -70,15 +73,6 @@
   - redução de roundtrip da aplicação (duas consultas -> uma consulta).
   - `Execution Time: 69.530 ms` no cenário sintético com alta concentração de dados no mesmo `customer_id`.
 
-## Como reproduzir
-1. Subir banco isolado:
-   - `POSTGRES_PASSWORD=benchpass docker compose -f docker-compose.yml -p posphase4 up -d db`
-2. Aplicar seed:
-   - `docker exec -i posphase4-db-1 psql -U pos -d posdb -f /docker-entrypoint-initdb.d/01-init.sql` (se banco novo sem schema)
-   - `docker cp backend/sql/benchmarks/phase4_seed.sql posphase4-db-1:/tmp/phase4_seed.sql`
-   - `docker exec -i posphase4-db-1 psql -U pos -d posdb -f /tmp/phase4_seed.sql`
-3. Rodar benchmark:
-   - `docker cp backend/sql/benchmarks/phase4_before_after.sql posphase4-db-1:/tmp/phase4_before_after.sql`
-   - `docker exec -i posphase4-db-1 psql -U pos -d posdb -f /tmp/phase4_before_after.sql`
-4. Encerrar ambiente:
-   - `docker compose -f docker-compose.yml -p posphase4 down -v`
+## Reprodução atual
+
+Use o [guia do benchmark HTTP descartável](phase6-http-benchmark.md). O harness novo não executa os scripts históricos acima. O SQL histórico remove/recria índices e seu seed remove linhas; os comandos antigos que reutilizavam o Compose da aplicação foram retirados para evitar confusão com o ambiente de desenvolvimento.

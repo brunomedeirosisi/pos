@@ -37,7 +37,8 @@ export function LoginPage(): JSX.Element {
 
   useEffect(() => {
     if (initialized && user) {
-      navigate(redirectPath, { replace: true });
+      // BrowserRouter: a navegação não bloqueia esta ação da interface.
+      void navigate(redirectPath, { replace: true });
     }
   }, [initialized, user, navigate, redirectPath]);
 

@@ -1,3 +1,4 @@
+import { assertDestructiveOperationEnabled } from '../../../utils/destructive-operation-policy.js';
 import { Router } from 'express';
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
@@ -53,37 +54,41 @@ router.post(
   requirePermission('system:import:legacy'),
   upload.array('files', env.LEGACY_IMPORT_MAX_FILES),
   asyncHandler(async (req, res) => {
-    const user = req.user;
-    if (!user) {
-      throw unauthorized();
-    }
-
-    const parsed = legacyImportSchema.safeParse(req.body);
-    if (!parsed.success) {
-      throw badRequest('invalid request', parsed.error.flatten());
-    }
-    const payload = parsed.data;
-
-    if (normalizeConfirmationPhrase(payload.confirmation) !== normalizeConfirmationPhrase('IMPORT LEGACY DATA NOW')) {
-      throw badRequest('confirmation phrase mismatch');
-    }
-
-    await validateLegacyImportCredentials(user.id, payload.password);
-
     const files = (req.files as Express.Multer.File[]) ?? [];
-    if (!files.length) {
-      throw badRequest('at least one file is required');
-    }
-
-    await ensureImportDirectory();
-    const sessionId = createLegacyImportSessionId();
-    const sessionDir = path.join(importRoot, sessionId);
-    await fsp.mkdir(sessionDir, { recursive: true });
-
-    const storedFiles: string[] = [];
-    const allowedExtensions = ['.dbf', '.dbt', '.zip'];
-
     try {
+      const user = req.user;
+      if (!user) {
+        throw unauthorized();
+      }
+
+      const parsed = legacyImportSchema.safeParse(req.body);
+      if (!parsed.success) {
+        throw badRequest('invalid request', parsed.error.flatten());
+      }
+      const payload = parsed.data;
+      if (payload.overwrite) assertDestructiveOperationEnabled('legacy-overwrite');
+
+      if (normalizeConfirmationPhrase(payload.confirmation) !== normalizeConfirmationPhrase('IMPORT LEGACY DATA NOW')) {
+        throw badRequest('confirmation phrase mismatch');
+      }
+
+      await validateLegacyImportCredentials(user.id, payload.password);
+
+      if (files.reduce((total, file) => total + file.size, 0) > env.ARCHIVE_MAX_UNCOMPRESSED_BYTES) throw badRequest('legacy_upload_total_size_exceeded');
+      const names = files.map((file) => sanitizeLegacyFilename(file.originalname).toUpperCase());
+      if (new Set(names).size !== names.length) throw badRequest('duplicate_legacy_filename');
+      if (!files.length) {
+        throw badRequest('at least one file is required');
+      }
+
+      await ensureImportDirectory();
+      const sessionId = createLegacyImportSessionId();
+      const sessionDir = path.join(importRoot, sessionId);
+      await fsp.mkdir(sessionDir, { recursive: true });
+
+      const storedFiles: string[] = [];
+      const allowedExtensions = ['.dbf', '.dbt', '.zip'];
+
       try {
         for (const file of files) {
           if (!isAllowedLegacyUpload(file)) {

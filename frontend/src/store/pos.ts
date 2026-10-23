@@ -1,9 +1,17 @@
+import {
+  decimalUnits,
+  decimalNumber,
+  lineTotalCents,
+  isDecimalValue,
+} from '../utils/checkout-decimal';
 import { create } from 'zustand';
 import type { Product } from '../types/catalog';
 
 type CartItem = {
   productId: string;
   name: string;
+  priceCash: number | null;
+  priceBase: number | null;
   unitPrice: number;
   quantity: number;
   total: number;
@@ -27,6 +35,14 @@ type PosState = {
   getTotal: () => number;
 };
 
+function checkedCart(items: CartItem[]): CartItem[] {
+  decimalNumber(
+    items.reduce((sum, item) => sum + decimalUnits(item.total, 2), 0n),
+    2,
+  );
+  return items;
+}
+
 export const usePosStore = create<PosState>((set, get) => ({
   items: [],
   customerId: null,
@@ -36,46 +52,66 @@ export const usePosStore = create<PosState>((set, get) => ({
 
   addProduct: (product, priceField = 'price_cash') =>
     set((state) => {
-      const unitPrice = Number(product[priceField] ?? product.price_cash ?? 0) || 0;
+      const fallbackPrice = priceField === 'price_cash' ? product.price_base : product.price_cash;
+      const unitPrice = Number(product[priceField] ?? fallbackPrice ?? 0) || 0;
+      decimalUnits(unitPrice, 2);
       const existing = state.items.find((item) => item.productId === product.id);
       if (existing) {
         const updatedItems = state.items.map((item) =>
           item.productId === product.id
             ? {
                 ...item,
-                quantity: item.quantity + 1,
-                total: (item.quantity + 1) * unitPrice,
+                quantity: decimalNumber(decimalUnits(item.quantity, 3) + 1000n, 3),
+                unitPrice,
+                priceCash: product.price_cash ?? null,
+                priceBase: product.price_base ?? null,
+                total: decimalNumber(
+                  lineTotalCents(
+                    decimalNumber(decimalUnits(item.quantity, 3) + 1000n, 3),
+                    unitPrice,
+                  ),
+                  2,
+                ),
               }
-            : item
+            : item,
         );
-        return { items: updatedItems };
+        return { items: checkedCart(updatedItems) };
       }
 
       return {
-        items: [
+        items: checkedCart([
           ...state.items,
           {
             productId: product.id,
             name: product.name,
+            priceCash: product.price_cash ?? null,
+            priceBase: product.price_base ?? null,
             unitPrice,
             quantity: 1,
             total: unitPrice,
           },
-        ],
+        ]),
       };
     }),
 
   updateQuantity: (productId, quantity) =>
     set((state) => {
+      if (!isDecimalValue(quantity, 3)) throw new RangeError('Invalid quantity');
       if (quantity <= 0) {
         return { items: state.items.filter((item) => item.productId !== productId) };
       }
 
       return {
-        items: state.items.map((item) =>
-          item.productId === productId
-            ? { ...item, quantity, total: quantity * item.unitPrice }
-            : item
+        items: checkedCart(
+          state.items.map((item) =>
+            item.productId === productId
+              ? {
+                  ...item,
+                  quantity,
+                  total: decimalNumber(lineTotalCents(quantity, item.unitPrice), 2),
+                }
+              : item,
+          ),
         ),
       };
     }),
@@ -97,17 +133,19 @@ export const usePosStore = create<PosState>((set, get) => ({
   setCustomer: (id) => set({ customerId: id }),
   setSeller: (id) => set({ sellerId: id }),
   setPaymentTerm: (id) => set({ paymentTermId: id }),
-  setDiscount: (value) =>
-    set(() => ({
-      discount: value < 0 ? 0 : value,
-    })),
+  setDiscount: (value) => set((state) => (isDecimalValue(value, 2) ? { discount: value } : state)),
 
-  getSubtotal: () => get().items.reduce((acc, item) => acc + item.total, 0),
+  getSubtotal: () =>
+    decimalNumber(
+      get().items.reduce((acc, item) => acc + decimalUnits(item.total, 2), 0n),
+      2,
+    ),
 
   getTotal: () => {
     const subtotal = get().getSubtotal();
     const discount = get().discount;
-    return Math.max(subtotal - discount, 0);
+    const cents = decimalUnits(subtotal, 2) - decimalUnits(discount, 2);
+    return decimalNumber(cents > 0n ? cents : 0n, 2);
   },
 }));
 

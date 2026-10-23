@@ -1,6 +1,7 @@
+import { PAYMENT_REPORT_ROW_LIMIT, isCompletePaymentReport } from '../domain/payment-report-integrity.js';
 import { withTransaction } from '../../../db.js';
 import { resolvePagination } from '../../../utils/pagination.js';
-import { badRequest, notFound } from '../../../errors.js';
+import { badRequest, notFound, HttpError } from '../../../errors.js';
 import {
   paymentMethodFilterValues,
   type CustomerPaymentDto,
@@ -105,10 +106,12 @@ export function createListCustomerPaymentsUseCase(repository: CustomerPaymentsRe
 export function createCustomerPaymentHistoryReportUseCase(repository: CustomerPaymentsRepository, company: CompanyInfo) {
   return async (customerId: string, filters: PaymentListQueryDto): Promise<CustomerPaymentHistoryReportDto> => {
     const orderDirection = filters.sort ?? 'desc';
-    const pagination = resolvePagination(filters, { defaultPageSize: 1000, maxPageSize: 5000 });
 
     return withTransaction(async (client) => {
-      const customer = await repository.getCustomerById(customerId, 'share', client);
+      // One read-only snapshot covers identity, global totals and all filtered rows.
+      // No row lock is needed for an export; concurrent operators may keep writing.
+      await client.query('set transaction isolation level repeatable read, read only');
+      const customer = await repository.getCustomerById(customerId, undefined, client);
       if (!customer) {
         throw notFound('customer not found');
       }
@@ -116,15 +119,24 @@ export function createCustomerPaymentHistoryReportUseCase(repository: CustomerPa
       const totals = await repository.getCustomerFinancialTotals(customerId, client);
       const currentBalance = Number((totals.totalCharges - totals.totalPaid).toFixed(2));
       const pageResult = await repository.listPayments(customerId, filters, orderDirection, {
-        limit: pagination.limit,
-        offset: pagination.offset,
+        limit: PAYMENT_REPORT_ROW_LIMIT,
+        offset: 0,
       }, client);
+
+      if (pageResult.filteredCount > PAYMENT_REPORT_ROW_LIMIT) {
+        throw new HttpError(413, 'payment_report_limit_exceeded', { limit: PAYMENT_REPORT_ROW_LIMIT, count: pageResult.filteredCount });
+      }
+      const payments = pageResult.payments.map(mapPaymentRecord);
+      if (!isCompletePaymentReport({ payments, summary: { filtered_count: pageResult.filteredCount, filtered_total_paid: pageResult.filteredTotal } })) {
+        throw new HttpError(422, 'payment_report_inconsistent');
+      }
 
       return {
         generated_at: new Date().toISOString(),
         company,
         customer,
-        payments: pageResult.payments.map(mapPaymentRecord),
+        payments,
+        coverage: { complete: true, row_count: payments.length, row_limit: PAYMENT_REPORT_ROW_LIMIT },
         summary: {
           total_debt: totals.totalCharges,
           total_paid: totals.totalPaid,
@@ -160,8 +172,9 @@ export function createCustomerPaymentReceiptUseCase(repository: CustomerPayments
       const paymentDate = toDate(paymentRow.payment_date);
       const createdAt = toDate(paymentRow.created_at);
       const paidBefore = await repository.getPaidBefore(customerId, paymentRow.id, paymentDate, createdAt, client);
+      const salesPaidBefore = await repository.getSalesPaidBefore(customerId, createdAt, client);
       const paymentAmount = toNumber(paymentRow.amount);
-      const previousBalance = Number((totals.totalCharges - paidBefore).toFixed(2));
+      const previousBalance = Number((totals.totalCharges - salesPaidBefore - paidBefore).toFixed(2));
       const newBalance = Math.max(0, Number((previousBalance - paymentAmount).toFixed(2)));
 
       return {

@@ -1,0 +1,222 @@
+{
+  "schemaVersion": 1,
+  "phase": "6 - first cut",
+  "recordedAt": "2026-10-22T13:57:59.748Z",
+  "baseGitHead": "ac85924e7a94e836805e770c60db8141c783bca6",
+  "baseWasDirty": true,
+  "scope": [
+    "TSK-033 / TEC-033: authenticated concurrent HTTP baseline for sales list only",
+    "Bounded synthetic disposable harness, real wall-clock throughput, empirical percentiles, failures and resource samples",
+    "Correction of historical SQL-throughput claims and reproducible benchmark documentation"
+  ],
+  "sourceFingerprint": {
+    "algorithm": "sha256/path-NUL-content-NUL",
+    "fileCount": 127,
+    "sha256": "7aee4204fb60db425eb3a17e456e24ee11a3165cce17c56736b67672b08b1a45"
+  },
+  "measurements": {
+    "summary": "../performance/phase6-http-baseline.json",
+    "raw": "../performance/phase6-http-baseline.raw.json.gz",
+    "rawCompressedSha256": "eb23df0a5d0dbb49940868f4d38a950ab0c68f21f2f8e97078b8aec7d04b8fbe",
+    "runs": 2,
+    "stagesPerRun": 6,
+    "requestsPerStage": 1000,
+    "warmupPerStage": 20,
+    "measuredRequests": 12000,
+    "warmupRequests": 240,
+    "failures": 0,
+    "loadModel": "closed-loop; zero think time; one authenticated session; fixed scenario order; warm cache",
+    "notAnOptimizationComparison": true,
+    "productionCapacityCertified": false,
+    "resourceSamples": [
+      {
+        "run": "A",
+        "samples": 570
+      },
+      {
+        "run": "B",
+        "samples": 594
+      }
+    ],
+    "deepPageConcurrency10P95Ms": [
+      300.4305000000022,
+      300.05190000000584
+    ],
+    "resultsRecomputedFromRawSamples": true
+  },
+  "checks": {
+    "measurementTests": {
+      "passed": 7,
+      "failed": 0,
+      "command": "node --test infra/performance/measurement.test.mjs",
+      "cases": [
+        "empirical tails and actual wall-clock throughput including failures",
+        "empty observations and invalid timing",
+        "bounded parallel workers and non-sensitive failure categories",
+        "deadline stops scheduling",
+        "bounded CLI options and no arbitrary targets",
+        "HTTP content validation rejects incomplete/inconsistent responses",
+        "container project, tmpfs and loopback isolation"
+      ]
+    },
+    "actualCliControls": {
+      "passed": 2,
+      "arbitraryTargetRejectedBeforeDocker": true,
+      "exclusiveLockPreservedWithoutOutputOrBuild": true
+    },
+    "composeConfig": "passed",
+    "syntax": "passed",
+    "prettierForNewJsAndOverlay": "passed",
+    "repositorySecretGuard": "passed",
+    "ciYaml": {
+      "parsed": true,
+      "measurementControlsMandatory": true,
+      "remoteActionsRun": false
+    },
+    "imageBuild": {
+      "result": "passed using current Dockerfile/lockfile; cached layers",
+      "apiImage": "sha256:5697e6e981e3625b028a70cc2f400e18ff843cfdfc75c374861391f68b247dd8"
+    },
+    "realApi": {
+      "startupMigrations": "disposable database only",
+      "login": "passed",
+      "salesQueriesAndContent": "passed in both final runs"
+    },
+    "rawGzipRoundTrip": "exact match to two final reports",
+    "currentSourceFingerprintMatchesReports": true,
+    "relativeArtifactLinksChecked": 9,
+    "scopedWhitespace": {
+      "diagnostics": [],
+      "method": "git diff --no-index --check between phase-start snapshot and phase-final files"
+    },
+    "wholeTreeWhitespace": {
+      "passed": false,
+      "preexistingDiagnostic": "backend/sql/init.sql:243: new blank line at EOF",
+      "fileUnchangedFromPhaseStart": true
+    },
+    "productUnitIntegrationAndE2eSuitesRerun": false,
+    "productSuiteReason": "No backend, frontend, agent, dependencies or product contracts changed in this cut"
+  },
+  "isolation": {
+    "project": "pos-phase6-bench",
+    "database": "pos_phase0_test",
+    "databaseStorage": "tmpfs",
+    "bindings": "dynamic 127.0.0.1 only",
+    "operationalDatabaseSelected": false,
+    "restoreOrOverwriteEnabled": false,
+    "arbitraryTargetAccepted": false,
+    "exclusiveProcessLock": true,
+    "cleanup": [
+      "complete",
+      "complete"
+    ],
+    "finalContainers": 0,
+    "finalVolumes": 0,
+    "finalNetworks": 0,
+    "lockRemoved": true,
+    "forcedTerminationAutomaticCleanupGuaranteed": false
+  },
+  "preservation": {
+    "baselineFiles": 389,
+    "backendUnchanged": true,
+    "frontendUnchanged": true,
+    "agentUnchanged": true,
+    "syntheticPosDataUnchanged": true,
+    "localEnvFilesUnchanged": true,
+    "filesDeleted": 0,
+    "ciOnlyAddedNewMeasurementControlStep": true,
+    "existingDirtyChangesPreserved": true
+  },
+  "history": {
+    "initialAttempt": "stopped before seed; tmpfs field verification corrected and covered by isolation test",
+    "exploratoryRun": "one complete 6000-request exploratory run; not merged into final baseline",
+    "finalRuns": "deterministic UUID fixture, warmup samples and formatted harness; identical final source fingerprints"
+  },
+  "remaining": [
+    "TSK-033: dashboard, actual EXPLAIN ANALYZE, importer memory/cancellation, checkout roundtrips/many items, representative load/soak and optimization comparisons",
+    "TSK-027 and TSK-032 contract/financial prerequisites",
+    "TSK-037: representative PDV loading baseline, route splitting and stale chunk recovery",
+    "TSK-039: complete setup/build-runtime/offline/certificate/runbook validation",
+    "All previously documented recovery, import, credit/inactive customer, non-negative stock, settlement/refund, KPI and structural work"
+  ],
+  "operationalDeployment": false,
+  "commitCreated": false,
+  "pushPerformed": false,
+  "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "change": "modified",
+      "sha256": "bba60af4537371558adb893d0a5797b7789518dcc7c6c8d851992ddc5bafb204"
+    },
+    {
+      "path": "README.md",
+      "change": "modified",
+      "sha256": "ba7728363a6373991fbd77414f76c7cffa3e6a320efd72a094962c3309901076"
+    },
+    {
+      "path": "docs/performance/phase4-benchmark.md",
+      "change": "modified",
+      "sha256": "9408966eade9f27e8565e24f69a67ef8b9093c92eb98eac185d8048191cc244d"
+    },
+    {
+      "path": "docs/performance/phase6-http-baseline.json",
+      "change": "new",
+      "sha256": "2a6011411bf6afd7eb8c733fbca54beb89aa63097e466225f5fb3b5b4932ecba"
+    },
+    {
+      "path": "docs/performance/phase6-http-baseline.raw.json.gz",
+      "change": "new",
+      "sha256": "eb23df0a5d0dbb49940868f4d38a950ab0c68f21f2f8e97078b8aec7d04b8fbe"
+    },
+    {
+      "path": "docs/performance/phase6-http-benchmark.md",
+      "change": "new",
+      "sha256": "9fb580446b87ce24d4ce51caa9d9433d038b4d00c2274997c2849a5c153518a6"
+    },
+    {
+      "path": "docs/technical-audit/02-inventario-problemas.md",
+      "change": "modified",
+      "sha256": "3dd84d6b0d90e8b0b5a3d9bb101600b3b21f6929104e0bd574732525263dbde1"
+    },
+    {
+      "path": "docs/technical-audit/03-backlog-tecnico.md",
+      "change": "modified",
+      "sha256": "74c6e6e2b6cbb8b406102933e867560ca587997b90fea8ad15bff80054040cce"
+    },
+    {
+      "path": "docs/technical-audit/04-roadmap-implementacao.md",
+      "change": "modified",
+      "sha256": "2147422b102ac72440f3bd588fe463c909f7fa27d6de517e19eb4628d852b9a7"
+    },
+    {
+      "path": "docs/technical-audit/18-fase-seis-primeiro-corte.md",
+      "change": "new",
+      "sha256": "c2bf298ad30dce72a5923710ab7e1d6e69598d07a479465ca067a7afc7a51c3a"
+    },
+    {
+      "path": "infra/benchmark-disposable.mjs",
+      "change": "new",
+      "sha256": "240c019da76b4c8a1b1828e6ca0d85daaa611d458fa442bb7bd65a86a314473c"
+    },
+    {
+      "path": "infra/docker-compose.benchmark.yml",
+      "change": "new",
+      "sha256": "749ade5a2211ff787aa25592c51bd0f272448ac6dfd3bf0baa3835712b0485c4"
+    },
+    {
+      "path": "infra/performance/measurement.mjs",
+      "change": "new",
+      "sha256": "66334141aed51c1780dead70921606d89d1ff20b1f7f2e05d5406999ddc2e125"
+    },
+    {
+      "path": "infra/performance/measurement.test.mjs",
+      "change": "new",
+      "sha256": "0c8e8a513a323e8daaf4804c00e0d8d6f4c9e534d0f9417dba8f6283c3db2b51"
+    },
+    {
+      "path": "infra/performance/seed.sql",
+      "change": "new",
+      "sha256": "1737fb6f328c84660ebf0a8d1be05729d0ed33bd04cebcdc5a65e51a2cef0988"
+    }
+  ]
+}

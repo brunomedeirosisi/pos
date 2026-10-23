@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 1,
+  "phase": "1 - first cut",
+  "recordedAt": "2026-10-22T01:54:45.410Z",
+  "baseGitHead": "ac85924e7a94e836805e770c60db8141c783bca6",
+  "baseWasDirty": true,
+  "scope": [
+    "TSK-002 implementation and disposable acceptance",
+    "TSK-008 file-operation coordination"
+  ],
+  "remainingPhaseOne": [
+    "Real off-host mount acceptance",
+    "TSK-009 independent journal and catalog reconciliation",
+    "TSK-010 persistent target/snapshot pinning",
+    "TSK-003 coordinated application recovery",
+    "TSK-011 restore UI outcomes"
+  ],
+  "runtime": {
+    "node": "24.21.0",
+    "npm": "12.2.0",
+    "pgDump": "16.15",
+    "psql": "16.15",
+    "apiUid": 10001
+  },
+  "tests": {
+    "backend": 112,
+    "frontend": 37,
+    "agent": 1,
+    "integration": 14,
+    "destructiveContainment": 2,
+    "passedTotal": 166,
+    "expectedFinancialFailures": 2
+  },
+  "validation": [
+    {
+      "workspace": "backend",
+      "checks": [
+        {
+          "command": "npm run lint",
+          "exitCode": 0
+        },
+        {
+          "command": "npm run typecheck",
+          "exitCode": 0
+        },
+        {
+          "command": "npm test",
+          "exitCode": 0
+        },
+        {
+          "command": "npm run build",
+          "exitCode": 0
+        }
+      ]
+    },
+    {
+      "workspace": "frontend",
+      "checks": [
+        {
+          "command": "npm run typecheck",
+          "exitCode": 0
+        },
+        {
+          "command": "npm test",
+          "exitCode": 0
+        }
+      ]
+    },
+    {
+      "workspace": "agent",
+      "checks": [
+        {
+          "command": "npm run typecheck",
+          "exitCode": 0
+        },
+        {
+          "command": "npm test",
+          "exitCode": 0
+        }
+      ]
+    }
+  ],
+  "imageTrial": {
+    "postgres": "pg_dump (PostgreSQL) 16.15",
+    "psql": "psql (PostgreSQL) 16.15",
+    "uid": 10001,
+    "backupMs": 123,
+    "simulationMs": 194,
+    "restored": {
+      "users": 2,
+      "customers": 1,
+      "products": 1,
+      "sales": 1,
+      "saleItems": 1,
+      "stockMovements": 1,
+      "foreignKeys": 19
+    },
+    "syntheticOnly": true,
+    "backups": [
+      {
+        "filename": "backup_2026-10-22-01-50-37_e30a4a08-ca21-4fc5-904d-f2c701ef483d.zip",
+        "checksum": "dffc9c33cd92129a45182a24a3971b86334804d29a416aa868f4276802bea43a",
+        "sizeBytes": 7307
+      },
+      {
+        "filename": "backup_2026-10-22-01-50-37_a6036376-3bcd-45bf-aea4-922ff9710b65.zip",
+        "checksum": "aa025fc5f4b39f5b0573451eb864112ae02aad3d7f4711e2acc108a2f7312a9d",
+        "sizeBytes": 7825
+      }
+    ],
+    "lockConflicts": [
+      "create",
+      "upload",
+      "delete",
+      "retention"
+    ],
+    "storageFailures": [
+      "readonly",
+      "free-space-reserve",
+      "replica-checksum",
+      "replica-unwritable",
+      "ENOSPC-cleanup",
+      "restore-size-budget"
+    ],
+    "sourceDatabasePreserved": true,
+    "uploadAndDeleteVerified": true,
+    "persistenceAfterApiRecreation": true,
+    "restoredAfterApiRecreation": true
+  },
+  "testedImages": [
+    "[pos-phase0-tests-api:latest] sha256:73d23e44a9868d2dbe60c7403240cf422a17d38b7ee4adbc014265450d755512",
+    "[pos-phase0-tests-frontend:latest] sha256:dbbff8e1d5fb302b514b1cccac3fb3f5e54cb7b79bae8e1566f2a9d00d052258"
+  ],
+  "preservation": {
+    "files": {
+      ".env": true,
+      "backend/.env": true,
+      "backend/package.json": true,
+      "backend/package-lock.json": true,
+      "frontend/package.json": true,
+      "frontend/package-lock.json": true,
+      "agent/package.json": true,
+      "agent/package-lock.json": true,
+      "agent/src/index.ts": true
+    },
+    "originalSyntheticData": true
+  },
+  "fingerprintsSHA256": {
+    ".env.example": "ac45d567edefb1f49ef795c0cdff0c0e47c32f5a6e0709b999bd139fee77a3e2",
+    ".github/workflows/ci.yml": "2618efda87c2e8c3c1f9c87a7af9e057862c796e4fd01e3d7004b7603b384498",
+    "backend/Dockerfile": "ca7c74f42e462fdf7b45355cd28743b02378b7761eccd281867f11ed31935427",
+    "backend/openapi/openapi.yaml": "7aed8a93a55dd2910a2c2e5a0ee42d13bb0dcb9cbe1c1ae0f1a7c4b5a8d59e47",
+    "backend/src/config/env.test.ts": "b5305087b7e16fd7977288a3c32f8abd5dad8a701dcfc2454cd9b067ea72dcad",
+    "backend/src/config/env.ts": "6c56141a1718a0c356d282d151a9fcc4fd40f0a86d7ca78f0517981b69c2d2dd",
+    "backend/src/db.ts": "a1e0419b1e5aacae693acef4aeaa150c7b4563495ce98470df4c885bb6be027f",
+    "backend/src/modules/backup/application/backup-use-cases.ts": "a5129d75893f7f081a6b5107350318f4ac9880d886c2c2f579f0fd0a99abb36c",
+    "backend/src/modules/backup/http/backup-router.ts": "d26c39f0628b7ceb0ee03702a62b05106b9c3ec41dcff9f05324965bec2d4cfa",
+    "backend/src/modules/backup/repository/backup-repository.ts": "11186aa07043108804ded1df6f64a8de034275edaf33954578bcee9c42350d82",
+    "backend/src/services/backup-restore-service.test.ts": "1ee16364a8630b91b40f02db94dc89f55a877b1211a1f6fa2215b7249a49b818",
+    "backend/src/services/backup-restore-service.ts": "71011c233d7220a2fac44bd9b0650964507946eb2be335999535f404b216f6d6",
+    "backend/src/utils/backup.ts": "52804fb367332121efc5bfc92c06bee1aee67d634c50e23c202903eba70fd235",
+    "docker-compose.yml": "2eb08aa5c57c58f2b4ce142722dd083563cb90487b6ba577ea014ecb020ec817",
+    "docs/backup-restore-runbook.md": "d7490f7b6ecb6d31248028a43ea3b2b7c64c7b4a53b888dda6be3071305df648",
+    "docs/technical-audit/04-roadmap-implementacao.md": "1ba9c98ae56b417f13d6fa69ad7df49ffdad0b051b0ba57c9ea5562323365fcb",
+    "infra/docker-compose.test.yml": "ec43f12d8fffe8fcf927ec1c954c46d59e080e38334ba362cccf3e9c5a38af17",
+    "infra/test-disposable.mjs": "f5e99ed839d816a38abf1d30218da0b4d296b46612d2fdf33aff81c3eddf0286",
+    "README.md": "d68ffa605382685ea9762f6f72d5823b0ea7fe958182945973c3ed295790a315",
+    "backend/src/services/backup-lock.ts": "8934d795c2702bd6fc35e166e29f2c1c485c80eb2b2967056c5e2c208200a487",
+    "backend/src/services/backup-lock.test.ts": "642831669bec9c5474e80282f284617e062380783c0d1927c2c38f92550ae5b1",
+    "backend/src/services/backup-preflight.ts": "d3a7a86ba38beb963d8be4fab334bdc7e959f9e3f7656a1fdd6eca14eecef260",
+    "backend/src/services/backup-preflight.test.ts": "7a7fbb330bb2434bac4709f1ca09533778536ccf2ce504a523ae760ae795cddc",
+    "backend/src/utils/backup-command.ts": "e72e23275cda7608b52d649b05c96e3c321bdeb92124477f7d6fb4fc1997ce33",
+    "backend/src/utils/backup-command.test.ts": "7aed55829ce819cc8d79d85be85a3c8ef99db129b4673a820a7a2550ebf28b60",
+    "backend/test/integration/backup-lock.test.ts": "f85ded90c46a99a86b330aaade5eff31defd259a49f282c4b0506b4cda9bac5f",
+    "infra/backup-image-check.mjs": "6d434466c34db09d55f394e10d4633f9ece8d0abd2f7206e4eece6f0f00e9a83",
+    "infra/docker-compose.backup-replica.yml": "9fb270af4c5dd0ec28d1efd163a93b09ada1ed05f4cb53b3a0d6c81d812d8aa8",
+    "docs/technical-audit/08-fase-um-primeiro-corte.md": "b7ca76811aa24d7d01d3b6526289c31e3a6b6660296988661cd80725d22d2f1e"
+  },
+  "operationalState": {
+    "applicationDatabaseTouched": false,
+    "applicationContainersRecreated": false,
+    "applicationRestoreEnabledByDefault": false,
+    "legacyOverwriteEnabledByDefault": false,
+    "remoteCIExecuted": false,
+    "realOffHostStorageProvisioned": false,
+    "productionRpoRtoMeasured": false
+  },
+  "notes": [
+    "Image trial restores only its own synthetic data into temporary databases",
+    "Source modification after snapshot is preserved",
+    "Readonly, reserve, checksum, replica permission, ENOSPC and restore-size-budget failures exercised",
+    "Local retention does not delete replica copies",
+    "Manifests do not yet constitute an independent recovery journal",
+    "OpenAPI response annotations were checked on final source"
+  ]
+}

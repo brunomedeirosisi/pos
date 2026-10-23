@@ -24,6 +24,7 @@ import { errorHandler } from './middleware/error-handler.js';
 import { requireAuth } from './middleware/auth.js';
 import { attachRequestId, requestLoggingMiddleware } from './observability/request-context.js';
 import { metricsHandler, metricsMiddleware } from './observability/metrics.js';
+import { printAgentRouter, printJobsRouter } from './modules/print-jobs/print-jobs-router.js';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const openApiPath = path.resolve(currentDir, '../openapi/openapi.yaml');
@@ -48,7 +49,8 @@ const corsOptions: cors.CorsOptions = {
 };
 
 export const app = express();
-app.set('trust proxy', true);
+const trustedProxies = env.TRUSTED_PROXY_CIDRS.split(',').map((value) => value.trim()).filter(Boolean);
+app.set('trust proxy', trustedProxies.length ? trustedProxies : false);
 app.disable('x-powered-by');
 app.use(attachRequestId);
 app.use(metricsMiddleware);
@@ -59,6 +61,11 @@ app.use(requestLoggingMiddleware);
 
 app.use('/api/v1/health', healthRouter);
 app.use('/api/v1/auth', authRouter);
+app.use('/api/v1/print-agent', printAgentRouter);
+app.get('/api/v1/store-info', (_req, res) => {
+  if (!env.STORE_ID) { res.status(503).json({ message: 'store_not_configured' }); return; }
+  res.json({ store_id: env.STORE_ID, print_mode: env.PRINT_MODE });
+});
 app.get('/api/v1/metrics', metricsHandler);
 
 app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
@@ -74,6 +81,7 @@ app.use('/api/v1/customers', customersRouter);
 app.use('/api/v1/sellers', sellersRouter);
 app.use('/api/v1/payment-terms', paymentTermsRouter);
 app.use('/api/v1/sales', salesRouter);
+app.use('/api/v1/print-jobs', printJobsRouter);
 app.use('/api/v1/dashboard', dashboardRouter);
 app.use('/api/v1/users', usersRouter);
 app.use('/api/v1/roles', rolesRouter);

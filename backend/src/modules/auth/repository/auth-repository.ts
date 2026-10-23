@@ -47,7 +47,9 @@ function mapAuthenticated(row: AuthUserRow): AuthenticatedUser {
 export interface AuthRepository {
   findByEmail(email: string): Promise<AuthUserCredentials | null>;
   findActiveById(id: string): Promise<AuthenticatedUser | null>;
-  updateLastLogin(id: string): Promise<void>;
+  findActiveSession(userId: string, sessionId: string): Promise<AuthenticatedUser | null>;
+  createSession(userId: string, passwordHash: string, ttlSeconds: number): Promise<string | null>;
+  revokeSession(userId: string, sessionId: string): Promise<void>;
 }
 
 export class PgAuthRepository implements AuthRepository {
@@ -97,7 +99,35 @@ export class PgAuthRepository implements AuthRepository {
     return mapAuthenticated(record);
   }
 
-  async updateLastLogin(id: string): Promise<void> {
-    await query('update app_user set last_login_at = now(), updated_at = now() where id = $1', [id]);
+  async findActiveSession(userId: string, sessionId: string): Promise<AuthenticatedUser | null> {
+    const { rows } = await query<AuthUserRow>(
+      `select u.id, u.email, u.password_hash, u.full_name, u.status,
+              r.name as role_name, r.permissions, r.discount_limit
+       from auth_session s
+       join app_user u on u.id = s.user_id
+       join app_role r on r.id = u.role_id
+       where s.id = $2 and s.user_id = $1 and s.revoked_at is null
+         and s.expires_at > now() and u.status = 'active'`, [userId, sessionId]
+    );
+    return rows[0] ? mapAuthenticated(rows[0]) : null;
+  }
+
+  async createSession(userId: string, passwordHash: string, ttlSeconds: number): Promise<string | null> {
+    const { rows } = await query<{ id: string }>(
+      `with eligible_user as (
+         select id from app_user where id = $1 and password_hash = $2 and status = 'active' for update
+       ), new_session as (
+         insert into auth_session (user_id, expires_at)
+         select id, now() + make_interval(secs => $3::int) from eligible_user
+         returning id, user_id
+       )
+       update app_user u set last_login_at = now(), updated_at = now()
+       from new_session s where u.id = s.user_id returning s.id`, [userId, passwordHash, ttlSeconds]
+    );
+    return rows[0]?.id ?? null;
+  }
+
+  async revokeSession(userId: string, sessionId: string): Promise<void> {
+    await query('update auth_session set revoked_at = coalesce(revoked_at, now()) where id = $2 and user_id = $1', [userId, sessionId]);
   }
 }

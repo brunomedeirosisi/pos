@@ -1,0 +1,13 @@
+FROM node:24.21.0-alpine3.23@sha256:9ec4a2e289874ed0d722e1772ec2de45d2801541db8612f3638b26f128c69ac2
+RUN npm install --global npm@12.2.0 --ignore-scripts --no-audit --no-fund
+ARG WORKSPACE
+WORKDIR /workspace/${WORKSPACE}
+COPY ${WORKSPACE}/package*.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY ${WORKSPACE}/ ./
+# Backend money tests and frontend tests share the same versioned fixture.
+COPY frontend/src/test-fixtures/ /workspace/frontend/src/test-fixtures/
+COPY infra/check-lint-rules.mjs /workspace/infra/check-lint-rules.mjs
+COPY infra/performance/ /workspace/infra/performance/
+COPY infra/run-workspace-checks.mjs /workspace/infra/run-workspace-checks.mjs
+CMD ["node", "../infra/run-workspace-checks.mjs"]

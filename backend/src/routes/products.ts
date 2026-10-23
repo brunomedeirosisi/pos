@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { query } from '../db.js';
+import { query, withTransaction } from '../db.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { notFound } from '../errors.js';
 import { requirePermission } from '../middleware/auth.js';
 import { paginationQuerySchema, resolvePagination } from '../utils/pagination.js';
+import { generateNextNumericCode } from '../utils/generated-code.js';
 
 export const router = Router();
 
@@ -47,13 +48,7 @@ function parseDecimalInput(value: unknown) {
 
 const numericField = z.preprocess(parseDecimalInput, z.number().nonnegative().nullable().optional());
 
-const baseSchema = z.object({
-  legacy_code: z
-    .string()
-    .trim()
-    .min(1)
-    .optional()
-    .nullable(),
+const writeSchema = z.object({
   name: z
     .string()
     .trim()
@@ -148,23 +143,31 @@ router.post(
   '/',
   requirePermission('catalog:write'),
   asyncHandler(async (req, res) => {
-    const body = baseSchema.parse(req.body);
-    const { rows } = await query<ProductRow>(
-      `insert into product (legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base)
-       values ($1,$2,$3,$4,$5,$6,$7,$8)
-       returning id, legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base`,
-      [
-        body.legacy_code ?? null,
-        body.name,
-        body.barcode ?? null,
-        body.group_id ?? null,
-        body.reference ?? null,
-        body.min_stock ?? null,
-        body.price_cash ?? null,
-        body.price_base ?? null,
-      ]
-    );
-    res.status(201).json(mapProduct(rows[0]));
+    const body = writeSchema.parse(req.body);
+
+    const product = await withTransaction(async (client) => {
+      const generatedCode = await generateNextNumericCode('product', client);
+      const { rows } = await query<ProductRow>(
+        `insert into product (legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base)
+         values ($1,$2,$3,$4,$5,$6,$7,$8)
+         returning id, legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base`,
+        [
+          generatedCode,
+          body.name,
+          body.barcode ?? null,
+          body.group_id ?? null,
+          body.reference ?? null,
+          body.min_stock ?? null,
+          body.price_cash ?? null,
+          body.price_base ?? null,
+        ],
+        client
+      );
+
+      return rows[0];
+    });
+
+    res.status(201).json(mapProduct(product));
   })
 );
 
@@ -190,7 +193,7 @@ router.patch(
   '/:id',
   requirePermission('catalog:write'),
   asyncHandler(async (req, res) => {
-    const body = baseSchema.partial().parse(req.body);
+    const body = writeSchema.partial().parse(req.body);
     const entries = Object.entries(body).filter(([, value]) => value !== undefined);
     if (entries.length === 0) {
       return res.status(204).send();

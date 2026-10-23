@@ -1,0 +1,837 @@
+{
+  "schemaVersion": 1,
+  "phase": "5 - first cut",
+  "recordedAt": "2026-10-22T13:33:48.058Z",
+  "baseGitHead": "ac85924e7a94e836805e770c60db8141c783bca6",
+  "baseWasDirty": true,
+  "scope": [
+    "TSK-028 / TEC-028 initial effective lint rules",
+    "Type-aware Promise checks, unused bindings, branches/debugger and frontend hook rules",
+    "Zero-warning CI gates with actual ESLint CLI positive/negative controls and empty test selection checks"
+  ],
+  "tooling": {
+    "node": "24.21.0",
+    "npm": "12.2.0",
+    "eslint": "8.57.1",
+    "typescriptEslintParser": "8.72.0",
+    "typescriptEslintPlugin": "8.72.0",
+    "reactHooksPlugin": "7.1.1"
+  },
+  "baseline": {
+    "backend": {
+      "counts": {
+        "@typescript-eslint/no-unused-vars": 2
+      },
+      "messages": [
+        {
+          "path": "backend/src/services/backup-restore-service.ts",
+          "line": 4,
+          "rule": "@typescript-eslint/no-unused-vars",
+          "message": "'badRequest' is defined but never used."
+        },
+        {
+          "path": "backend/src/utils/backup.ts",
+          "line": 252,
+          "rule": "@typescript-eslint/no-unused-vars",
+          "message": "'error' is defined but never used. Allowed unused caught errors must match /^_/u."
+        }
+      ]
+    },
+    "frontend": {
+      "counts": {
+        "@typescript-eslint/no-unused-vars": 3,
+        "@typescript-eslint/no-floating-promises": 36,
+        "react-hooks/rules-of-hooks": 4
+      },
+      "messages": [
+        {
+          "path": "frontend/src/api.ts",
+          "line": 199,
+          "rule": "@typescript-eslint/no-unused-vars",
+          "message": "'err' is defined but never used. Allowed unused caught errors must match /^_/u."
+        },
+        {
+          "path": "frontend/src/components/layout/AppLayout.tsx",
+          "line": 136,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/lib/i18n.ts",
+          "line": 879,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/DashboardPage.tsx",
+          "line": 304,
+          "rule": "react-hooks/rules-of-hooks",
+          "message": "React Hook \"React.useMemo\" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?"
+        },
+        {
+          "path": "frontend/src/pages/DashboardPage.tsx",
+          "line": 310,
+          "rule": "react-hooks/rules-of-hooks",
+          "message": "React Hook \"React.useMemo\" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?"
+        },
+        {
+          "path": "frontend/src/pages/DashboardPage.tsx",
+          "line": 318,
+          "rule": "react-hooks/rules-of-hooks",
+          "message": "React Hook \"React.useMemo\" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?"
+        },
+        {
+          "path": "frontend/src/pages/DashboardPage.tsx",
+          "line": 331,
+          "rule": "react-hooks/rules-of-hooks",
+          "message": "React Hook \"React.useMemo\" is called conditionally. React Hooks must be called in the exact same order in every component render. Did you accidentally call a React Hook after an early return?"
+        },
+        {
+          "path": "frontend/src/pages/LoginPage.tsx",
+          "line": 40,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/PaymentsPage.tsx",
+          "line": 162,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/PosPage.tsx",
+          "line": 85,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/PosPage.tsx",
+          "line": 86,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/PosPage.tsx",
+          "line": 567,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/SaleDetailsPage.tsx",
+          "line": 40,
+          "rule": "@typescript-eslint/no-unused-vars",
+          "message": "'sale' is defined but never used. Allowed unused args must match /^_/u."
+        },
+        {
+          "path": "frontend/src/pages/SaleDetailsPage.tsx",
+          "line": 43,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/SaleDetailsPage.tsx",
+          "line": 44,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/SaleDetailsPage.tsx",
+          "line": 45,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/SalesListPage.tsx",
+          "line": 82,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/SalesListPage.tsx",
+          "line": 83,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/admin/BackupRestorePage.tsx",
+          "line": 50,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/admin/BackupRestorePage.tsx",
+          "line": 60,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/admin/BackupRestorePage.tsx",
+          "line": 73,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/admin/BackupRestorePage.tsx",
+          "line": 93,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/admin/RolesPage.tsx",
+          "line": 64,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/admin/RolesPage.tsx",
+          "line": 75,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/admin/RolesPage.tsx",
+          "line": 85,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/admin/UsersPage.tsx",
+          "line": 76,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/admin/UsersPage.tsx",
+          "line": 87,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/admin/UsersPage.tsx",
+          "line": 97,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/catalog/CustomerDetailsPage.tsx",
+          "line": 120,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/catalog/CustomerDetailsPage.tsx",
+          "line": 121,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/catalog/CustomerDetailsPage.tsx",
+          "line": 209,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/catalog/CustomerDetailsPage.tsx",
+          "line": 220,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/catalog/CustomersPage.tsx",
+          "line": 48,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/catalog/CustomersPage.tsx",
+          "line": 61,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/catalog/PaymentTermsPage.tsx",
+          "line": 52,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/catalog/PaymentTermsPage.tsx",
+          "line": 65,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/catalog/ProductGroupsPage.tsx",
+          "line": 52,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/catalog/ProductGroupsPage.tsx",
+          "line": 65,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/catalog/ProductsPage.tsx",
+          "line": 52,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/catalog/ProductsPage.tsx",
+          "line": 65,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/catalog/SellersPage.tsx",
+          "line": 52,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/pages/catalog/SellersPage.tsx",
+          "line": 65,
+          "rule": "@typescript-eslint/no-floating-promises",
+          "message": "Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator."
+        },
+        {
+          "path": "frontend/src/services/catalog.ts",
+          "line": 10,
+          "rule": "@typescript-eslint/no-unused-vars",
+          "message": "'CustomerPayment' is defined but never used."
+        }
+      ]
+    },
+    "adoptedRuleOccurrences": 45,
+    "unusedBindings": 5,
+    "implicitPromises": 36,
+    "conditionalHooks": 4,
+    "finalErrors": 0,
+    "finalWarnings": 0,
+    "suppressionAllowlist": false,
+    "policy": {
+      "explicitVoid": "permitted with local rationale; void is not a rejection handler",
+      "constantLoopConditions": "permitted; constant branches are errors",
+      "unusedArguments": "underscore prefix allowed; no generic variable-name exemption",
+      "testAndIntegrationScope": "src lint and typecheck including existing integration harness"
+    }
+  },
+  "adjustments": {
+    "removedUnusedBindings": 5,
+    "dashboardHookOrder": "permission return follows all four useMemo hooks; query enabled conditions and calculations preserved",
+    "explicitBackgroundOrDeclarativeNavigation": 35,
+    "i18nInitializationRejection": "fixed non-sensitive error message handler",
+    "authChangeAfterImageBuild": "local rationale comments only; behavior unchanged"
+  },
+  "controls": {
+    "total": 16,
+    "expectedLintRefusals": 9,
+    "validLintControls": 5,
+    "emptySuiteRefusals": 2,
+    "backend": {
+      "fixtures": [
+        {
+          "name": "ignored-promise",
+          "rule": "@typescript-eslint/no-floating-promises",
+          "exitCode": 1
+        },
+        {
+          "name": "unused-variable",
+          "rule": "@typescript-eslint/no-unused-vars",
+          "exitCode": 1
+        },
+        {
+          "name": "constant-branch",
+          "rule": "no-constant-condition",
+          "exitCode": 1
+        },
+        {
+          "name": "debugger",
+          "rule": "no-debugger",
+          "exitCode": 1
+        },
+        {
+          "name": "handled-promise",
+          "exitCode": 0
+        },
+        {
+          "name": "explicit-detachment",
+          "exitCode": 0
+        }
+      ],
+      "emptyTestSelectionExitCode": 1
+    },
+    "frontend": {
+      "fixtures": [
+        {
+          "name": "ignored-promise",
+          "rule": "@typescript-eslint/no-floating-promises",
+          "exitCode": 1
+        },
+        {
+          "name": "unused-variable",
+          "rule": "@typescript-eslint/no-unused-vars",
+          "exitCode": 1
+        },
+        {
+          "name": "constant-branch",
+          "rule": "no-constant-condition",
+          "exitCode": 1
+        },
+        {
+          "name": "debugger",
+          "rule": "no-debugger",
+          "exitCode": 1
+        },
+        {
+          "name": "handled-promise",
+          "exitCode": 0
+        },
+        {
+          "name": "explicit-detachment",
+          "exitCode": 0
+        },
+        {
+          "name": "conditional-hook",
+          "rule": "react-hooks/rules-of-hooks",
+          "exitCode": 1
+        },
+        {
+          "name": "unconditional-hook",
+          "exitCode": 0
+        }
+      ],
+      "emptyTestSelectionExitCode": 1
+    },
+    "method": "Real ESLint CLI through stdin, type-aware watch-program mode for canaries only; no files written into src; no canary code executed",
+    "emptySuiteMethod": "Actual npm test script with --exclude **/* must exit 1 with No test files found"
+  },
+  "tests": {
+    "backend": 138,
+    "frontend": 67,
+    "integration": 51,
+    "normalRegressions": 3,
+    "passedTotal": 259,
+    "expectedFailures": 1,
+    "remainingExpectedFailure": "TSK-016 anonymous checkout without settlement",
+    "agent": "unchanged; not rerun"
+  },
+  "validation": [
+    {
+      "workspace": "backend",
+      "command": "npm run lint",
+      "exitCode": 0
+    },
+    {
+      "workspace": "frontend",
+      "command": "npm run lint",
+      "exitCode": 0
+    },
+    {
+      "workspace": "backend",
+      "command": "npm run lint:rules",
+      "exitCode": 0
+    },
+    {
+      "workspace": "frontend",
+      "command": "npm run lint:rules",
+      "exitCode": 0
+    },
+    {
+      "workspace": "backend",
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    {
+      "workspace": "frontend",
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    {
+      "workspace": "backend",
+      "command": "npm test",
+      "exitCode": 0
+    },
+    {
+      "workspace": "frontend",
+      "command": "npm test",
+      "exitCode": 0
+    },
+    {
+      "workspace": "backend",
+      "command": "npm audit --audit-level=low --json",
+      "exitCode": 0,
+      "vulnerabilities": 0
+    },
+    {
+      "workspace": "frontend",
+      "command": "npm audit --audit-level=low --json",
+      "exitCode": 0,
+      "vulnerabilities": 0
+    },
+    {
+      "command": "node infra/test-disposable.mjs --images --backups",
+      "exitCode": 0,
+      "includes": [
+        "fresh npm ci from updated lockfiles",
+        "API/frontend builds",
+        "PostgreSQL/Redis regressions",
+        "HTTP authentication/metrics/SPA smoke",
+        "Backup simulation and API recreation"
+      ]
+    },
+    {
+      "command": "CI YAML parse and mandatory lint/lint:rules assertions",
+      "exitCode": 0
+    },
+    {
+      "command": "node --check infra/check-lint-rules.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "node infra/check-repository-secrets.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "git diff --check -- [changed paths]",
+      "exitCode": 0
+    }
+  ],
+  "dependencyChanges": {
+    "backend": {
+      "added": [
+        {
+          "name": "node_modules/@typescript-eslint/eslint-plugin",
+          "version": "8.72.0",
+          "dev": true
+        },
+        {
+          "name": "node_modules/@typescript-eslint/eslint-plugin/node_modules/ignore",
+          "version": "7.0.13",
+          "dev": true
+        },
+        {
+          "name": "node_modules/@typescript-eslint/type-utils",
+          "version": "8.72.0",
+          "dev": true
+        },
+        {
+          "name": "node_modules/@typescript-eslint/utils",
+          "version": "8.72.0",
+          "dev": true
+        }
+      ],
+      "changed": []
+    },
+    "frontend": {
+      "added": [
+        {
+          "name": "node_modules/@typescript-eslint/eslint-plugin",
+          "version": "8.72.0",
+          "dev": true
+        },
+        {
+          "name": "node_modules/@typescript-eslint/eslint-plugin/node_modules/ignore",
+          "version": "7.0.13",
+          "dev": true
+        },
+        {
+          "name": "node_modules/@typescript-eslint/type-utils",
+          "version": "8.72.0",
+          "dev": true
+        },
+        {
+          "name": "node_modules/@typescript-eslint/utils",
+          "version": "8.72.0",
+          "dev": true
+        },
+        {
+          "name": "node_modules/eslint-plugin-react-hooks",
+          "version": "7.1.1",
+          "dev": true
+        },
+        {
+          "name": "node_modules/hermes-estree",
+          "version": "0.25.1",
+          "dev": true
+        },
+        {
+          "name": "node_modules/hermes-parser",
+          "version": "0.25.1",
+          "dev": true
+        },
+        {
+          "name": "node_modules/zod-validation-error",
+          "version": "4.0.2",
+          "dev": true
+        }
+      ],
+      "changed": []
+    }
+  },
+  "images": {
+    "api": "sha256:d7560a9be94e21e0aa0cbf8688065166af9b6b0ef4fffc12c365539d8dab7c3f",
+    "frontend": "sha256:47c9033130f1cf9423e82645abeee7096002d66af62f907bb4d059117d7128fd"
+  },
+  "backupRecheck": {
+    "postgres": "pg_dump (PostgreSQL) 16.15",
+    "psql": "psql (PostgreSQL) 16.15",
+    "uid": 10001,
+    "backupMs": 133,
+    "simulationMs": 186,
+    "restored": {
+      "users": 2,
+      "customers": 1,
+      "products": 1,
+      "sales": 1,
+      "saleItems": 1,
+      "stockMovements": 1,
+      "foreignKeys": 19
+    },
+    "syntheticOnly": true,
+    "backups": [
+      {
+        "filename": "backup_2026-10-22-13-27-28_e14e5b87-3b90-41c7-bf67-911f17c30b68.zip",
+        "checksum": "653219e2c4242a51c680558763def8ebc269031c0abe011a4f4a27395abc0dff",
+        "sizeBytes": 7386
+      },
+      {
+        "filename": "backup_2026-10-22-13-27-28_c7948517-e698-4870-8104-7569384d5f8d.zip",
+        "checksum": "03a337e368a733a962618919f852e20098686a01060ce45350b916f68e31368a",
+        "sizeBytes": 7906
+      }
+    ],
+    "lockConflicts": [
+      "create",
+      "upload",
+      "delete",
+      "retention"
+    ],
+    "storageFailures": [
+      "readonly",
+      "free-space-reserve",
+      "replica-checksum",
+      "replica-unwritable",
+      "ENOSPC-cleanup",
+      "restore-size-budget"
+    ],
+    "sourceDatabasePreserved": true,
+    "uploadAndDeleteVerified": true,
+    "persistenceAfterApiRecreation": true,
+    "restoredAfterApiRecreation": true
+  },
+  "preservation": {
+    "noBaselineFilesDeleted": true,
+    "secretsUnchanged": true,
+    "syntheticDataFiles": 21,
+    "syntheticDataUnchanged": true,
+    "agentUnchanged": true,
+    "runtimeDependenciesUnchanged": {
+      "backend": true,
+      "frontend": true
+    },
+    "existingLockedPackageVersionsUnchanged": true,
+    "allAddedPackagesDevOnly": true,
+    "importWorkerAndLockUnchanged": true,
+    "checkoutArithmeticUnchanged": true,
+    "completePaymentReportUnchanged": true
+  },
+  "remaining": [
+    "Further lint rules need separate baseline and controls; exhaustive-deps, no-misused-promises and a11y not enabled in this cut",
+    "TSK-029 responsibility extraction pending",
+    "TSK-038 migration checksums, fresh/upgrade and least privilege pending",
+    "Unfinished recovery/import/financial/UI/cache/audit/print/accessibility work from phases 1-4 remains pending"
+  ],
+  "deployment": {
+    "schemaMigration": false,
+    "businessRuleChange": false,
+    "userDatabaseTouched": false,
+    "historicalCorrection": false,
+    "commit": false,
+    "push": false,
+    "deploy": false,
+    "remoteCiTriggered": false,
+    "databaseRestoreEnabled": false,
+    "legacyOverwriteEnabled": false,
+    "printerNetworkExposureChanged": false
+  },
+  "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "62502373f7a4d792eab21b1e0738233bed69479154a7787d0d4cf90069a077f1",
+      "action": "modified"
+    },
+    {
+      "path": "backend/.eslintrc.cjs",
+      "sha256": "c5ee8a5aab6814cc3fa67137c0ead724e0ce1444f7753f7f2f968ecdce9fc464",
+      "action": "modified"
+    },
+    {
+      "path": "backend/package-lock.json",
+      "sha256": "3986cf5521e77dae6762cab4979348ed02482a008a2f5b1d74f0366e6c711c88",
+      "action": "modified"
+    },
+    {
+      "path": "backend/package.json",
+      "sha256": "235aa87588eed0aa7e8c44d2bfb14409de403ef85f6077ca90fd8555abeb5122",
+      "action": "modified"
+    },
+    {
+      "path": "backend/src/services/backup-restore-service.ts",
+      "sha256": "7546458e9d83fd2f9d8513f0cd494b64a739699cfdcda26c9a018601907f8466",
+      "action": "modified"
+    },
+    {
+      "path": "backend/src/utils/backup.ts",
+      "sha256": "8eb00fcd1d9e0c9c636bdf2721a3a76ad49145bef7a1c1d73c4f1f82826250ff",
+      "action": "modified"
+    },
+    {
+      "path": "docs/technical-audit/02-inventario-problemas.md",
+      "sha256": "d5fab9b2498069e95f3d2b51559416e807a8a6c95fab806e0046c7a5937978e4",
+      "action": "modified"
+    },
+    {
+      "path": "docs/technical-audit/03-backlog-tecnico.md",
+      "sha256": "0095f7523f048cc48e340572bca1e5a18f54feb186b8eefd882397f10f3ca1c2",
+      "action": "modified"
+    },
+    {
+      "path": "docs/technical-audit/04-roadmap-implementacao.md",
+      "sha256": "c7d99b253c776ee12c8d5c4b305abe2bd5feb075e6e7c643dd2a239522a6c05b",
+      "action": "modified"
+    },
+    {
+      "path": "docs/technical-audit/16-fase-cinco-primeiro-corte.md",
+      "sha256": "7cd948cb48326e5220b75826686f731575f91dd78dc01bbf452a7932e85bf25a",
+      "action": "created"
+    },
+    {
+      "path": "frontend/.eslintrc.cjs",
+      "sha256": "983582edf8d52432c9dc821c64af1541104de44a801bc1b60801713086b5a72b",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/package-lock.json",
+      "sha256": "474fef70785f509ae678bfd52308c84cf5d59747038a6f17256b475c92828e60",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/package.json",
+      "sha256": "0689f685ccf1828675f086548655fd589ed4b44994a253788c8d99f29e0957c0",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/api.ts",
+      "sha256": "92ff5a83042ef33340b776cb9a095fb0b82d0f3e2a0f29fa9a6de31a3d1f18f3",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/components/layout/AppLayout.tsx",
+      "sha256": "2f712e698363758ebacd2410a1b8354c8aa2036e38aa89017992d9df564b7ad1",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/lib/i18n.ts",
+      "sha256": "964f3f9e2f0dbdaed6e6616959e95f21d33571254efc82815be1ba5a17719c28",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/admin/BackupRestorePage.tsx",
+      "sha256": "2fee53e078cd42ca6009eea2673dd50ddd5bfa1a4396a4b2f31a7e4482051420",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/admin/RolesPage.tsx",
+      "sha256": "e697ff67ca71c46d8edfc1ef6739b8bb78be3cf3260e7f3be06479dbdcad9a43",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/admin/UsersPage.tsx",
+      "sha256": "22e6e47ee089d6719447f1ab10f2e604ec1b4d4068e8d791f95a4ffdb1c04c54",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/catalog/CustomerDetailsPage.tsx",
+      "sha256": "42c794dd027e7f84926e21905fd511f5ae6f88192d717377cd193fd01cd8a65d",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/catalog/CustomersPage.tsx",
+      "sha256": "71ac395b6549195ce06e508d97a890553f60a375fa96bac111a2fa0bed2828ef",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/catalog/PaymentTermsPage.tsx",
+      "sha256": "15e0289cabcb87626a1860f8e95f2147baa15c6986d404d83f3292c05455d9dd",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/catalog/ProductGroupsPage.tsx",
+      "sha256": "813b27a9ace5eae690da3efce0313a1790c2043bbba3e9d84644242b9dd69f91",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/catalog/ProductsPage.tsx",
+      "sha256": "8178241399d130a188dcc1c43eeabc26910d8ff0b5095cb4dfad808e6e34498d",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/catalog/SellersPage.tsx",
+      "sha256": "1f60aae4fcca1b83bd1921ca2ed0e3405ba6b94a4a561313357c3011d9e2e8d2",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/DashboardPage.tsx",
+      "sha256": "2e191be0642f0b4982e8c14fd139acaff4b0c6ac4ac59fb84682d65d24346efe",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/LoginPage.tsx",
+      "sha256": "0c656d0b3b3db2d98807fec9a4edd68abc37e5ced7225db8fd07de4fd5023b4e",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/PaymentsPage.tsx",
+      "sha256": "a09635a863aad6b8d2d64f67c74ba4476ff0633da367c9369f01707426312f3a",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/PosPage.tsx",
+      "sha256": "38df0fa081035ecb0e81494f1049e7769be01b986790b51e9f951b430c2cb885",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/SaleDetailsPage.tsx",
+      "sha256": "b0267f1916676f48210861ce4c3f13593c7649364a3efe842bac01603faa0f44",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/SalesListPage.tsx",
+      "sha256": "3d7dfd8dbddadd1e22e4938563188ca160bf0a8026cd9eecfb7aeb28db07adac",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/services/catalog.ts",
+      "sha256": "ba40a452fc42180f8d7bbb3351a837b8256b71b2e2b849f16ef68ce9feda0145",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/store/auth.ts",
+      "sha256": "9503c176cd83e88728a52d7f8c4320ce6dafde992e54d46dfac6447f78b5887f",
+      "action": "modified"
+    },
+    {
+      "path": "infra/check-lint-rules.mjs",
+      "sha256": "d0ba2d7390754243621cde9ef651f6c462b2da310e8fa65d49a0c9bf9c64a4a9",
+      "action": "created"
+    },
+    {
+      "path": "README.md",
+      "sha256": "8d7de446494edadac260c01b110eefa7288d8943a8a88330052d71f304359486",
+      "action": "modified"
+    }
+  ]
+}

@@ -1,9 +1,11 @@
 ﻿import React from 'react';
 import type { TFunction } from 'i18next';
+import { Controller } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
 import { Modal } from '../../../components/ui/Modal';
 import type { CustomerPayment, CustomerPaymentMethod, CustomerPaymentRegisterResponse, CustomerPaymentsResponse } from '../../../types/catalog';
 import { defaultPaymentFilters, formatCurrency, formatDate, paymentMethodFilterOptions, paymentMethodOptions } from './constants';
+import { CurrencyInput } from '../../../components/ui/CurrencyInput';
 
 type PaymentFormValues = {
   amount: number;
@@ -256,7 +258,11 @@ export function CustomerPaymentsSection(props: CustomerPaymentsSectionProps): JS
         <form onSubmit={onSubmitPayment} className="form-grid vertical">
           <div className="form-group">
             <label htmlFor="payment-amount">{t('customers.paymentAmount')}*</label>
-            <input id="payment-amount" type="number" step="0.01" {...paymentForm.register('amount')} />
+            <Controller
+              name="amount"
+              control={paymentForm.control}
+              render={({ field }) => <CurrencyInput id="payment-amount" value={field.value} onValueChange={field.onChange} />}
+            />
             {paymentForm.formState.errors.amount && (
               <small style={{ color: '#dc2626' }}>{paymentForm.formState.errors.amount.message}</small>
             )}

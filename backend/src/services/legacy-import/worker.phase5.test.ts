@@ -26,6 +26,8 @@ describe('legacy import worker phase 5', () => {
     const queueAdd = vi.fn().mockResolvedValue(undefined);
     const queueGetJob = vi.fn().mockResolvedValue(null);
     const queryMock = vi.fn(async (text: string) => {
+      if (text.includes('pg_try_advisory_lock')) return { rows: [{ locked: true }], rowCount: 1 };
+      if (text.includes('pg_advisory_unlock')) return { rows: [{ unlocked: true }], rowCount: 1 };
       if (text.includes('from information_schema.tables')) {
         return { rows: REQUIRED_IMPORT_TABLES.map((table_name) => ({ table_name })), rowCount: REQUIRED_IMPORT_TABLES.length };
       }
@@ -39,15 +41,17 @@ describe('legacy import worker phase 5', () => {
     });
 
     vi.doMock('bullmq', () => ({
-      Queue: vi.fn().mockImplementation(() => ({ add: queueAdd, getJob: queueGetJob })),
-      Worker: vi.fn().mockImplementation(() => ({})),
+      Queue: vi.fn().mockImplementation(function () { return { add: queueAdd, getJob: queueGetJob }; }),
+      Worker: vi.fn().mockImplementation(function () { return {}; }),
     }));
     vi.doMock('ioredis', () => ({
-      default: vi.fn().mockImplementation(() => ({})),
+      default: vi.fn().mockImplementation(function () { return {}; }),
     }));
     vi.doMock('../../db.js', () => ({
       query: queryMock,
-      withTransaction: vi.fn(),
+      acquireDatabaseClient: vi.fn().mockResolvedValue({
+        query: queryMock, on: vi.fn(), removeListener: vi.fn(), release: vi.fn(),
+      }),
     }));
     vi.doMock('../../config/env.js', () => ({
       getEnv: () => ({
@@ -77,11 +81,11 @@ describe('legacy import worker phase 5', () => {
     const queueGetJob = vi.fn().mockResolvedValue({ id: 'imp-dup' });
 
     vi.doMock('bullmq', () => ({
-      Queue: vi.fn().mockImplementation(() => ({ add: queueAdd, getJob: queueGetJob })),
-      Worker: vi.fn().mockImplementation(() => ({})),
+      Queue: vi.fn().mockImplementation(function () { return { add: queueAdd, getJob: queueGetJob }; }),
+      Worker: vi.fn().mockImplementation(function () { return {}; }),
     }));
     vi.doMock('ioredis', () => ({
-      default: vi.fn().mockImplementation(() => ({})),
+      default: vi.fn().mockImplementation(function () { return {}; }),
     }));
     vi.doMock('../../db.js', () => ({
       query: vi.fn(),

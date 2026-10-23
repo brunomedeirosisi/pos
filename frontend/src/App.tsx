@@ -1,10 +1,11 @@
 import React from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
 import { DashboardPage } from './pages/DashboardPage';
 import { PosPage } from './pages/PosPage';
 import { SalesListPage } from './pages/SalesListPage';
 import { SaleDetailsPage } from './pages/SaleDetailsPage';
+import { SaleReceiptPage } from './pages/SaleReceiptPage';
 import { ProductsPage } from './pages/catalog/ProductsPage';
 import { ProductGroupsPage } from './pages/catalog/ProductGroupsPage';
 import { CustomersPage } from './pages/catalog/CustomersPage';
@@ -20,6 +21,7 @@ import { CustomerPaymentReceiptPage } from './pages/catalog/CustomerPaymentRecei
 import { CustomerPaymentHistoryReportPage } from './pages/catalog/CustomerPaymentHistoryReportPage';
 import { LoginPage } from './pages/LoginPage';
 import { RequireAuth } from './components/auth/RequireAuth';
+import { RequirePermission } from './components/auth/RequirePermission';
 import { useAuthStore } from './store/auth';
 import { getDefaultAppRoute } from './lib/navigation';
 
@@ -46,11 +48,12 @@ export function App(): JSX.Element {
       <Route path="/login" element={<LoginPage />} />
       <Route element={<RequireAuth><AppLayout /></RequireAuth>}>
         <Route index element={<HomeRoute />} />
-        <Route path="pos" element={<PosPage />} />
-        <Route path="sales" element={<SalesListPage />} />
-        <Route path="sales/:id" element={<SaleDetailsPage />} />
-        <Route path="payments" element={<PaymentsPage />} />
-        <Route path="catalog">
+        <Route path="pos" element={<RequirePermission permission="pos:checkout"><PosPage /></RequirePermission>} />
+        <Route path="sales" element={<RequirePermission permission="sales:read"><SalesListPage /></RequirePermission>} />
+        <Route path="sales/:id" element={<RequirePermission permission="sales:read"><SaleDetailsPage /></RequirePermission>} />
+        <Route path="sales/:id/receipt" element={<RequirePermission permission="sales:read"><SaleReceiptPage /></RequirePermission>} />
+        <Route path="payments" element={<RequirePermission permission="catalog:read"><PaymentsPage /></RequirePermission>} />
+        <Route path="catalog" element={<RequirePermission permission="catalog:read"><Outlet /></RequirePermission>}>
           <Route path="products" element={<ProductsPage />} />
           <Route path="product-groups" element={<ProductGroupsPage />} />
           <Route path="customers" element={<CustomersPage />} />
@@ -62,11 +65,11 @@ export function App(): JSX.Element {
           <Route index element={<Navigate to="products" replace />} />
         </Route>
         <Route path="admin">
-          <Route path="users" element={<UsersPage />} />
-          <Route path="roles" element={<RolesPage />} />
+          <Route path="users" element={<RequirePermission permission="users:read"><UsersPage /></RequirePermission>} />
+          <Route path="roles" element={<RequirePermission permission={['roles:read', 'users:read']}><RolesPage /></RequirePermission>} />
           <Route path="system">
-            <Route path="backup" element={<BackupRestorePage />} />
-            <Route path="import" element={<LegacyImportPage />} />
+            <Route path="backup" element={<RequirePermission permission="system:backup:read"><BackupRestorePage /></RequirePermission>} />
+            <Route path="import" element={<RequirePermission permission="system:import:legacy"><LegacyImportPage /></RequirePermission>} />
             <Route index element={<Navigate to="backup" replace />} />
           </Route>
           <Route index element={<Navigate to="users" replace />} />

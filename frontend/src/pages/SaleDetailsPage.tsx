@@ -1,4 +1,5 @@
-﻿import React, { useMemo } from 'react';
+import { PrintJobHistory } from '../components/PrintJobHistory';
+import React, { useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -6,8 +7,10 @@ import { salesService } from '../services/sales';
 import { useToast } from '../components/ui/ToastProvider';
 import type { SaleStatus } from '../types/sales';
 import type { Customer, Seller, PaymentTerm } from '../types/catalog';
-import { formatDateDdMmYyyy } from '../utils/date';
+import { formatDateDdMmYyyy, formatDateTimeDdMmYyyy } from '../utils/date';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { useSaleReceiptActions } from '../hooks/useSaleReceiptActions';
+import { formatCurrencyBrl } from '../utils/number';
 
 const statusClasses: Record<SaleStatus, string> = {
   completed: 'status-completed',
@@ -22,6 +25,7 @@ export function SaleDetailsPage(): JSX.Element | null {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [confirmCancelOpen, setConfirmCancelOpen] = React.useState(false);
+  const { isPrinting, printReceipt, openReceiptPreview } = useSaleReceiptActions();
 
   const saleQuery = useQuery({
     queryKey: ['sale', id],
@@ -34,11 +38,13 @@ export function SaleDetailsPage(): JSX.Element | null {
 
   const cancelMutation = useMutation({
     mutationFn: (saleId: string) => salesService.cancel(saleId),
-    onSuccess: (sale) => {
+    onSuccess: () => {
       toast.show(t('sales.saleCancelled'), 'success');
       setConfirmCancelOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['sale', id] });
-      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['sale', id] });
+      void queryClient.invalidateQueries({ queryKey: ['sales'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
   });
@@ -59,6 +65,17 @@ export function SaleDetailsPage(): JSX.Element | null {
   const customerMap = useMemo(() => new Map(customersCache.map((c) => [c.id, c.name])), [customersCache]);
   const sellerMap = useMemo(() => new Map(sellersCache.map((s) => [s.id, s.name])), [sellersCache]);
   const paymentTermMap = useMemo(() => new Map(paymentTermsCache.map((p) => [p.id, p.name])), [paymentTermsCache]);
+  const paymentMethodLabels = React.useMemo(
+    () => ({
+      cash: t('customers.paymentMethods.cash'),
+      card: t('customers.paymentMethods.card'),
+      bank: t('customers.paymentMethods.bank'),
+      other: t('customers.paymentMethods.other'),
+      credit: t('customers.paymentMethods.credit'),
+      credit_with_entry: t('customers.paymentMethods.credit_with_entry'),
+    }),
+    [t]
+  );
 
   const totals = useMemo(() => {
     if (!sale) {
@@ -95,6 +112,7 @@ export function SaleDetailsPage(): JSX.Element | null {
 
   return (
     <div className="card" style={{ marginTop: '1.5rem' }}>
+      <PrintJobHistory saleId={sale.id} />
       <button type="button" className="button secondary" onClick={() => navigate(-1)} style={{ marginBottom: '1rem' }}>
         {t('common.back') ?? 'Back'}
       </button>
@@ -102,10 +120,19 @@ export function SaleDetailsPage(): JSX.Element | null {
         <div>
           <h3>{t('sales.viewSale')}</h3>
           <p style={{ margin: 0 }}>
-            {t('sales.emission')}: {formatDateDdMmYyyy(sale.emission_date)} | {t('sales.total')}: R$ {totals.total.toFixed(2)}
+            {t('sales.emission')}: {formatDateDdMmYyyy(sale.emission_date)} | {t('sales.total')}: {formatCurrencyBrl(totals.total)}
           </p>
         </div>
         <span className={`badge ${statusClasses[sale.status]}`}>{saleStatusLabels[sale.status]}</span>
+      </div>
+
+      <div className="form-actions wrap-actions" style={{ marginTop: '1rem' }}>
+        <button type="button" className="button primary" onClick={() => printReceipt(sale.id)} disabled={isPrinting}>
+          {isPrinting ? t('common.loading') : t('sales.printReceipt')}
+        </button>
+        <button type="button" className="button secondary" onClick={() => openReceiptPreview(sale.id)}>
+          {t('sales.openPrintableReceipt')}
+        </button>
       </div>
 
       <div style={{ marginTop: '1rem', display: 'grid', gap: '0.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
@@ -123,11 +150,31 @@ export function SaleDetailsPage(): JSX.Element | null {
         </div>
         <div className="card">
           <strong>{t('sales.subtotal')}</strong>
-          <p>R$ {totals.subtotal.toFixed(2)}</p>
+          <p>{formatCurrencyBrl(totals.subtotal)}</p>
         </div>
         <div className="card">
           <strong>{t('sales.discount')}</strong>
-          <p>R$ {totals.discount.toFixed(2)}</p>
+          <p>{formatCurrencyBrl(totals.discount)}</p>
+        </div>
+        <div className="card">
+          <strong>{t('sales.paymentDateTime')}</strong>
+          <p>{formatDateTimeDdMmYyyy(sale.paid_at ?? sale.emission_date)}</p>
+        </div>
+        <div className="card">
+          <strong>{t('sales.paymentMethod')}</strong>
+          <p>{sale.payment_method ? paymentMethodLabels[sale.payment_method] : '-'}</p>
+        </div>
+        <div className="card">
+          <strong>{t('sales.amountPaid')}</strong>
+          <p>{sale.amount_paid == null ? '-' : formatCurrencyBrl(sale.amount_paid)}</p>
+        </div>
+        <div className="card">
+          <strong>{t('sales.changeAmount')}</strong>
+          <p>{sale.change_amount == null ? '-' : formatCurrencyBrl(sale.change_amount)}</p>
+        </div>
+        <div className="card">
+          <strong>{t('sales.pendingAmount')}</strong>
+          <p>{sale.pending_amount == null ? '-' : formatCurrencyBrl(sale.pending_amount)}</p>
         </div>
       </div>
 
@@ -153,8 +200,8 @@ export function SaleDetailsPage(): JSX.Element | null {
               <tr key={item.id}>
                 <td>{item.product_name ?? item.product_id}</td>
                 <td>{item.quantity}</td>
-                <td>R$ {(item.unit_price ?? 0).toFixed(2)}</td>
-                <td>R$ {(item.total ?? item.quantity * (item.unit_price ?? 0)).toFixed(2)}</td>
+                <td>{formatCurrencyBrl(item.unit_price ?? 0)}</td>
+                <td>{formatCurrencyBrl(item.total ?? item.quantity * (item.unit_price ?? 0))}</td>
               </tr>
             ))}
           </tbody>
@@ -176,7 +223,7 @@ export function SaleDetailsPage(): JSX.Element | null {
       <ConfirmDialog
         open={confirmCancelOpen}
         title={t('sales.cancelSale')}
-        description={`${formatDateDdMmYyyy(sale.emission_date)} - R$ ${totals.total.toFixed(2)}`}
+        description={`${formatDateDdMmYyyy(sale.emission_date)} - ${formatCurrencyBrl(totals.total)}`}
         confirmLabel={t('sales.cancelSale')}
         onClose={() => setConfirmCancelOpen(false)}
         onConfirm={() => cancelMutation.mutate(sale.id)}

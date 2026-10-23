@@ -1,14 +1,16 @@
+import { assertDestructiveOperationEnabled } from '../../utils/destructive-operation-policy.js';
 import path from 'node:path';
 import os from 'node:os';
 import { promises as fsp } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import extract from 'extract-zip';
+import { prepareLegacyFiles } from './archive-files.js';
 import { DBFFile } from 'dbffile';
 import type { Job } from 'bullmq';
 import { Queue, Worker } from 'bullmq';
 import IORedis from 'ioredis';
 import type { PoolClient } from 'pg';
-import { query, withTransaction } from '../../db.js';
+import { query } from '../../db.js';
+import { withLegacyImportLock, withImportTransaction } from './execution-lock.js';
 import { getEnv } from '../../config/env.js';
 import { formatDateOnly, normalizeLegacyDate } from './date-utils.js';
 
@@ -387,40 +389,6 @@ async function assertLegacyImportSchemaReady(): Promise<void> {
   }
 }
 
-async function readDirectoryRecursive(root: string): Promise<string[]> {
-  const entries = await fsp.readdir(root, { withFileTypes: true });
-  const results: string[] = [];
-  for (const entry of entries) {
-    const resolved = path.join(root, entry.name);
-    if (entry.isDirectory()) {
-      results.push(...(await readDirectoryRecursive(resolved)));
-    } else {
-      results.push(resolved);
-    }
-  }
-  return results;
-}
-
-async function prepareLegacyFiles(sessionDir: string): Promise<Map<string, string>> {
-  const files = await readDirectoryRecursive(sessionDir);
-  const map = new Map<string, string>();
-  for (const file of files) {
-    const ext = path.extname(file).toLowerCase();
-    if (ext === '.zip') {
-      const extractDir = path.join(sessionDir, path.parse(file).name);
-      await fsp.mkdir(extractDir, { recursive: true });
-      await extract(file, { dir: extractDir });
-      await fsp.unlink(file);
-      const extracted = await readDirectoryRecursive(extractDir);
-      extracted.forEach((ex) => {
-        map.set(path.basename(ex).toUpperCase(), ex);
-      });
-    } else {
-      map.set(path.basename(file).toUpperCase(), file);
-    }
-  }
-  return map;
-}
 
 async function ensureStagingTable(config: StagingConfig, client?: PoolClient): Promise<void> {
   await runDbQuery(`truncate ${config.table}`, undefined, client);
@@ -454,7 +422,7 @@ async function loadDbfIntoStaging(
 ): Promise<number> {
   const filePath = files.get(config.file);
   if (!filePath) {
-    await appendLog(importId, 'warn', `Optional file ${config.file} not provided; skipping.`);
+    await appendLog(importId, 'warn', `Optional file ${config.file} not provided; skipping.`, client);
     return 0;
   }
 
@@ -1407,24 +1375,26 @@ async function runImportStage<T>(
   job: LegacyImportJob,
   stage: ImportStage,
   checkpointCache: Map<string, { status: LegacyImportCheckpointStatus; summary: unknown }>,
+  client: PoolClient,
   handler: (client: PoolClient) => Promise<T>
 ): Promise<T> {
   const existing = checkpointCache.get(stage);
   if (existing?.status === 'completed') {
-    await appendLog(job.id, 'info', `Skipping stage ${stage} because checkpoint is already completed`);
+    await appendLog(job.id, 'info', `Skipping stage ${stage} because checkpoint is already completed`, client);
     return existing.summary as T;
   }
 
   const startedAt = new Date().toISOString();
-  await appendLog(job.id, 'info', `Starting stage ${stage}`);
+  await appendLog(job.id, 'info', `Starting stage ${stage}`, client);
   await updateImportStatus(job.id, 'running', {
     current_stage: stage,
     last_heartbeat: startedAt,
     error_message: null,
-  });
+  }, client);
 
+  let stageResult: T;
   try {
-    const stageResult = await withTransaction(async (client) => {
+    stageResult = await withImportTransaction(client, async () => {
       await upsertStageCheckpoint(
         job.id,
         stage,
@@ -1454,9 +1424,6 @@ async function runImportStage<T>(
       return result;
     });
 
-    checkpointCache.set(stage, { status: 'completed', summary: stageResult });
-    await appendLog(job.id, 'info', `Completed stage ${stage}`);
-    return stageResult;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await upsertStageCheckpoint(job.id, stage, {
@@ -1465,14 +1432,21 @@ async function runImportStage<T>(
       finishedAt: new Date().toISOString(),
       summary: null,
       errorMessage: message,
-    });
-    await appendLog(job.id, 'error', `Stage ${stage} failed: ${message}`);
+    }, client);
+    await appendLog(job.id, 'error', `Stage ${stage} failed: ${message}`, client);
     throw error;
   }
+
+  // Logging after commit must never turn a committed publication checkpoint
+  // into a failed one: a retry could otherwise duplicate payments or stock.
+  checkpointCache.set(stage, { status: 'completed', summary: stageResult });
+  await appendLog(job.id, 'info', `Completed stage ${stage}`, client);
+  return stageResult;
 }
 
-async function runImport(job: LegacyImportJob): Promise<void> {
-  await appendLog(job.id, 'info', 'Preparing legacy files for import');
+async function runImport(job: LegacyImportJob, client: PoolClient): Promise<void> {
+  if (job.overwrite) assertDestructiveOperationEnabled('legacy-overwrite');
+  await appendLog(job.id, 'info', 'Preparing legacy files for import', client);
   const filesMap = await prepareLegacyFiles(job.sessionDir);
 
   for (const required of REQUIRED_FILES) {
@@ -1481,16 +1455,27 @@ async function runImport(job: LegacyImportJob): Promise<void> {
     }
   }
 
+  // Staging is disposable per attempt. Never trust a completed load checkpoint:
+  // another import may have replaced the shared tables during retry backoff.
+  // Keep publication checkpoints, so committed payments/movements are not replayed.
+  await withImportTransaction(client, async () => {
+    await truncateStagingTables(client);
+    await runDbQuery(
+      "delete from system_legacy_import_checkpoint where import_id = $1 and stage like 'load-staging:%'",
+      [job.id], client,
+    );
+  });
+
   const checkpointRows = await runDbQuery<{
     stage: string;
     status: LegacyImportCheckpointStatus;
     summary: unknown;
-  }>(`select stage, status, summary from system_legacy_import_checkpoint where import_id = $1`, [job.id]);
+  }>(`select stage, status, summary from system_legacy_import_checkpoint where import_id = $1`, [job.id], client);
   const checkpointCache = new Map<string, { status: LegacyImportCheckpointStatus; summary: unknown }>(
     checkpointRows.rows.map((row) => [row.stage, { status: row.status, summary: row.summary }])
   );
 
-  await runImportStage(job, 'reset-target', checkpointCache, async (client) => {
+  await runImportStage(job, 'reset-target', checkpointCache, client, async (client) => {
     if (job.overwrite) {
       await appendLog(job.id, 'info', 'Clearing existing data before import', client);
       await truncateCoreTables(client);
@@ -1502,29 +1487,29 @@ async function runImport(job: LegacyImportJob): Promise<void> {
   const stagingSummary: Record<string, number> = {};
   for (const config of STAGING_CONFIG) {
     const stageName = `load-staging:${config.table}` as ImportStage;
-    const count = await runImportStage(job, stageName, checkpointCache, async (client) => {
+    const count = await runImportStage(job, stageName, checkpointCache, client, async (client) => {
       return loadDbfIntoStaging(job.id, config, filesMap, client);
     });
     stagingSummary[config.table] = Number(count ?? 0);
   }
 
-  const masterSummary = await runImportStage(job, 'migrate-master', checkpointCache, async (client) => {
+  const masterSummary = await runImportStage(job, 'migrate-master', checkpointCache, client, async (client) => {
     return migrateMasterData(job.overwrite, client);
   });
 
-  const salesSummary = await runImportStage(job, 'migrate-sales', checkpointCache, async (client) => {
+  const salesSummary = await runImportStage(job, 'migrate-sales', checkpointCache, client, async (client) => {
     return migrateSales(job.overwrite, client);
   });
 
-  const paymentsCount = await runImportStage(job, 'migrate-customer-payments', checkpointCache, async (client) => {
+  const paymentsCount = await runImportStage(job, 'migrate-customer-payments', checkpointCache, client, async (client) => {
     return migrateCustomerPayments(client);
   });
 
-  const stockCount = await runImportStage(job, 'migrate-stock', checkpointCache, async (client) => {
+  const stockCount = await runImportStage(job, 'migrate-stock', checkpointCache, client, async (client) => {
     return migrateStockMovements(client);
   });
 
-  const reconciliation = await runImportStage(job, 'reconciliation-report', checkpointCache, async (client) => {
+  const reconciliation = await runImportStage(job, 'reconciliation-report', checkpointCache, client, async (client) => {
     return createReconciliationReport(
       job.id,
       job.sessionId,
@@ -1557,9 +1542,9 @@ async function runImport(job: LegacyImportJob): Promise<void> {
     report_json_path: (reconciliation as { jsonPath: string }).jsonPath,
     reconciliation_version: (reconciliation as { version: string }).version,
     last_heartbeat: new Date().toISOString(),
-  });
+  }, client);
 
-  await appendLog(job.id, 'info', 'Legacy data import completed successfully');
+  await appendLog(job.id, 'info', 'Legacy data import completed successfully', client);
 }
 
 function getQueueConnection(): IORedis {
@@ -1603,18 +1588,19 @@ async function ensureQueueInfra(): Promise<void> {
   );
 }
 
-async function getJobRecord(importId: string): Promise<LegacyImportJob | null> {
+async function getJobRecord(importId: string, client: PoolClient): Promise<(LegacyImportJob & { status: string }) | null> {
   const { rows } = await runDbQuery<{
     id: string;
     session_id: string;
     session_dir: string;
     overwrite: boolean;
     created_by: string;
+    status: string;
   }>(
-    `select id, session_id, session_dir, overwrite, created_by
+    `select id, session_id, session_dir, overwrite, created_by, status
      from system_legacy_import
      where id = $1`,
-    [importId]
+    [importId], client
   );
   const row = rows[0];
   if (!row) {
@@ -1626,14 +1612,24 @@ async function getJobRecord(importId: string): Promise<LegacyImportJob | null> {
     sessionDir: row.session_dir,
     overwrite: row.overwrite,
     userId: row.created_by,
+    status: row.status,
   };
 }
 
-async function processLegacyImportJob(job: Job<LegacyImportQueuePayload>): Promise<void> {
+export async function processLegacyImportJob(job: Pick<Job<LegacyImportQueuePayload>, 'data' | 'attemptsMade' | 'opts'>): Promise<void> {
+  return withLegacyImportLock(async (client) => {
+    await processLockedImportJob(job, client);
+  });
+}
+
+async function processLockedImportJob(
+  job: Pick<Job<LegacyImportQueuePayload>, 'data' | 'attemptsMade' | 'opts'>,
+  client: PoolClient,
+): Promise<void> {
   const importId = job.data.importId;
   const attemptNumber = job.attemptsMade + 1;
-  const importRecord = await getJobRecord(importId);
-  if (!importRecord) {
+  const importRecord = await getJobRecord(importId, client);
+  if (!importRecord || importRecord.status === 'completed') {
     return;
   }
 
@@ -1644,11 +1640,11 @@ async function processLegacyImportJob(job: Job<LegacyImportQueuePayload>): Promi
     error_message: null,
     current_stage: null,
     last_heartbeat: new Date().toISOString(),
-  });
-  await appendLog(importId, 'info', `Processing import attempt ${attemptNumber}`);
+  }, client);
+  await appendLog(importId, 'info', `Processing import attempt ${attemptNumber}`, client);
 
   try {
-    await runImport(importRecord);
+    await runImport(importRecord, client);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const maxAttempts = Number(job.opts.attempts ?? env.LEGACY_IMPORT_JOB_ATTEMPTS);
@@ -1660,7 +1656,7 @@ async function processLegacyImportJob(job: Job<LegacyImportQueuePayload>): Promi
         current_stage: null,
         error_message: message,
         last_heartbeat: new Date().toISOString(),
-      });
+      }, client);
 
       await runDbQuery(
         `insert into system_legacy_import_dead_letter (import_id, session_id, attempts, error_message, payload)
@@ -1676,7 +1672,7 @@ async function processLegacyImportJob(job: Job<LegacyImportQueuePayload>): Promi
             attemptNumber,
             failedAt: new Date().toISOString(),
           }),
-        ]
+        ], client
       );
 
       if (dlqQueue) {
@@ -1701,30 +1697,33 @@ async function processLegacyImportJob(job: Job<LegacyImportQueuePayload>): Promi
         current_stage: null,
         error_message: message,
         last_heartbeat: new Date().toISOString(),
-      });
+      }, client);
     }
 
-    await appendLog(importId, 'error', `Import attempt ${attemptNumber} failed: ${message}`);
+    await appendLog(importId, 'error', `Import attempt ${attemptNumber} failed: ${message}`, client);
     throw error;
   }
 }
 
 async function enqueuePendingImportsFromDatabase(): Promise<void> {
-  await runDbQuery(
-    `update system_legacy_import
+  const rows = await withLegacyImportLock(async (client) => {
+    await runDbQuery(
+      `update system_legacy_import
      set status = 'retrying',
          error_message = coalesce(error_message, 'service restarted while import was running'),
          last_heartbeat = now()
      where status = 'running'
-       and finished_at is null`
-  );
+       and finished_at is null`, undefined, client
+    );
 
-  const { rows } = await runDbQuery<{ id: string }>(
-    `select id
+    const { rows } = await runDbQuery<{ id: string }>(
+      `select id
      from system_legacy_import
      where status in ('queued', 'retrying')
-     order by created_at asc`
-  );
+     order by created_at asc`, undefined, client
+    );
+    return rows;
+  });
 
   for (const row of rows) {
     await queueLegacyImport({ id: row.id });

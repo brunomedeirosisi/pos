@@ -35,5 +35,5 @@ export function RequireAuth({ children }: Props): JSX.Element {
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
-  return children;
+  return <React.Fragment key={user.id}>{children}</React.Fragment>;
 }

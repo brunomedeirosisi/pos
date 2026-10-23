@@ -49,7 +49,8 @@ export function SellersPage(): JSX.Element {
     mutationFn: (values: FormValues) => sellersService.create(buildPayload(values)),
     onSuccess: () => {
       toast.show(t('common.saved'), 'success');
-      queryClient.invalidateQueries({ queryKey: ['sellers'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['sellers'] });
       closeForm();
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
@@ -62,7 +63,8 @@ export function SellersPage(): JSX.Element {
     },
     onSuccess: () => {
       toast.show(t('common.saved'), 'success');
-      queryClient.invalidateQueries({ queryKey: ['sellers'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['sellers'] });
       closeForm();
     },
     onError: (error: Error) => toast.show(error.message, 'error'),

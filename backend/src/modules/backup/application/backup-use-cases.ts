@@ -7,6 +7,12 @@ import {
   enforceRetentionPolicy,
   restoreBackupWithRollback,
 } from '../../../services/backup-restore-service.js';
+import {
+  deleteBackupFile,
+  replicateBackupFile,
+  writeBackupManifest,
+} from '../../../utils/backup.js';
+import { withBackupLock, type BackupLease } from '../../../services/backup-lock.js';
 import { logAudit } from '../../../utils/audit.js';
 
 export type BackupActor = {
@@ -19,7 +25,7 @@ function mapBackupRow(row: BackupRow): BackupDto {
   return {
     id: row.id,
     filename: row.filename,
-    sizeBytes: row.size_bytes ?? 0,
+    sizeBytes: Number(row.size_bytes ?? 0),
     createdAt: row.created_at,
     checksum: row.checksum ?? null,
     metadata: row.metadata ?? null,
@@ -62,7 +68,13 @@ export function createRegisterUploadedBackupUseCase(repository: BackupRepository
     sizeBytes: number;
     checksum: string;
     metadata: unknown;
+    lease: BackupLease;
   }): Promise<BackupDto> => {
+    input.lease.assertHeld();
+    await replicateBackupFile(input.filename, input.checksum, input.metadata, input.lease.signal);
+    input.lease.assertHeld();
+    await writeBackupManifest(input);
+    input.lease.assertHeld();
     const created = await repository.insertBackupRecord({
       filename: input.filename,
       sizeBytes: input.sizeBytes,
@@ -76,7 +88,8 @@ export function createRegisterUploadedBackupUseCase(repository: BackupRepository
         userId: input.actor.userId,
         ipAddress: input.actor.ipAddress,
       },
-      'backup:upload'
+      'backup:upload',
+      input.lease,
     );
 
     await logAudit({
@@ -93,26 +106,24 @@ export function createRegisterUploadedBackupUseCase(repository: BackupRepository
 
 export function createDeleteBackupUseCase(repository: BackupRepository) {
   return async (actor: BackupActor, filename: string): Promise<void> => {
-    const deleted = await repository.deleteByFilename(filename);
-    if (!deleted) {
-      throw notFound('backup not found');
-    }
-
-    await logAudit({
-      userId: actor.userId,
-      action: 'BACKUP_DELETE',
-      details: { filename },
-      ipAddress: actor.ipAddress,
+    await withBackupLock(async (lease) => {
+      if (!(await repository.findByFilename(filename))) throw notFound('backup not found');
+      lease.assertHeld();
+      await deleteBackupFile(filename);
+      lease.assertHeld();
+      await repository.deleteByFilename(filename);
+      await logAudit({
+        userId: actor.userId,
+        action: 'BACKUP_DELETE',
+        details: { filename },
+        ipAddress: actor.ipAddress,
+      });
     });
   };
 }
 
 export function createRestoreBackupUseCase(repository: BackupRepository) {
-  return async (input: {
-    actor: BackupActor;
-    filename: string;
-    password: string;
-  }) => {
+  return async (input: { actor: BackupActor; filename: string; password: string }) => {
     const passwordHash = await repository.getUserPasswordHash(input.actor.userId);
     if (!passwordHash) {
       throw unauthorized();

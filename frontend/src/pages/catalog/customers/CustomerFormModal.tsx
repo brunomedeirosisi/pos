@@ -1,8 +1,10 @@
 import React from 'react';
+import { Controller } from 'react-hook-form';
 import type { TFunction } from 'i18next';
 import type { UseFormReturn } from 'react-hook-form';
 import { Modal } from '../../../components/ui/Modal';
 import type { CustomerFormValues } from './customer-form-schema';
+import { CurrencyInput } from '../../../components/ui/CurrencyInput';
 
 type CustomerFormModalProps = {
   open: boolean;
@@ -30,10 +32,6 @@ export function CustomerFormModal(props: CustomerFormModalProps): JSX.Element {
             <label htmlFor="customer-name">{t('customers.heading')}*</label>
             <input id="customer-name" {...form.register('name')} />
             {form.formState.errors.name && <small style={{ color: '#dc2626' }}>{form.formState.errors.name.message}</small>}
-          </div>
-          <div className="form-group">
-            <label htmlFor="customer-legacy">{t('products.legacyCode')}</label>
-            <input id="customer-legacy" {...form.register('legacy_code')} />
           </div>
           <div className="form-group">
             <label htmlFor="customer-cpf">{t('customers.cpf')}</label>
@@ -70,7 +68,13 @@ export function CustomerFormModal(props: CustomerFormModalProps): JSX.Element {
           </div>
           <div className="form-group">
             <label htmlFor="customer-credit">{t('customers.creditLimit')}</label>
-            <input id="customer-credit" type="number" step="0.01" {...form.register('credit_limit')} />
+            <Controller
+              name="credit_limit"
+              control={form.control}
+              render={({ field }) => (
+                <CurrencyInput id="customer-credit" value={field.value} onValueChange={field.onChange} />
+              )}
+            />
             {form.formState.errors.credit_limit && (
               <small style={{ color: '#dc2626' }}>{form.formState.errors.credit_limit.message as string}</small>
             )}

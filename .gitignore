@@ -22,6 +22,7 @@ frontend/vite.config.js
 # Coverage and temp files
 coverage/
 tmp/
+artifacts/
 
 # Environment files
 .env

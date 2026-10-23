@@ -1,0 +1,316 @@
+{
+  "schemaVersion": 1,
+  "phase": "3 - first cut",
+  "recordedAt": "2026-10-22T11:46:01.208Z",
+  "baseGitHead": "ac85924e7a94e836805e770c60db8141c783bca6",
+  "baseWasDirty": true,
+  "scope": [
+    "TSK-013 / TEC-013 initial checkout arithmetic and precision cut",
+    "Exact line totals, header totals, change and outstanding amounts",
+    "Exact stock movement grouping for newly created sales",
+    "Money/quantity precision and numeric(14,scale) range checks at checkout; positive standalone payment scale"
+  ],
+  "calculationPolicy": {
+    "version": "line-half-up-money-2-quantity-3/v1",
+    "moneyScale": 2,
+    "quantityScale": 3,
+    "rounding": "half up per line, then sum rounded lines and subtract discount",
+    "moneyMaximum": "999999999999.99",
+    "quantityMaximum": "99999999999.999",
+    "positiveLineRoundedToZero": "reject",
+    "positiveStandalonePaymentBelowOneCent": "reject",
+    "existingExplicitZeroCatalogPrice": "preserved"
+  },
+  "tests": {
+    "backend": 138,
+    "frontend": 53,
+    "integration": 38,
+    "normalRegressions": 3,
+    "passedTotal": 232,
+    "expectedFailures": 1,
+    "remainingExpectedFailure": "TSK-016 anonymous checkout without settlement",
+    "sharedConformanceVectors": 10,
+    "deterministicFractionalQuantityPairs": 100,
+    "newHttpPostgresCases": 19,
+    "agent": "unchanged; not rerun"
+  },
+  "validation": [
+    {
+      "workspace": "backend",
+      "command": "npm run lint",
+      "exitCode": 0
+    },
+    {
+      "workspace": "backend",
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    {
+      "workspace": "backend",
+      "command": "npm test",
+      "exitCode": 0
+    },
+    {
+      "workspace": "frontend",
+      "command": "npm run lint",
+      "exitCode": 0
+    },
+    {
+      "workspace": "frontend",
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    {
+      "workspace": "frontend",
+      "command": "npm test",
+      "exitCode": 0
+    },
+    {
+      "command": "node infra/test-disposable.mjs --images --backups",
+      "exitCode": 0,
+      "includes": [
+        "PostgreSQL/Redis integration and regressions",
+        "API and frontend image builds",
+        "API authentication, metrics authorization, session revocation and SPA fallback",
+        "Backup storage/failure controls, independent simulation and API recreation"
+      ]
+    },
+    {
+      "command": "OpenAPI YAML parse and precision constraints assertion",
+      "exitCode": 0
+    },
+    {
+      "command": "node infra/check-repository-secrets.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "git diff --check -- [changed tracked product files]",
+      "exitCode": 0
+    }
+  ],
+  "negativeProof": {
+    "target": "pre-cut sales domain from dirty workspace snapshot",
+    "test": "TSK-013 fractional lines must sum to the recorded sale total",
+    "result": "failed as expected",
+    "receivedTotal": 0.01,
+    "expectedTotal": 0.02,
+    "correctedSourceRestored": true
+  },
+  "additionalRegressionFoundAndFixed": "Receipt recomputed 0.30 - 0.10 as 0.19999999999999998; now uses the existing PostgreSQL pending_amount projection. Creation returns its integer-cent pending amount.",
+  "httpSqlAssertions": [
+    "Header subtotal equals sum of persisted line amounts",
+    "Header total equals subtotal minus discount",
+    "Stock movement totals equal rounded line totals",
+    "Receipt fields agree with persisted sale",
+    "Create/detail/receipt report 0.20 outstanding for a 0.30 sale with 0.10 down payment",
+    "Invalid precision, positive sub-cent line and overflow return 400 without a committed sale",
+    "Overflow of repeated-product movement quantity rolls back sale and items"
+  ],
+  "images": {
+    "api": "sha256:0c5e453727ffd2dd770da3909d3dd9b6c6ec61ead243b45b0dc3ee133122c2bc",
+    "frontend": "sha256:7ad816654f624e49cff2c8d40c3ba36dab48fd29cf8f5d5cef3adc1bb11a6e11"
+  },
+  "backupRecheck": {
+    "postgres": "pg_dump (PostgreSQL) 16.15",
+    "psql": "psql (PostgreSQL) 16.15",
+    "uid": 10001,
+    "backupMs": 184,
+    "simulationMs": 249,
+    "restored": {
+      "users": 2,
+      "customers": 1,
+      "products": 1,
+      "sales": 1,
+      "saleItems": 1,
+      "stockMovements": 1,
+      "foreignKeys": 19
+    },
+    "syntheticOnly": true,
+    "backups": [
+      {
+        "filename": "backup_2026-10-22-11-44-35_d0e0b36b-2eea-4f23-b22f-e8ed6381ad99.zip",
+        "checksum": "5b4aee1fa3aea7bae65d0c6cef67e61f1bc30887d7c26b2e9b5d3a3650ea9184",
+        "sizeBytes": 7371
+      },
+      {
+        "filename": "backup_2026-10-22-11-44-36_064959a1-c9a4-4fd3-bba4-13e337dac4e9.zip",
+        "checksum": "88ce8a8b1fb79b974b0713a4a844bf206f3669844a8fbdaf1307363feee3e638",
+        "sizeBytes": 7902
+      }
+    ],
+    "lockConflicts": [
+      "create",
+      "upload",
+      "delete",
+      "retention"
+    ],
+    "storageFailures": [
+      "readonly",
+      "free-space-reserve",
+      "replica-checksum",
+      "replica-unwritable",
+      "ENOSPC-cleanup",
+      "restore-size-budget"
+    ],
+    "sourceDatabasePreserved": true,
+    "uploadAndDeleteVerified": true,
+    "persistenceAfterApiRecreation": true,
+    "restoredAfterApiRecreation": true
+  },
+  "preservation": {
+    "noBaselineFilesDeleted": true,
+    "secretsUnchanged": true,
+    "manifestsAndLockfilesUnchanged": true,
+    "existingSyntheticDataFiles": 21,
+    "existingSyntheticDataUnchanged": true,
+    "agentSourceUnchanged": true,
+    "legacyImportIsolationUnchanged": true,
+    "historicalStockGroupingPreserved": true
+  },
+  "limits": [
+    "No browser-driven E2E or load test",
+    "No constraints added before historical reconciliation",
+    "No full strict parser/localized input revision (TSK-035 pending)",
+    "TSK-016 settlement, TSK-012 net payments in all consumers, TSK-014 customer/credit locking, TSK-015 idempotency pending",
+    "Negative stock blocking, accounting/refund authorization and historical cancellation reconciliation pending",
+    "Snapshots, cost/margin KPI provenance and full integration/E2E pending",
+    "Independent recovery/cutover and safe overwrite gates from earlier phases remain pending"
+  ],
+  "deployment": {
+    "schemaMigration": false,
+    "historicalDataCorrection": false,
+    "userDatabaseTouched": false,
+    "commit": false,
+    "push": false,
+    "deploy": false,
+    "databaseRestoreEnabled": false,
+    "legacyOverwriteEnabled": false
+  },
+  "files": [
+    {
+      "path": "backend/openapi/openapi.yaml",
+      "sha256": "8640fecf7ec41a5ff1148ebf6c40c6a08ba358b98a46517dd3146dad4dcc98f6",
+      "action": "modified"
+    },
+    {
+      "path": "backend/src/modules/customer-payments/contracts/customer-payments-contracts.ts",
+      "sha256": "7c1b6a6595261b6c2ed150f1b7ccfe7281929571d0189617fdf39f4830afe6dd",
+      "action": "modified"
+    },
+    {
+      "path": "backend/src/modules/sales/application/sales-use-cases.ts",
+      "sha256": "518808abd9a9a55d7653d9cd311ea040d8f72743ea6b90a81c050925f0e16dc9",
+      "action": "modified"
+    },
+    {
+      "path": "backend/src/modules/sales/contracts/sales-contracts.ts",
+      "sha256": "e9cffba3791515b3586f36a8536ad822c27c7664c398a198998410343dfd191b",
+      "action": "modified"
+    },
+    {
+      "path": "backend/src/modules/sales/domain/sale-receipt.ts",
+      "sha256": "0650b96aea02a843ce4cde6768d032c2704e09b40d7375dcd2a129014aa4c81c",
+      "action": "modified"
+    },
+    {
+      "path": "backend/src/modules/sales/domain/sales-domain.ts",
+      "sha256": "28e1e699fd6f3d828373b2543aac0fbb6d146cfb63bb366bcf8c223088cbd6c2",
+      "action": "modified"
+    },
+    {
+      "path": "backend/src/modules/sales/repository/sales-repository.ts",
+      "sha256": "f9c26f481b34257d54c7d6e7a45108df99b50852bdaa57bccef5bf3c0d080ed9",
+      "action": "modified"
+    },
+    {
+      "path": "backend/src/utils/checkout-decimal.test.ts",
+      "sha256": "98552797cbc4138176e0d9f0a3b7bfcbdfeb88aa36af1847ad79434908f6126e",
+      "action": "created"
+    },
+    {
+      "path": "backend/src/utils/checkout-decimal.ts",
+      "sha256": "fd8fac1401ed4ec6d3059d047b1af875286b049bfcf5afd91af4ce4d8745a113",
+      "action": "created"
+    },
+    {
+      "path": "backend/test/integration/checkout-money.test.ts",
+      "sha256": "0d0c3d045a60f5fbaf22449ffe7bd9a81dd21258243e39c84aad77514ea3f928",
+      "action": "created"
+    },
+    {
+      "path": "backend/test/regression/financial-debt.test.ts",
+      "sha256": "ee250e32b75d77dd7c17c7d90337bb079f9ee31568148e43cff3fcd23a692935",
+      "action": "modified"
+    },
+    {
+      "path": "docs/technical-audit/02-inventario-problemas.md",
+      "sha256": "c66b49296a1abd61f8a6cf4f44eb90ecd140be9cfb121d102a838b66a591591c",
+      "action": "modified"
+    },
+    {
+      "path": "docs/technical-audit/03-backlog-tecnico.md",
+      "sha256": "73ae0d6e0777f135753bb8725c9302fe4c8dfd5059d15440f30d9c576db0a1ea",
+      "action": "modified"
+    },
+    {
+      "path": "docs/technical-audit/04-roadmap-implementacao.md",
+      "sha256": "895b73065f9d71a874c645a172280ee976feb22a0215cde791faae707eefe1f8",
+      "action": "modified"
+    },
+    {
+      "path": "docs/technical-audit/12-fase-tres-primeiro-corte.md",
+      "sha256": "fcbc8220b98dce759a9987db41530a2871478ef0a43e1cbc8b4d3991e3ad85b7",
+      "action": "created"
+    },
+    {
+      "path": "frontend/src/lib/i18n.ts",
+      "sha256": "9371025d40e67a9735a8d8991626d447f3403211731225b2f58d06c69856892b",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/pos/pricing.test.ts",
+      "sha256": "f8caae5869a5bada999bbbba8d4714fdc01b2feb4e9fcf09315bae45c72c7d63",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/pos/pricing.ts",
+      "sha256": "44ca6bfd7e9ea0d15415fc9fd336d28cffdb8fc4d1ff285c7808501ffcda8fb3",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/PosPage.tsx",
+      "sha256": "5f39c732cdd6544e4fa9c51896f36ab5fa0878dc87b533b6042f5902bc44ff5f",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/store/pos.test.ts",
+      "sha256": "744df3f997be850ae81628509328f8dad55752bca5a926c713779cfb4bbf90c7",
+      "action": "created"
+    },
+    {
+      "path": "frontend/src/store/pos.ts",
+      "sha256": "01b2aa3e77e71959a9bafe2aac86c9e692cf85cc9115ace7938b93162eb694c9",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/test-fixtures/checkout-calculation.v1.json",
+      "sha256": "d9bae40aa8b66538c8b7e1644f609d2b2305b1d987f59d898f8704f5168dbc49",
+      "action": "created"
+    },
+    {
+      "path": "frontend/src/utils/checkout-decimal.ts",
+      "sha256": "d7db90078dc68d5af76956313fe376b74179c7c95a96d9b74522a473a06af31f",
+      "action": "created"
+    },
+    {
+      "path": "frontend/tsconfig.json",
+      "sha256": "578c24a284a07c8083ed3f23e81a604e91209822b7ca15edf4875e6950699f6a",
+      "action": "modified"
+    },
+    {
+      "path": "README.md",
+      "sha256": "7c893b11973592062171ba2d7738ccfacc8b8c98f316398e0d3812cca127f2ec",
+      "action": "modified"
+    }
+  ]
+}

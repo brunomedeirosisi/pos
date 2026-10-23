@@ -1,6 +1,5 @@
-﻿import React, { useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
+import React, { useMemo, useState } from 'react';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -10,37 +9,10 @@ import type { Product } from '../../types/catalog';
 import { useToast } from '../../components/ui/ToastProvider';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useHasPermission } from '../../store/auth';
-import { parseLocaleNumericInput } from '../../utils/number';
 import { Modal } from '../../components/ui/Modal';
-
-const nullableNumberSchema = z.preprocess(
-  parseLocaleNumericInput,
-  z.number({ invalid_type_error: 'Invalid number' }).nonnegative().nullable()
-);
-
-const productSchema = z.object({
-  name: z.string().trim().min(1, 'Required'),
-  legacy_code: z.string().trim().optional(),
-  barcode: z.string().trim().optional(),
-  group_id: z.string().uuid().optional().or(z.literal('')),
-  reference: z.string().trim().optional(),
-  min_stock: nullableNumberSchema.optional(),
-  price_cash: nullableNumberSchema.optional(),
-  price_base: nullableNumberSchema.optional(),
-});
-
-type ProductFormValues = z.infer<typeof productSchema>;
-
-const defaultValues: ProductFormValues = {
-  name: '',
-  legacy_code: '',
-  barcode: '',
-  group_id: '',
-  reference: '',
-  min_stock: null,
-  price_cash: null,
-  price_base: null,
-};
+import { CurrencyInput } from '../../components/ui/CurrencyInput';
+import { formatCurrencyBrl } from '../../utils/number';
+import { buildProductPayload, productFormDefaults, productFormSchema, type ProductFormValues } from './products/product-form';
 
 export function ProductsPage(): JSX.Element {
   const { t } = useTranslation();
@@ -57,8 +29,8 @@ export function ProductsPage(): JSX.Element {
   const canWriteCatalog = useHasPermission('catalog:write');
 
   const form = useForm<ProductFormValues>({
-    resolver: zodResolver(productSchema),
-    defaultValues,
+    resolver: zodResolver(productFormSchema),
+    defaultValues: productFormDefaults,
   });
 
   const productsQuery = useQuery({
@@ -74,10 +46,11 @@ export function ProductsPage(): JSX.Element {
   });
 
   const createMutation = useMutation({
-    mutationFn: (values: ProductFormValues) => productsService.create(buildPayload(values)),
+    mutationFn: (values: ProductFormValues) => productsService.create(buildProductPayload(values)),
     onSuccess: () => {
       toast.show(t('common.saved'), 'success');
-      queryClient.invalidateQueries({ queryKey: ['products'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['products'] });
       closeForm();
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
@@ -86,28 +59,16 @@ export function ProductsPage(): JSX.Element {
   const updateMutation = useMutation({
     mutationFn: (values: ProductFormValues) => {
       if (!editing) throw new Error('No product selected');
-      return productsService.update(editing.id, buildPayload(values));
+      return productsService.update(editing.id, buildProductPayload(values));
     },
     onSuccess: () => {
       toast.show(t('common.saved'), 'success');
-      queryClient.invalidateQueries({ queryKey: ['products'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['products'] });
       closeForm();
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
   });
-
-  function buildPayload(values: ProductFormValues) {
-    return {
-      ...values,
-      legacy_code: values.legacy_code?.trim() || null,
-      barcode: values.barcode?.trim() || null,
-      group_id: values.group_id ? values.group_id : null,
-      reference: values.reference?.trim() || null,
-      min_stock: values.min_stock ?? null,
-      price_cash: values.price_cash ?? null,
-      price_base: values.price_base ?? null,
-    };
-  }
 
   function openCreateForm() {
     if (!canWriteCatalog) {
@@ -115,7 +76,7 @@ export function ProductsPage(): JSX.Element {
       return;
     }
     setEditing(null);
-    form.reset(defaultValues);
+    form.reset(productFormDefaults);
     setIsFormOpen(true);
   }
 
@@ -127,7 +88,6 @@ export function ProductsPage(): JSX.Element {
     setEditing(product);
     form.reset({
       name: product.name,
-      legacy_code: product.legacy_code ?? '',
       barcode: product.barcode ?? '',
       group_id: product.group_id ?? '',
       reference: product.reference ?? '',
@@ -141,7 +101,7 @@ export function ProductsPage(): JSX.Element {
   function closeForm() {
     setIsFormOpen(false);
     setEditing(null);
-    form.reset(defaultValues);
+    form.reset(productFormDefaults);
   }
 
   const onSubmit = form.handleSubmit((values) => {
@@ -224,7 +184,7 @@ export function ProductsPage(): JSX.Element {
         <td>{product.legacy_code ?? '-'}</td>
         <td>{product.barcode ?? '-'}</td>
         <td>{groups.find((group) => group.id === product.group_id)?.name ?? '-'}</td>
-        <td>{product.price_cash != null ? product.price_cash.toFixed(2) : '-'}</td>
+        <td>{product.price_cash != null ? formatCurrencyBrl(product.price_cash) : '-'}</td>
         <td>
           <button
             type="button"
@@ -286,7 +246,7 @@ export function ProductsPage(): JSX.Element {
           <thead>
             <tr>
               <th>{t('products.heading')}</th>
-              <th>{t('products.legacyCode')}</th>
+              <th>{t('products.code')}</th>
               <th>{t('products.barcode')}</th>
               <th>{t('products.group')}</th>
               <th>{t('products.priceCash')}</th>
@@ -316,10 +276,6 @@ export function ProductsPage(): JSX.Element {
               )}
             </div>
             <div className="form-group">
-              <label htmlFor="legacy_code">{t('products.legacyCode')}</label>
-              <input id="legacy_code" {...form.register('legacy_code')} />
-            </div>
-            <div className="form-group">
               <label htmlFor="barcode">{t('products.barcode')}</label>
               <input id="barcode" {...form.register('barcode')} />
             </div>
@@ -347,14 +303,26 @@ export function ProductsPage(): JSX.Element {
             </div>
             <div className="form-group">
               <label htmlFor="price_cash">{t('products.priceCash')}</label>
-              <input id="price_cash" type="number" step="0.01" {...form.register('price_cash')} />
+              <Controller
+                name="price_cash"
+                control={form.control}
+                render={({ field }) => (
+                  <CurrencyInput id="price_cash" value={field.value} onValueChange={field.onChange} />
+                )}
+              />
               {form.formState.errors.price_cash && (
                 <small style={{ color: '#dc2626' }}>{form.formState.errors.price_cash.message as string}</small>
               )}
             </div>
             <div className="form-group">
               <label htmlFor="price_base">{t('products.priceBase')}</label>
-              <input id="price_base" type="number" step="0.01" {...form.register('price_base')} />
+              <Controller
+                name="price_base"
+                control={form.control}
+                render={({ field }) => (
+                  <CurrencyInput id="price_base" value={field.value} onValueChange={field.onChange} />
+                )}
+              />
               {form.formState.errors.price_base && (
                 <small style={{ color: '#dc2626' }}>{form.formState.errors.price_base.message as string}</small>
               )}
@@ -373,5 +341,3 @@ export function ProductsPage(): JSX.Element {
     </div>
   );
 }
-
-

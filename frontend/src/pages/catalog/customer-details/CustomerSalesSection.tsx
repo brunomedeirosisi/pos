@@ -65,7 +65,7 @@ export function CustomerSalesSection(props: CustomerSalesSectionProps): JSX.Elem
     if (!canReadSales) {
       return (
         <tr>
-          <td colSpan={6}>
+          <td colSpan={7}>
             <div className="empty-state">{t('customers.noSalesPermission')}</div>
           </td>
         </tr>
@@ -75,7 +75,7 @@ export function CustomerSalesSection(props: CustomerSalesSectionProps): JSX.Elem
     if (salesState.isLoading) {
       return (
         <tr>
-          <td colSpan={6}>
+          <td colSpan={7}>
             <div className="empty-state">{t('common.loading')}</div>
           </td>
         </tr>
@@ -85,7 +85,7 @@ export function CustomerSalesSection(props: CustomerSalesSectionProps): JSX.Elem
     if (salesState.isError) {
       return (
         <tr>
-          <td colSpan={6}>
+          <td colSpan={7}>
             <div className="empty-state">{salesState.error?.message ?? t('common.error')}</div>
           </td>
         </tr>
@@ -95,7 +95,7 @@ export function CustomerSalesSection(props: CustomerSalesSectionProps): JSX.Elem
     if (sales.length === 0) {
       return (
         <tr>
-          <td colSpan={6}>
+          <td colSpan={7}>
             <div className="empty-state">{t('customers.noSales')}</div>
           </td>
         </tr>
@@ -122,6 +122,7 @@ export function CustomerSalesSection(props: CustomerSalesSectionProps): JSX.Elem
           )}
         </td>
         <td>{sale.total != null ? formatCurrency(sale.total) : '-'}</td>
+        <td>{sale.pending_amount != null ? formatCurrency(sale.pending_amount) : '-'}</td>
         <td>
           <span className="badge">{purchaseStatusTexts[sale.status]}</span>
         </td>
@@ -192,7 +193,9 @@ export function CustomerSalesSection(props: CustomerSalesSectionProps): JSX.Elem
           typeLabel: t('customers.timelineTypePurchase'),
           details: `${t('customers.purchaseOrder')}: ${sale.order_number ?? '-'} | ${t('customers.purchaseSeller')}: ${
             sale.seller_name ?? '-'
-          } | ${t('customers.purchaseItems')}: ${itemsLabel}`,
+          } | ${t('customers.purchaseItems')}: ${itemsLabel} | ${t('customers.purchasePendingAmount')}: ${formatCurrency(
+            sale.pending_amount
+          )}`,
           amount: sale.total,
           statusLabel: purchaseStatusTexts[sale.status],
         });
@@ -321,6 +324,7 @@ export function CustomerSalesSection(props: CustomerSalesSectionProps): JSX.Elem
                 <th>{t('customers.purchaseSeller')}</th>
                 <th>{t('customers.purchaseItems')}</th>
                 <th>{t('customers.purchaseTotal')}</th>
+                <th>{t('customers.purchasePendingAmount')}</th>
                 <th>{t('customers.purchaseStatus')}</th>
               </tr>
             </thead>

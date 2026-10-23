@@ -1,0 +1,12 @@
+# Mount an existing off-host/NAS destination. Verify the actual mount with infrastructure.
+services:
+  api:
+    environment:
+      BACKUP_REPLICA_PATH: /var/backups/replica
+      BACKUP_REQUIRE_REPLICA: 'true'
+    volumes:
+      - type: bind
+        source: ${BACKUP_REPLICA_HOST_PATH:?Set an existing absolute off-host mount path}
+        target: /var/backups/replica
+        bind:
+          create_host_path: false

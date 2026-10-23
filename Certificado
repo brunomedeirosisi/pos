@@ -1,3 +1,14 @@
+TLS local do projeto:
+
+1. Suba o proxy:
 docker compose up -d reverse-proxy
-docker compose cp reverse-proxy:/data/caddy/pki/authorities/local/root.crt .\infra\caddy-local-root.crt
-Import-Certificate -FilePath .\infra\caddy-local-root.crt -CertStoreLocation Cert:\CurrentUser\Root
+
+2. Instale o certificado local confiável:
+powershell -ExecutionPolicy Bypass -File .\infra\install-dev-certificate.ps1
+
+3. Se precisar remover depois:
+powershell -ExecutionPolicy Bypass -File .\infra\remove-dev-certificate.ps1
+
+Observação:
+Para `pos.localhost`, não existe certificado público gratuito emitido por CA pública.
+O caminho correto é confiar na CA local gerada pelo Caddy na máquina de desenvolvimento.

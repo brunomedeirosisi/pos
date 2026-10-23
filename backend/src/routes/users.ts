@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 import { asyncHandler } from '../utils/async-handler.js';
-import { query } from '../db.js';
+import { query, withTransaction } from '../db.js';
 import { requirePermission } from '../middleware/auth.js';
 import { badRequest, notFound } from '../errors.js';
 import { paginationQuerySchema, resolvePagination } from '../utils/pagination.js';
@@ -236,7 +236,12 @@ router.patch(
     setClauses.push('updated_at = now()');
     values.push(id);
     const sql = `update app_user set ${setClauses.join(', ')} where id = $${values.length}`;
-    await query(sql, values as any[]);
+    await withTransaction(async (client) => {
+      await query(sql, values, client);
+      if (payload.password !== undefined || payload.status === 'disabled') {
+        await query('update auth_session set revoked_at = coalesce(revoked_at, now()) where user_id = $1', [id], client);
+      }
+    });
 
     const updated = await fetchUser(id);
     res.json(updated);
@@ -250,7 +255,10 @@ router.delete(
     const id = req.params.id;
     await fetchUser(id);
 
-    await query('update app_user set status = $1, updated_at = now() where id = $2', ['disabled', id]);
+    await withTransaction(async (client) => {
+      await query('update app_user set status = $1, updated_at = now() where id = $2', ['disabled', id], client);
+      await query('update auth_session set revoked_at = coalesce(revoked_at, now()) where user_id = $1', [id], client);
+    });
     res.status(204).send();
   })
 );

@@ -3,21 +3,29 @@
 
 \set ON_ERROR_STOP on
 
+do $$
+begin
+  if current_database() <> 'pos_phase0_test' or current_user <> 'pos_test' then
+    raise exception 'Synthetic disposable benchmark database required';
+  end if;
+end $$;
+
 begin;
 
 insert into product_group (legacy_code, name)
 values ('BENCH_GRP', 'Benchmark Group')
 on conflict (legacy_code) do update set name = excluded.name;
 
-insert into product (legacy_code, name, group_id, price_cash, price_base)
-select 'BENCH_PROD', 'Benchmark Product', pg.id, 10, 10
+insert into product (legacy_code, name, group_id, price_cash, price_base, cost_price)
+select 'BENCH_PROD', 'Benchmark Product', pg.id, 10, 10, 6
 from product_group pg
 where pg.legacy_code = 'BENCH_GRP'
 on conflict (legacy_code) do update set
   name = excluded.name,
   group_id = excluded.group_id,
   price_cash = excluded.price_cash,
-  price_base = excluded.price_base;
+  price_base = excluded.price_base,
+  cost_price = excluded.cost_price;
 
 insert into customer (legacy_code, name, status)
 values ('BENCH_CUST', 'Benchmark Customer', 'active')
@@ -55,6 +63,9 @@ insert into sale (
   seller_id,
   customer_id,
   payment_term_id,
+  payment_method,
+  amount_paid,
+  change_amount,
   subtotal,
   discount,
   total,
@@ -68,9 +79,12 @@ select
   refs.seller_id,
   refs.customer_id,
   refs.payment_term_id,
-  100,
-  10,
-  90,
+  'credit',
+  0,
+  0,
+  30,
+  0,
+  30,
   'completed',
   'BENCH',
   'BENCH-' || g
@@ -112,7 +126,7 @@ insert into customer_payment (
 )
 select
   refs.customer_id,
-  (10 + (g % 100))::numeric,
+  10::numeric,
   current_date - (g % 365),
   'legacy',
   'BENCH-' || g,

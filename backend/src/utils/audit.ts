@@ -2,7 +2,7 @@ import type { PoolClient } from 'pg';
 import { query } from '../db.js';
 
 type AuditInput = {
-  userId: string;
+  userId: string | null;
   action: string;
   details?: unknown;
   ipAddress?: string | null;

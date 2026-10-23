@@ -11,7 +11,6 @@ export type Product = {
 };
 
 export type ProductInput = {
-  legacy_code?: string | null;
   name: string;
   barcode?: string | null;
   group_id?: string | null;
@@ -50,7 +49,6 @@ export type Customer = {
 };
 
 export type CustomerInput = {
-  legacy_code?: string | null;
   name: string;
   cpf?: string | null;
   address?: string | null;
@@ -169,6 +167,7 @@ export type CustomerPaymentReceipt = {
 };
 
 export type CustomerPaymentHistoryReport = {
+  coverage?: { complete: true; row_count: number; row_limit: number };
   generated_at: string;
   company: CompanyInfo;
   customer: CustomerSummary;
@@ -181,6 +180,7 @@ export type CustomerSale = {
   emission_date: string | null;
   order_number: string | null;
   total: number | null;
+  pending_amount: number | null;
   status: 'draft' | 'completed' | 'cancelled';
   seller_id: string | null;
   seller_name: string | null;

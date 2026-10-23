@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { query } from '../db.js';
+import { query, withTransaction } from '../db.js';
 import { asyncHandler } from '../utils/async-handler.js';
 import { notFound } from '../errors.js';
 import { requirePermission } from '../middleware/auth.js';
 import { customerPaymentsRouter } from '../modules/customer-payments/http/customer-payments-router.js';
 import { parseDecimalInput } from '../modules/customer-payments/domain/customer-payments-domain.js';
 import { paginationQuerySchema, resolvePagination } from '../utils/pagination.js';
+import { generateNextNumericCode } from '../utils/generated-code.js';
 
 export const router = Router();
 
@@ -25,8 +26,7 @@ const customerSalesQuerySchema = paginationQuerySchema;
 
 const numericField = z.preprocess(parseDecimalInput, z.number().nonnegative().nullable().optional());
 
-const baseSchema = z.object({
-  legacy_code: z.string().trim().min(1).optional().nullable(),
+const writeSchema = z.object({
   name: z.string().trim().min(1),
   cpf: z.string().trim().min(1).optional().nullable(),
   address: z.string().trim().min(1).optional().nullable(),
@@ -172,27 +172,34 @@ router.post(
   '/',
   requirePermission('catalog:write'),
   asyncHandler(async (req, res) => {
-    const body = baseSchema.parse(req.body);
-    const { rows } = await query(
-      `insert into customer (legacy_code, name, cpf, address, city, uf, cep, phone, status, credit_limit, notes)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-       returning id, legacy_code, name, cpf, address, city, uf, cep, phone, status, credit_limit, notes`,
-      [
-        body.legacy_code ?? null,
-        body.name,
-        body.cpf ?? null,
-        body.address ?? null,
-        body.city ?? null,
-        body.uf ?? null,
-        body.cep ?? null,
-        body.phone ?? null,
-        body.status ?? 'active',
-        body.credit_limit ?? null,
-        body.notes ?? null,
-      ]
-    );
+    const body = writeSchema.parse(req.body);
 
-    res.status(201).json(rows[0]);
+    const customer = await withTransaction(async (client) => {
+      const generatedCode = await generateNextNumericCode('customer', client);
+      const { rows } = await query(
+        `insert into customer (legacy_code, name, cpf, address, city, uf, cep, phone, status, credit_limit, notes)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+         returning id, legacy_code, name, cpf, address, city, uf, cep, phone, status, credit_limit, notes`,
+        [
+          generatedCode,
+          body.name,
+          body.cpf ?? null,
+          body.address ?? null,
+          body.city ?? null,
+          body.uf ?? null,
+          body.cep ?? null,
+          body.phone ?? null,
+          body.status ?? 'active',
+          body.credit_limit ?? null,
+          body.notes ?? null,
+        ],
+        client
+      );
+
+      return rows[0];
+    });
+
+    res.status(201).json(customer);
   })
 );
 
@@ -224,7 +231,13 @@ router.get(
          where s.customer_id = c.id and s.status = 'completed'
        ) as charges on true
        left join lateral (
-         select coalesce(sum(p.amount), 0) as total_payments, max(p.payment_date) as last_payment_date
+         select
+           (
+             coalesce((select sum(s.amount_paid) from sale s where s.customer_id = c.id and s.status = 'completed'), 0)
+             +
+             coalesce(sum(p.amount), 0)
+           ) as total_payments,
+           max(p.payment_date) as last_payment_date
          from customer_payment p
          where p.customer_id = c.id
        ) as payments on true
@@ -273,6 +286,7 @@ router.get(
       emission_date: string | Date;
       order_number: string | null;
       total: string | number | null;
+      pending_amount: string | number | null;
       status: string;
       seller_id: string | null;
       seller_name: string | null;
@@ -283,6 +297,7 @@ router.get(
          s.emission_date,
          s.order_number,
          s.total,
+         greatest(coalesce(s.total, 0) - coalesce(s.amount_paid, 0), 0) as pending_amount,
          s.status,
          s.seller_id,
          seller_ref.name as seller_name,
@@ -317,6 +332,7 @@ router.get(
       emission_date: toDateOnly(row.emission_date),
       order_number: row.order_number ?? null,
       total: toNumber(row.total),
+      pending_amount: toNumber(row.pending_amount),
       status: row.status as 'draft' | 'completed' | 'cancelled',
       seller_id: row.seller_id ?? null,
       seller_name: row.seller_name ?? null,
@@ -331,7 +347,7 @@ router.patch(
   '/:id',
   requirePermission('catalog:write'),
   asyncHandler(async (req, res) => {
-    const body = baseSchema.partial().parse(req.body);
+    const body = writeSchema.partial().parse(req.body);
     const entries = Object.entries(body).filter(([, value]) => value !== undefined);
     if (entries.length === 0) {
       return res.status(204).send();

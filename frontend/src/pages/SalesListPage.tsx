@@ -10,6 +10,8 @@ import { useToast } from '../components/ui/ToastProvider';
 import { useHasPermission } from '../store/auth';
 import { formatDateTimeDdMmYyyy } from '../utils/date';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
+import { useSaleReceiptActions } from '../hooks/useSaleReceiptActions';
+import { formatCurrencyBrl } from '../utils/number';
 
 const statusClasses: Record<SaleStatus, string> = {
   completed: 'status-completed',
@@ -41,6 +43,7 @@ export function SalesListPage(): JSX.Element {
   const canReadSales = useHasPermission('sales:read');
   const canCancelSales = useHasPermission('sales:cancel');
   const canCheckout = useHasPermission('pos:checkout');
+  const { isPrinting, printReceipt } = useSaleReceiptActions();
 
   const [filters, setFilters] = useState<FiltersState>(defaultFilters);
   const [saleToCancel, setSaleToCancel] = useState<Sale | null>(null);
@@ -76,7 +79,9 @@ export function SalesListPage(): JSX.Element {
     onSuccess: () => {
       toast.show(t('sales.saleCancelled'), 'success');
       setSaleToCancel(null);
-      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['sales'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
   });
@@ -254,7 +259,7 @@ export function SalesListPage(): JSX.Element {
                 <td>{customerMap.get(sale.customer_id ?? '') ?? '-'}</td>
                 <td>{sellerMap.get(sale.seller_id ?? '') ?? '-'}</td>
                 <td>{paymentTermMap.get(sale.payment_term_id ?? '') ?? '-'}</td>
-                <td>R$ {(sale.total ?? 0).toFixed(2)}</td>
+                <td>{formatCurrencyBrl(sale.total ?? 0)}</td>
                 <td>
                   <span className={`badge ${statusClasses[sale.status]}`}>{saleStatusLabels[sale.status]}</span>
                 </td>
@@ -262,6 +267,9 @@ export function SalesListPage(): JSX.Element {
                   <Link className="button secondary" to={`/sales/${sale.id}`}>
                     {t('sales.viewSale')}
                   </Link>
+                  <button type="button" className="button secondary" onClick={() => printReceipt(sale.id)} disabled={isPrinting}>
+                    {isPrinting ? t('common.loading') : t('sales.printReceipt')}
+                  </button>
                   {sale.status !== 'cancelled' && canCancelSales && (
                     <button
                       type="button"
@@ -282,7 +290,7 @@ export function SalesListPage(): JSX.Element {
       <ConfirmDialog
         open={Boolean(saleToCancel)}
         title={t('sales.cancelSale')}
-        description={saleToCancel ? `${getSalePrimaryItemName(saleToCancel)} - R$ ${(saleToCancel.total ?? 0).toFixed(2)}` : undefined}
+        description={saleToCancel ? `${getSalePrimaryItemName(saleToCancel)} - ${formatCurrencyBrl(saleToCancel.total ?? 0)}` : undefined}
         confirmLabel={t('sales.cancelSale')}
         onClose={() => setSaleToCancel(null)}
         onConfirm={() => {

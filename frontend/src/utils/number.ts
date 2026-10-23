@@ -33,3 +33,35 @@ export function parseLocaleNumericInput(value: unknown) {
   const parsed = Number(normalized);
   return Number.isNaN(parsed) ? value : parsed;
 }
+
+const brlFormatter = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+export function formatCurrencyBrl(value: number): string {
+  return brlFormatter.format(Number.isFinite(value) ? value : 0);
+}
+
+export function formatCurrencyInput(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) {
+    return '';
+  }
+
+  return formatCurrencyBrl(value);
+}
+
+export function parseCurrencyInputToNumber(value: string): number | null {
+  if (!value.trim()) {
+    return null;
+  }
+
+  const digits = value.replace(/\D/g, '');
+  if (!digits) {
+    return 0;
+  }
+
+  return Number(digits) / 100;
+}

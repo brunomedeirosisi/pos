@@ -1,11 +1,20 @@
 import express from 'express';
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
-import { badRequest } from '../errors.js';
+import { badRequest, HttpError } from '../errors.js';
 import { errorHandler } from './error-handler.js';
 import { attachRequestId } from '../observability/request-context.js';
 
 describe('error handler integration', () => {
+  it('preserves service-unavailable status while sanitizing internal details', async () => {
+    const app = express();
+    app.get('/unavailable', () => { throw new HttpError(503, 'private dependency detail'); });
+    app.use(errorHandler);
+    const response = await request(app).get('/unavailable');
+    expect(response.status).toBe(503);
+    expect(response.body.message).toBe('internal_error');
+    expect(JSON.stringify(response.body)).not.toContain('private dependency detail');
+  });
   it('sanitizes unhandled errors and preserves request correlation id', async () => {
     const app = express();
     app.use(attachRequestId);

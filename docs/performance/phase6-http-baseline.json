@@ -1,0 +1,1122 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-22T13:54:37.962Z",
+  "meaning": "Two repetitions of identical implementation, not an optimization comparison; closed-loop warm-cache engineering baseline only.",
+  "totals": {
+    "measuredRequests": 12000,
+    "warmupRequests": 240,
+    "failures": 0
+  },
+  "raw": {
+    "file": "phase6-http-baseline.raw.json.gz",
+    "encoding": "gzip compressed JSON array of two full reports",
+    "compressedBytes": 100995,
+    "compressedSha256": "eb23df0a5d0dbb49940868f4d38a950ab0c68f21f2f8e97078b8aec7d04b8fbe",
+    "uncompressedBytes": 698451,
+    "uncompressedSha256": "10e8a3c6e415079ea4841d115e613425df9e5a2121b04a01f435d46c60c4bf84"
+  },
+  "runs": [
+    {
+      "label": "A",
+      "schemaVersion": 1,
+      "scope": "engineering baseline: authenticated read-only sales list, synthetic data; no financial acceptance or production capacity claim",
+      "status": "complete",
+      "startedAt": "2026-10-22T13:48:36.590Z",
+      "load": {
+        "model": "closed-loop; zero think time; one authenticated session; fixed scenario order; warm cache",
+        "requestsPerStage": 1000,
+        "warmupRequestsPerStage": 20,
+        "concurrency": [
+          1,
+          4,
+          10
+        ],
+        "requestTimeoutMs": 5000,
+        "measurementDeadlineMs": 600000,
+        "percentiles": "nearest rank; all completions and successes separately",
+        "latencyBoundary": "fetch through full body read, JSON decode and fixture validation; includes client overhead",
+        "coordinatedOmissionCorrection": false,
+        "retries": 0
+      },
+      "dataset": {
+        "generator": "infra/performance/seed.sql",
+        "seedDate": "2026-01-01",
+        "sales": 120000,
+        "saleItems": 360000,
+        "products": 30,
+        "itemsPerSale": 3,
+        "totalPerSale": 30,
+        "paidPerSale": 30,
+        "customerPayments": 0,
+        "stockMovements": 0,
+        "notes": "Deterministic read-list fixture inserted directly, including UUIDs. Does not exercise checkout, stock reconciliation, import or dashboard formulas.",
+        "databaseBytesAfterSeed": 138599447
+      },
+      "source": {
+        "gitHead": "ac85924e7a94e836805e770c60db8141c783bca6",
+        "dirty": true,
+        "fingerprint": {
+          "algorithm": "sha256/path-NUL-content-NUL",
+          "fileCount": 127,
+          "sha256": "7aee4204fb60db425eb3a17e456e24ee11a3165cce17c56736b67672b08b1a45"
+        }
+      },
+      "environment": {
+        "node": "v24.21.0",
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "13th Gen Intel(R) Core(TM) i9-13900HX",
+        "logicalCpus": 32,
+        "hostMemoryBytes": 34033319936,
+        "docker": {
+          "serverVersion": "29.8.0",
+          "os": "Docker Desktop (containerized)",
+          "architecture": "x86_64",
+          "cpus": 32,
+          "memoryBytes": 16604401664
+        }
+      },
+      "containers": {
+        "api": {
+          "image": "sha256:5697e6e981e3625b028a70cc2f400e18ff843cfdfc75c374861391f68b247dd8",
+          "memoryLimitBytes": 1073741824,
+          "nanoCpus": 2000000000,
+          "user": "pos"
+        },
+        "db": {
+          "image": "sha256:81bd698b4594e751a3269e4dcd3e03a4a0ec0daf7b72e7aa1abd43cce9887542",
+          "memoryLimitBytes": 2147483648,
+          "nanoCpus": 2000000000,
+          "user": "image default"
+        },
+        "redis": {
+          "image": "sha256:4df5c34dc41256fc4ed293482cb34281e17d133077e9aa3c6a87fda60a356c65",
+          "memoryLimitBytes": 134217728,
+          "nanoCpus": 250000000,
+          "user": "image default"
+        }
+      },
+      "databaseSettings": {
+        "version": "PostgreSQL 16.15 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+        "shared_buffers": "128MB",
+        "max_connections": "100",
+        "timezone": "UTC"
+      },
+      "apiDatabaseConfig": {
+        "poolMax": 10,
+        "connectionTimeoutMs": 5000,
+        "statementTimeoutMs": 30000,
+        "lockTimeoutMs": 5000,
+        "idleInTransactionTimeoutMs": 60000
+      },
+      "cleanup": "complete",
+      "finishedAt": "2026-10-22T13:50:44.200Z",
+      "stages": [
+        {
+          "scenario": "sales_first_page",
+          "path": "/api/v1/sales?page=1&page_size=100",
+          "warmupRequests": 20,
+          "startedAt": "2026-10-22T13:49:03.560Z",
+          "finishedAt": "2026-10-22T13:49:09.954Z",
+          "concurrency": 1,
+          "scheduledRequests": 1000,
+          "aborted": false,
+          "requests": 1000,
+          "successfulRequests": 1000,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 6393.8279,
+          "completedRequestsPerSecond": 156.4008314956366,
+          "successfulRequestsPerSecond": 156.4008314956366,
+          "allLatency": {
+            "count": 1000,
+            "minMs": 4.97519999999713,
+            "meanMs": 6.39000029999996,
+            "p50Ms": 6.3237999999983,
+            "p95Ms": 7.5873999999967054,
+            "p99Ms": 8.486300000000483,
+            "maxMs": 9.601299999998446
+          },
+          "successLatency": {
+            "count": 1000,
+            "minMs": 4.97519999999713,
+            "meanMs": 6.39000029999996,
+            "p50Ms": 6.3237999999983,
+            "p95Ms": 7.5873999999967054,
+            "p99Ms": 8.486300000000483,
+            "maxMs": 9.601299999998446
+          }
+        },
+        {
+          "scenario": "sales_first_page",
+          "path": "/api/v1/sales?page=1&page_size=100",
+          "warmupRequests": 20,
+          "startedAt": "2026-10-22T13:49:10.014Z",
+          "finishedAt": "2026-10-22T13:49:12.138Z",
+          "concurrency": 4,
+          "scheduledRequests": 1000,
+          "aborted": false,
+          "requests": 1000,
+          "successfulRequests": 1000,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 2124.4927000000025,
+          "completedRequestsPerSecond": 470.70060537275504,
+          "successfulRequestsPerSecond": 470.70060537275504,
+          "allLatency": {
+            "count": 1000,
+            "minMs": 5.311099999998987,
+            "meanMs": 8.486584499999983,
+            "p50Ms": 8.138800000000629,
+            "p95Ms": 11.528000000005704,
+            "p99Ms": 12.887399999999616,
+            "maxMs": 15.309300000000803
+          },
+          "successLatency": {
+            "count": 1000,
+            "minMs": 5.311099999998987,
+            "meanMs": 8.486584499999983,
+            "p50Ms": 8.138800000000629,
+            "p95Ms": 11.528000000005704,
+            "p99Ms": 12.887399999999616,
+            "maxMs": 15.309300000000803
+          }
+        },
+        {
+          "scenario": "sales_first_page",
+          "path": "/api/v1/sales?page=1&page_size=100",
+          "warmupRequests": 20,
+          "startedAt": "2026-10-22T13:49:12.192Z",
+          "finishedAt": "2026-10-22T13:49:14.063Z",
+          "concurrency": 10,
+          "scheduledRequests": 1000,
+          "aborted": false,
+          "requests": 1000,
+          "successfulRequests": 1000,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 1871.1526000000013,
+          "completedRequestsPerSecond": 534.4299550982637,
+          "successfulRequestsPerSecond": 534.4299550982637,
+          "allLatency": {
+            "count": 1000,
+            "minMs": 8.576300000000629,
+            "meanMs": 18.63365550000004,
+            "p50Ms": 18.59440000000177,
+            "p95Ms": 23.772799999998824,
+            "p99Ms": 26.851000000002387,
+            "maxMs": 30.94919999999547
+          },
+          "successLatency": {
+            "count": 1000,
+            "minMs": 8.576300000000629,
+            "meanMs": 18.63365550000004,
+            "p50Ms": 18.59440000000177,
+            "p95Ms": 23.772799999998824,
+            "p99Ms": 26.851000000002387,
+            "maxMs": 30.94919999999547
+          }
+        },
+        {
+          "scenario": "sales_last_page",
+          "path": "/api/v1/sales?page=1200&page_size=100",
+          "warmupRequests": 20,
+          "startedAt": "2026-10-22T13:49:14.858Z",
+          "finishedAt": "2026-10-22T13:49:54.124Z",
+          "concurrency": 1,
+          "scheduledRequests": 1000,
+          "aborted": false,
+          "requests": 1000,
+          "successfulRequests": 1000,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 39266.020399999994,
+          "completedRequestsPerSecond": 25.467312190363966,
+          "successfulRequestsPerSecond": 25.467312190363966,
+          "allLatency": {
+            "count": 1000,
+            "minMs": 35.73619999999937,
+            "meanMs": 39.26254879999977,
+            "p50Ms": 38.99790000000212,
+            "p95Ms": 41.91240000000107,
+            "p99Ms": 43.73530000000028,
+            "maxMs": 47.43660000000091
+          },
+          "successLatency": {
+            "count": 1000,
+            "minMs": 35.73619999999937,
+            "meanMs": 39.26254879999977,
+            "p50Ms": 38.99790000000212,
+            "p95Ms": 41.91240000000107,
+            "p99Ms": 43.73530000000028,
+            "maxMs": 47.43660000000091
+          }
+        },
+        {
+          "scenario": "sales_last_page",
+          "path": "/api/v1/sales?page=1200&page_size=100",
+          "warmupRequests": 20,
+          "startedAt": "2026-10-22T13:49:54.527Z",
+          "finishedAt": "2026-10-22T13:50:15.033Z",
+          "concurrency": 4,
+          "scheduledRequests": 1000,
+          "aborted": false,
+          "requests": 1000,
+          "successfulRequests": 1000,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 20506.4825,
+          "completedRequestsPerSecond": 48.765067339071926,
+          "successfulRequestsPerSecond": 48.765067339071926,
+          "allLatency": {
+            "count": 1000,
+            "minMs": 40.407400000010966,
+            "meanMs": 81.98744309999991,
+            "p50Ms": 89.02880000000005,
+            "p95Ms": 97.85779999999795,
+            "p99Ms": 103.56299999999464,
+            "maxMs": 155.42410000000382
+          },
+          "successLatency": {
+            "count": 1000,
+            "minMs": 40.407400000010966,
+            "meanMs": 81.98744309999991,
+            "p50Ms": 89.02880000000005,
+            "p95Ms": 97.85779999999795,
+            "p99Ms": 103.56299999999464,
+            "maxMs": 155.42410000000382
+          }
+        },
+        {
+          "scenario": "sales_last_page",
+          "path": "/api/v1/sales?page=1200&page_size=100",
+          "warmupRequests": 20,
+          "startedAt": "2026-10-22T13:50:15.525Z",
+          "finishedAt": "2026-10-22T13:50:39.937Z",
+          "concurrency": 10,
+          "scheduledRequests": 1000,
+          "aborted": false,
+          "requests": 1000,
+          "successfulRequests": 1000,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 24411.71990000001,
+          "completedRequestsPerSecond": 40.96393060777334,
+          "successfulRequestsPerSecond": 40.96393060777334,
+          "allLatency": {
+            "count": 1000,
+            "minMs": 118.06479999999283,
+            "meanMs": 243.55171529999976,
+            "p50Ms": 213.90669999999227,
+            "p95Ms": 300.4305000000022,
+            "p99Ms": 308.17089999999735,
+            "maxMs": 392.27880000000005
+          },
+          "successLatency": {
+            "count": 1000,
+            "minMs": 118.06479999999283,
+            "meanMs": 243.55171529999976,
+            "p50Ms": 213.90669999999227,
+            "p95Ms": 300.4305000000022,
+            "p99Ms": 308.17089999999735,
+            "maxMs": 392.27880000000005
+          }
+        }
+      ],
+      "warmups": [
+        {
+          "scenario": "sales_first_page",
+          "startedAt": "2026-10-22T13:49:03.397Z",
+          "finishedAt": "2026-10-22T13:49:03.560Z",
+          "concurrency": 1,
+          "scheduledRequests": 20,
+          "aborted": false,
+          "requests": 20,
+          "successfulRequests": 20,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 163.19540000000052,
+          "completedRequestsPerSecond": 122.5524739055141,
+          "successfulRequestsPerSecond": 122.5524739055141,
+          "allLatency": {
+            "count": 20,
+            "minMs": 6.2708999999995285,
+            "meanMs": 8.15208500000026,
+            "p50Ms": 7.36109999999826,
+            "p95Ms": 9.389299999998912,
+            "p99Ms": 18.33560000000216,
+            "maxMs": 18.33560000000216
+          },
+          "successLatency": {
+            "count": 20,
+            "minMs": 6.2708999999995285,
+            "meanMs": 8.15208500000026,
+            "p50Ms": 7.36109999999826,
+            "p95Ms": 9.389299999998912,
+            "p99Ms": 18.33560000000216,
+            "maxMs": 18.33560000000216
+          }
+        },
+        {
+          "scenario": "sales_first_page",
+          "startedAt": "2026-10-22T13:49:09.956Z",
+          "finishedAt": "2026-10-22T13:49:10.014Z",
+          "concurrency": 4,
+          "scheduledRequests": 20,
+          "aborted": false,
+          "requests": 20,
+          "successfulRequests": 20,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 57.90179999999964,
+          "completedRequestsPerSecond": 345.4124051411204,
+          "successfulRequestsPerSecond": 345.4124051411204,
+          "allLatency": {
+            "count": 20,
+            "minMs": 5.815000000002328,
+            "meanMs": 10.833410000000367,
+            "p50Ms": 8.00119999999879,
+            "p95Ms": 23.657100000003993,
+            "p99Ms": 24.845200000003388,
+            "maxMs": 24.845200000003388
+          },
+          "successLatency": {
+            "count": 20,
+            "minMs": 5.815000000002328,
+            "meanMs": 10.833410000000367,
+            "p50Ms": 8.00119999999879,
+            "p95Ms": 23.657100000003993,
+            "p99Ms": 24.845200000003388,
+            "maxMs": 24.845200000003388
+          }
+        },
+        {
+          "scenario": "sales_first_page",
+          "startedAt": "2026-10-22T13:49:12.139Z",
+          "finishedAt": "2026-10-22T13:49:12.192Z",
+          "concurrency": 10,
+          "scheduledRequests": 20,
+          "aborted": false,
+          "requests": 20,
+          "successfulRequests": 20,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 52.38420000000042,
+          "completedRequestsPerSecond": 381.7945105585241,
+          "successfulRequestsPerSecond": 381.7945105585241,
+          "allLatency": {
+            "count": 20,
+            "minMs": 9.713799999997718,
+            "meanMs": 22.678900000000066,
+            "p50Ms": 13.454700000002049,
+            "p95Ms": 49.77100000000064,
+            "p99Ms": 49.96800000000076,
+            "maxMs": 49.96800000000076
+          },
+          "successLatency": {
+            "count": 20,
+            "minMs": 9.713799999997718,
+            "meanMs": 22.678900000000066,
+            "p50Ms": 13.454700000002049,
+            "p95Ms": 49.77100000000064,
+            "p99Ms": 49.96800000000076,
+            "maxMs": 49.96800000000076
+          }
+        },
+        {
+          "scenario": "sales_last_page",
+          "startedAt": "2026-10-22T13:49:14.064Z",
+          "finishedAt": "2026-10-22T13:49:14.857Z",
+          "concurrency": 1,
+          "scheduledRequests": 20,
+          "aborted": false,
+          "requests": 20,
+          "successfulRequests": 20,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 793.6491999999998,
+          "completedRequestsPerSecond": 25.200050601701612,
+          "successfulRequestsPerSecond": 25.200050601701612,
+          "allLatency": {
+            "count": 20,
+            "minMs": 37.138099999996484,
+            "meanMs": 39.67847499999989,
+            "p50Ms": 39.72200000000157,
+            "p95Ms": 41.99960000000283,
+            "p99Ms": 42.46379999999772,
+            "maxMs": 42.46379999999772
+          },
+          "successLatency": {
+            "count": 20,
+            "minMs": 37.138099999996484,
+            "meanMs": 39.67847499999989,
+            "p50Ms": 39.72200000000157,
+            "p95Ms": 41.99960000000283,
+            "p99Ms": 42.46379999999772,
+            "maxMs": 42.46379999999772
+          }
+        },
+        {
+          "scenario": "sales_last_page",
+          "startedAt": "2026-10-22T13:49:54.125Z",
+          "finishedAt": "2026-10-22T13:49:54.527Z",
+          "concurrency": 4,
+          "scheduledRequests": 20,
+          "aborted": false,
+          "requests": 20,
+          "successfulRequests": 20,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 401.68539999998757,
+          "completedRequestsPerSecond": 49.79020895457146,
+          "successfulRequestsPerSecond": 49.79020895457146,
+          "allLatency": {
+            "count": 20,
+            "minMs": 41.76790000000619,
+            "meanMs": 72.8229600000006,
+            "p50Ms": 72.15069999999832,
+            "p95Ms": 93.21540000000095,
+            "p99Ms": 98.33169999999518,
+            "maxMs": 98.33169999999518
+          },
+          "successLatency": {
+            "count": 20,
+            "minMs": 41.76790000000619,
+            "meanMs": 72.8229600000006,
+            "p50Ms": 72.15069999999832,
+            "p95Ms": 93.21540000000095,
+            "p99Ms": 98.33169999999518,
+            "maxMs": 98.33169999999518
+          }
+        },
+        {
+          "scenario": "sales_last_page",
+          "startedAt": "2026-10-22T13:50:15.035Z",
+          "finishedAt": "2026-10-22T13:50:15.525Z",
+          "concurrency": 10,
+          "scheduledRequests": 20,
+          "aborted": false,
+          "requests": 20,
+          "successfulRequests": 20,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 490.3625000000029,
+          "completedRequestsPerSecond": 40.78615310102196,
+          "successfulRequestsPerSecond": 40.78615310102196,
+          "allLatency": {
+            "count": 20,
+            "minMs": 181.2144999999873,
+            "meanMs": 223.89014499999976,
+            "p50Ms": 207.20509999999194,
+            "p95Ms": 289.454899999997,
+            "p99Ms": 296.2896000000037,
+            "maxMs": 296.2896000000037
+          },
+          "successLatency": {
+            "count": 20,
+            "minMs": 181.2144999999873,
+            "meanMs": 223.89014499999976,
+            "p50Ms": 207.20509999999194,
+            "p95Ms": 289.454899999997,
+            "p99Ms": 296.2896000000037,
+            "maxMs": 296.2896000000037
+          }
+        }
+      ],
+      "resources": {
+        "method": "docker stats streaming; timestamped samples, not peak allocation or per-request consumption",
+        "failure": null,
+        "totalSamples": 570,
+        "observed": {
+          "api": {
+            "samples": 190,
+            "cpuPercentObservedRange": [
+              0.02,
+              105.38
+            ],
+            "memoryPercentObservedRange": [
+              8.14,
+              8.83
+            ],
+            "memorySampleAtHighestReportedPercent": "90.39MiB / 1GiB"
+          },
+          "db": {
+            "samples": 190,
+            "cpuPercentObservedRange": [
+              42.27,
+              208.89
+            ],
+            "memoryPercentObservedRange": [
+              29.14,
+              30.4
+            ],
+            "memorySampleAtHighestReportedPercent": "622.5MiB / 2GiB"
+          },
+          "redis": {
+            "samples": 190,
+            "cpuPercentObservedRange": [
+              0,
+              2.59
+            ],
+            "memoryPercentObservedRange": [
+              5.32,
+              8.88
+            ],
+            "memorySampleAtHighestReportedPercent": "11.36MiB / 128MiB"
+          }
+        }
+      }
+    },
+    {
+      "label": "B",
+      "schemaVersion": 1,
+      "scope": "engineering baseline: authenticated read-only sales list, synthetic data; no financial acceptance or production capacity claim",
+      "status": "complete",
+      "startedAt": "2026-10-22T13:51:24.178Z",
+      "load": {
+        "model": "closed-loop; zero think time; one authenticated session; fixed scenario order; warm cache",
+        "requestsPerStage": 1000,
+        "warmupRequestsPerStage": 20,
+        "concurrency": [
+          1,
+          4,
+          10
+        ],
+        "requestTimeoutMs": 5000,
+        "measurementDeadlineMs": 600000,
+        "percentiles": "nearest rank; all completions and successes separately",
+        "latencyBoundary": "fetch through full body read, JSON decode and fixture validation; includes client overhead",
+        "coordinatedOmissionCorrection": false,
+        "retries": 0
+      },
+      "dataset": {
+        "generator": "infra/performance/seed.sql",
+        "seedDate": "2026-01-01",
+        "sales": 120000,
+        "saleItems": 360000,
+        "products": 30,
+        "itemsPerSale": 3,
+        "totalPerSale": 30,
+        "paidPerSale": 30,
+        "customerPayments": 0,
+        "stockMovements": 0,
+        "notes": "Deterministic read-list fixture inserted directly, including UUIDs. Does not exercise checkout, stock reconciliation, import or dashboard formulas.",
+        "databaseBytesAfterSeed": 138599447
+      },
+      "source": {
+        "gitHead": "ac85924e7a94e836805e770c60db8141c783bca6",
+        "dirty": true,
+        "fingerprint": {
+          "algorithm": "sha256/path-NUL-content-NUL",
+          "fileCount": 127,
+          "sha256": "7aee4204fb60db425eb3a17e456e24ee11a3165cce17c56736b67672b08b1a45"
+        }
+      },
+      "environment": {
+        "node": "v24.21.0",
+        "platform": "win32",
+        "architecture": "x64",
+        "cpuModel": "13th Gen Intel(R) Core(TM) i9-13900HX",
+        "logicalCpus": 32,
+        "hostMemoryBytes": 34033319936,
+        "docker": {
+          "serverVersion": "29.8.0",
+          "os": "Docker Desktop (containerized)",
+          "architecture": "x86_64",
+          "cpus": 32,
+          "memoryBytes": 16604401664
+        }
+      },
+      "containers": {
+        "api": {
+          "image": "sha256:5697e6e981e3625b028a70cc2f400e18ff843cfdfc75c374861391f68b247dd8",
+          "memoryLimitBytes": 1073741824,
+          "nanoCpus": 2000000000,
+          "user": "pos"
+        },
+        "db": {
+          "image": "sha256:81bd698b4594e751a3269e4dcd3e03a4a0ec0daf7b72e7aa1abd43cce9887542",
+          "memoryLimitBytes": 2147483648,
+          "nanoCpus": 2000000000,
+          "user": "image default"
+        },
+        "redis": {
+          "image": "sha256:4df5c34dc41256fc4ed293482cb34281e17d133077e9aa3c6a87fda60a356c65",
+          "memoryLimitBytes": 134217728,
+          "nanoCpus": 250000000,
+          "user": "image default"
+        }
+      },
+      "databaseSettings": {
+        "version": "PostgreSQL 16.15 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit",
+        "shared_buffers": "128MB",
+        "max_connections": "100",
+        "timezone": "UTC"
+      },
+      "apiDatabaseConfig": {
+        "poolMax": 10,
+        "connectionTimeoutMs": 5000,
+        "statementTimeoutMs": 30000,
+        "lockTimeoutMs": 5000,
+        "idleInTransactionTimeoutMs": 60000
+      },
+      "cleanup": "complete",
+      "finishedAt": "2026-10-22T13:53:35.172Z",
+      "stages": [
+        {
+          "scenario": "sales_first_page",
+          "path": "/api/v1/sales?page=1&page_size=100",
+          "warmupRequests": 20,
+          "startedAt": "2026-10-22T13:51:50.874Z",
+          "finishedAt": "2026-10-22T13:51:57.606Z",
+          "concurrency": 1,
+          "scheduledRequests": 1000,
+          "aborted": false,
+          "requests": 1000,
+          "successfulRequests": 1000,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 6732.580699999999,
+          "completedRequestsPerSecond": 148.53145391929726,
+          "successfulRequestsPerSecond": 148.53145391929726,
+          "allLatency": {
+            "count": 1000,
+            "minMs": 5.278200000000652,
+            "meanMs": 6.728525699999994,
+            "p50Ms": 6.611499999999069,
+            "p95Ms": 7.879899999999907,
+            "p99Ms": 8.773400000001857,
+            "maxMs": 11.85689999999886
+          },
+          "successLatency": {
+            "count": 1000,
+            "minMs": 5.278200000000652,
+            "meanMs": 6.728525699999994,
+            "p50Ms": 6.611499999999069,
+            "p95Ms": 7.879899999999907,
+            "p99Ms": 8.773400000001857,
+            "maxMs": 11.85689999999886
+          }
+        },
+        {
+          "scenario": "sales_first_page",
+          "path": "/api/v1/sales?page=1&page_size=100",
+          "warmupRequests": 20,
+          "startedAt": "2026-10-22T13:51:57.665Z",
+          "finishedAt": "2026-10-22T13:51:59.940Z",
+          "concurrency": 4,
+          "scheduledRequests": 1000,
+          "aborted": false,
+          "requests": 1000,
+          "successfulRequests": 1000,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 2274.188900000001,
+          "completedRequestsPerSecond": 439.7172108262421,
+          "successfulRequestsPerSecond": 439.7172108262421,
+          "allLatency": {
+            "count": 1000,
+            "minMs": 5.334199999997509,
+            "meanMs": 9.08090099999999,
+            "p50Ms": 8.769999999996799,
+            "p95Ms": 12.552700000000186,
+            "p99Ms": 14.996299999998882,
+            "maxMs": 20.50510000000213
+          },
+          "successLatency": {
+            "count": 1000,
+            "minMs": 5.334199999997509,
+            "meanMs": 9.08090099999999,
+            "p50Ms": 8.769999999996799,
+            "p95Ms": 12.552700000000186,
+            "p99Ms": 14.996299999998882,
+            "maxMs": 20.50510000000213
+          }
+        },
+        {
+          "scenario": "sales_first_page",
+          "path": "/api/v1/sales?page=1&page_size=100",
+          "warmupRequests": 20,
+          "startedAt": "2026-10-22T13:51:59.998Z",
+          "finishedAt": "2026-10-22T13:52:02.092Z",
+          "concurrency": 10,
+          "scheduledRequests": 1000,
+          "aborted": false,
+          "requests": 1000,
+          "successfulRequests": 1000,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 2094.049100000004,
+          "completedRequestsPerSecond": 477.5437213960256,
+          "successfulRequestsPerSecond": 477.5437213960256,
+          "allLatency": {
+            "count": 1000,
+            "minMs": 7.852999999995518,
+            "meanMs": 20.827632600000054,
+            "p50Ms": 20.71310000000085,
+            "p95Ms": 27.19999999999709,
+            "p99Ms": 30.359599999996135,
+            "maxMs": 39.63199999999779
+          },
+          "successLatency": {
+            "count": 1000,
+            "minMs": 7.852999999995518,
+            "meanMs": 20.827632600000054,
+            "p50Ms": 20.71310000000085,
+            "p95Ms": 27.19999999999709,
+            "p99Ms": 30.359599999996135,
+            "maxMs": 39.63199999999779
+          }
+        },
+        {
+          "scenario": "sales_last_page",
+          "path": "/api/v1/sales?page=1200&page_size=100",
+          "warmupRequests": 20,
+          "startedAt": "2026-10-22T13:52:02.929Z",
+          "finishedAt": "2026-10-22T13:52:44.469Z",
+          "concurrency": 1,
+          "scheduledRequests": 1000,
+          "aborted": false,
+          "requests": 1000,
+          "successfulRequests": 1000,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 41539.873700000004,
+          "completedRequestsPerSecond": 24.073255668083554,
+          "successfulRequestsPerSecond": 24.073255668083554,
+          "allLatency": {
+            "count": 1000,
+            "minMs": 37.186900000000605,
+            "meanMs": 41.536253899999785,
+            "p50Ms": 41.3411000000051,
+            "p95Ms": 44.681700000001,
+            "p99Ms": 47.12930000000051,
+            "maxMs": 50.3211999999985
+          },
+          "successLatency": {
+            "count": 1000,
+            "minMs": 37.186900000000605,
+            "meanMs": 41.536253899999785,
+            "p50Ms": 41.3411000000051,
+            "p95Ms": 44.681700000001,
+            "p99Ms": 47.12930000000051,
+            "maxMs": 50.3211999999985
+          }
+        },
+        {
+          "scenario": "sales_last_page",
+          "path": "/api/v1/sales?page=1200&page_size=100",
+          "warmupRequests": 20,
+          "startedAt": "2026-10-22T13:52:44.876Z",
+          "finishedAt": "2026-10-22T13:53:06.211Z",
+          "concurrency": 4,
+          "scheduledRequests": 1000,
+          "aborted": false,
+          "requests": 1000,
+          "successfulRequests": 1000,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 21334.535699999993,
+          "completedRequestsPerSecond": 46.87235822994734,
+          "successfulRequestsPerSecond": 46.87235822994734,
+          "allLatency": {
+            "count": 1000,
+            "minMs": 40.68890000000829,
+            "meanMs": 85.25647980000006,
+            "p50Ms": 91.04730000000563,
+            "p95Ms": 99.27500000000873,
+            "p99Ms": 103.48910000000615,
+            "maxMs": 145.15499999999884
+          },
+          "successLatency": {
+            "count": 1000,
+            "minMs": 40.68890000000829,
+            "meanMs": 85.25647980000006,
+            "p50Ms": 91.04730000000563,
+            "p95Ms": 99.27500000000873,
+            "p99Ms": 103.48910000000615,
+            "maxMs": 145.15499999999884
+          }
+        },
+        {
+          "scenario": "sales_last_page",
+          "path": "/api/v1/sales?page=1200&page_size=100",
+          "warmupRequests": 20,
+          "startedAt": "2026-10-22T13:53:06.688Z",
+          "finishedAt": "2026-10-22T13:53:30.993Z",
+          "concurrency": 10,
+          "scheduledRequests": 1000,
+          "aborted": false,
+          "requests": 1000,
+          "successfulRequests": 1000,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 24304.9464,
+          "completedRequestsPerSecond": 41.14388830744346,
+          "successfulRequestsPerSecond": 41.14388830744346,
+          "allLatency": {
+            "count": 1000,
+            "minMs": 118.94670000000042,
+            "meanMs": 242.56883339999985,
+            "p50Ms": 212.66730000000098,
+            "p95Ms": 300.05190000000584,
+            "p99Ms": 309.61990000000515,
+            "maxMs": 392.3206000000064
+          },
+          "successLatency": {
+            "count": 1000,
+            "minMs": 118.94670000000042,
+            "meanMs": 242.56883339999985,
+            "p50Ms": 212.66730000000098,
+            "p95Ms": 300.05190000000584,
+            "p99Ms": 309.61990000000515,
+            "maxMs": 392.3206000000064
+          }
+        }
+      ],
+      "warmups": [
+        {
+          "scenario": "sales_first_page",
+          "startedAt": "2026-10-22T13:51:50.707Z",
+          "finishedAt": "2026-10-22T13:51:50.874Z",
+          "concurrency": 1,
+          "scheduledRequests": 20,
+          "aborted": false,
+          "requests": 20,
+          "successfulRequests": 20,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 166.06650000000081,
+          "completedRequestsPerSecond": 120.43368168775703,
+          "successfulRequestsPerSecond": 120.43368168775703,
+          "allLatency": {
+            "count": 20,
+            "minMs": 6.5460000000020955,
+            "meanMs": 8.29398000000001,
+            "p50Ms": 7.768400000000838,
+            "p95Ms": 9.84860000000117,
+            "p99Ms": 17.708299999998417,
+            "maxMs": 17.708299999998417
+          },
+          "successLatency": {
+            "count": 20,
+            "minMs": 6.5460000000020955,
+            "meanMs": 8.29398000000001,
+            "p50Ms": 7.768400000000838,
+            "p95Ms": 9.84860000000117,
+            "p99Ms": 17.708299999998417,
+            "maxMs": 17.708299999998417
+          }
+        },
+        {
+          "scenario": "sales_first_page",
+          "startedAt": "2026-10-22T13:51:57.608Z",
+          "finishedAt": "2026-10-22T13:51:57.665Z",
+          "concurrency": 4,
+          "scheduledRequests": 20,
+          "aborted": false,
+          "requests": 20,
+          "successfulRequests": 20,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 57.39059999999881,
+          "completedRequestsPerSecond": 348.4891253968492,
+          "successfulRequestsPerSecond": 348.4891253968492,
+          "allLatency": {
+            "count": 20,
+            "minMs": 6.270199999999022,
+            "meanMs": 10.695630000000165,
+            "p50Ms": 8.077100000002247,
+            "p95Ms": 22.775000000001455,
+            "p99Ms": 27.887500000004366,
+            "maxMs": 27.887500000004366
+          },
+          "successLatency": {
+            "count": 20,
+            "minMs": 6.270199999999022,
+            "meanMs": 10.695630000000165,
+            "p50Ms": 8.077100000002247,
+            "p95Ms": 22.775000000001455,
+            "p99Ms": 27.887500000004366,
+            "maxMs": 27.887500000004366
+          }
+        },
+        {
+          "scenario": "sales_first_page",
+          "startedAt": "2026-10-22T13:51:59.941Z",
+          "finishedAt": "2026-10-22T13:51:59.998Z",
+          "concurrency": 10,
+          "scheduledRequests": 20,
+          "aborted": false,
+          "requests": 20,
+          "successfulRequests": 20,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 57.21889999999985,
+          "completedRequestsPerSecond": 349.53485648972725,
+          "successfulRequestsPerSecond": 349.53485648972725,
+          "allLatency": {
+            "count": 20,
+            "minMs": 9.829099999995378,
+            "meanMs": 24.696179999999366,
+            "p50Ms": 13.422200000000885,
+            "p95Ms": 53.90570000000298,
+            "p99Ms": 55.486400000001595,
+            "maxMs": 55.486400000001595
+          },
+          "successLatency": {
+            "count": 20,
+            "minMs": 9.829099999995378,
+            "meanMs": 24.696179999999366,
+            "p50Ms": 13.422200000000885,
+            "p95Ms": 53.90570000000298,
+            "p99Ms": 55.486400000001595,
+            "maxMs": 55.486400000001595
+          }
+        },
+        {
+          "scenario": "sales_last_page",
+          "startedAt": "2026-10-22T13:52:02.094Z",
+          "finishedAt": "2026-10-22T13:52:02.929Z",
+          "concurrency": 1,
+          "scheduledRequests": 20,
+          "aborted": false,
+          "requests": 20,
+          "successfulRequests": 20,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 835.1375999999946,
+          "completedRequestsPerSecond": 23.94814938280845,
+          "successfulRequestsPerSecond": 23.94814938280845,
+          "allLatency": {
+            "count": 20,
+            "minMs": 39.164199999999255,
+            "meanMs": 41.75257500000007,
+            "p50Ms": 41.32430000000022,
+            "p95Ms": 44.95650000000023,
+            "p99Ms": 47.133999999998196,
+            "maxMs": 47.133999999998196
+          },
+          "successLatency": {
+            "count": 20,
+            "minMs": 39.164199999999255,
+            "meanMs": 41.75257500000007,
+            "p50Ms": 41.32430000000022,
+            "p95Ms": 44.95650000000023,
+            "p99Ms": 47.133999999998196,
+            "maxMs": 47.133999999998196
+          }
+        },
+        {
+          "scenario": "sales_last_page",
+          "startedAt": "2026-10-22T13:52:44.470Z",
+          "finishedAt": "2026-10-22T13:52:44.876Z",
+          "concurrency": 4,
+          "scheduledRequests": 20,
+          "aborted": false,
+          "requests": 20,
+          "successfulRequests": 20,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 406.60710000000836,
+          "completedRequestsPerSecond": 49.18753263285267,
+          "successfulRequestsPerSecond": 49.18753263285267,
+          "allLatency": {
+            "count": 20,
+            "minMs": 42.58550000000105,
+            "meanMs": 80.4321450000003,
+            "p50Ms": 88.17720000000554,
+            "p95Ms": 94.26809999998659,
+            "p99Ms": 96.20259999998962,
+            "maxMs": 96.20259999998962
+          },
+          "successLatency": {
+            "count": 20,
+            "minMs": 42.58550000000105,
+            "meanMs": 80.4321450000003,
+            "p50Ms": 88.17720000000554,
+            "p95Ms": 94.26809999998659,
+            "p99Ms": 96.20259999998962,
+            "maxMs": 96.20259999998962
+          }
+        },
+        {
+          "scenario": "sales_last_page",
+          "startedAt": "2026-10-22T13:53:06.212Z",
+          "finishedAt": "2026-10-22T13:53:06.688Z",
+          "concurrency": 10,
+          "scheduledRequests": 20,
+          "aborted": false,
+          "requests": 20,
+          "successfulRequests": 20,
+          "errors": {},
+          "errorRate": 0,
+          "elapsedMs": 475.84040000000095,
+          "completedRequestsPerSecond": 42.03089943602931,
+          "successfulRequestsPerSecond": 42.03089943602931,
+          "allLatency": {
+            "count": 20,
+            "minMs": 160.4890000000014,
+            "meanMs": 228.94220000000058,
+            "p50Ms": 210.3585999999923,
+            "p95Ms": 288.9799000000057,
+            "p99Ms": 294.2127999999939,
+            "maxMs": 294.2127999999939
+          },
+          "successLatency": {
+            "count": 20,
+            "minMs": 160.4890000000014,
+            "meanMs": 228.94220000000058,
+            "p50Ms": 210.3585999999923,
+            "p95Ms": 288.9799000000057,
+            "p99Ms": 294.2127999999939,
+            "maxMs": 294.2127999999939
+          }
+        }
+      ],
+      "resources": {
+        "method": "docker stats streaming; timestamped samples, not peak allocation or per-request consumption",
+        "failure": null,
+        "totalSamples": 594,
+        "observed": {
+          "api": {
+            "samples": 198,
+            "cpuPercentObservedRange": [
+              7.31,
+              106.87
+            ],
+            "memoryPercentObservedRange": [
+              8.1,
+              8.82
+            ],
+            "memorySampleAtHighestReportedPercent": "90.37MiB / 1GiB"
+          },
+          "db": {
+            "samples": 198,
+            "cpuPercentObservedRange": [
+              0.21,
+              206.03
+            ],
+            "memoryPercentObservedRange": [
+              29.17,
+              30.52
+            ],
+            "memorySampleAtHighestReportedPercent": "625MiB / 2GiB"
+          },
+          "redis": {
+            "samples": 198,
+            "cpuPercentObservedRange": [
+              0.28,
+              2.75
+            ],
+            "memoryPercentObservedRange": [
+              5.21,
+              9.8
+            ],
+            "memorySampleAtHighestReportedPercent": "12.54MiB / 128MiB"
+          }
+        }
+      }
+    }
+  ]
+}

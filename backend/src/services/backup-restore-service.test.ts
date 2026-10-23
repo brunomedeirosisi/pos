@@ -12,6 +12,9 @@ const { queryMock, createBackupArchiveMock, restoreBackupArchiveMock, simulateRe
 vi.mock('../db.js', () => ({
   query: queryMock,
 }));
+vi.mock('./backup-lock.js', () => ({
+  withBackupLock: (work: (lease: unknown) => Promise<unknown>) => work({ signal: new AbortController().signal, backendPid: 1, assertHeld: vi.fn() }),
+}));
 
 vi.mock('../utils/audit.js', () => ({
   logAudit: vi.fn().mockResolvedValue(undefined),
@@ -28,6 +31,7 @@ vi.mock('../utils/backup.js', () => ({
 
 async function loadService() {
   process.env.NODE_ENV = 'test';
+  process.env.ENABLE_DATABASE_RESTORE = 'true';
   process.env.API_PORT = '8080';
   process.env.JWT_SECRET = 'test_secret_with_more_than_32_characters_123456';
   process.env.JWT_TTL = '12h';

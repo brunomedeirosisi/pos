@@ -1,3 +1,4 @@
+import { isDecimalValue } from '../../../utils/checkout-decimal.js';
 import { z } from 'zod';
 import { paginationQuerySchema } from '../../../utils/pagination.js';
 import { parseDecimalInput } from '../domain/customer-payments-domain.js';
@@ -22,7 +23,7 @@ const optionalDateSchema = z
   .optional();
 
 export const paymentInputSchema = z.object({
-  amount: z.preprocess(parseDecimalInput, z.number().positive()),
+  amount: z.preprocess(parseDecimalInput, z.number().finite().positive().refine((value) => isDecimalValue(value, 2), 'Expected positive numeric(14,2) payment without rounding')),
   payment_date: optionalDateSchema,
   method: paymentMethodSchema.optional(),
   reference: z.string().trim().max(120).optional().nullable(),
@@ -100,6 +101,7 @@ export type RegisterCustomerPaymentResponseDto = {
 };
 
 export type CustomerPaymentHistoryReportDto = {
+  coverage: { complete: true; row_count: number; row_limit: number };
   generated_at: string;
   company: {
     name: string;

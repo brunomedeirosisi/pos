@@ -45,7 +45,8 @@ export function CustomersPage(): JSX.Element {
     mutationFn: (values: CustomerFormValues) => customersService.create(buildCustomerPayload(values)),
     onSuccess: () => {
       toast.show(t('common.saved'), 'success');
-      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['customers'] });
       closeForm();
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
@@ -58,7 +59,8 @@ export function CustomersPage(): JSX.Element {
     },
     onSuccess: () => {
       toast.show(t('common.saved'), 'success');
-      queryClient.invalidateQueries({ queryKey: ['customers'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['customers'] });
       closeForm();
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
@@ -84,7 +86,6 @@ export function CustomersPage(): JSX.Element {
     setEditing(record);
     form.reset({
       name: record.name,
-      legacy_code: record.legacy_code ?? '',
       cpf: record.cpf ?? '',
       address: record.address ?? '',
       city: record.city ?? '',

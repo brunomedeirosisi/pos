@@ -1,0 +1,109 @@
+services:
+  proxy:
+    image: ${PROXY_IMAGE:?}
+    restart: unless-stopped
+    ports:
+      - '${STORE_IP:?}:443:443'
+    environment:
+      STORE_IP: ${STORE_IP:?}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      api: { condition: service_healthy }
+      frontend: { condition: service_healthy }
+    networks:
+      store:
+        ipv4_address: 172.29.73.2
+    logging: &logging
+      driver: local
+      options: { max-size: '10m', max-file: '3' }
+  api:
+    image: ${API_IMAGE:?}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: pos
+      POSTGRES_DB: posdb
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      JWT_SECRET: ${JWT_SECRET:?}
+      METRICS_TOKEN: ${METRICS_TOKEN:?}
+      REDIS_HOST: redis
+      CORS_ALLOWED_ORIGINS: https://${STORE_IP:?}
+      TRUSTED_PROXY_CIDRS: 172.29.73.2/32
+      STORE_ID: ${STORE_ID:?}
+      PRINT_MODE: queue
+      PRINT_AGENT_TOKEN_SHA256: ${PRINT_AGENT_TOKEN_SHA256:?}
+      PRINT_PRINTER_NAME: ${PRINT_PRINTER_NAME:?}
+      COMPANY_NAME: ${COMPANY_NAME:?}
+      COMPANY_ADDRESS: ${COMPANY_ADDRESS:?}
+      COMPANY_TAX_ID: ${COMPANY_TAX_ID:?}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BOOTSTRAP_ADMIN_FULL_NAME: ${BOOTSTRAP_ADMIN_FULL_NAME:-}
+      ENABLE_DATABASE_RESTORE: 'false'
+      ENABLE_LEGACY_OVERWRITE: 'false'
+      BACKUP_PATH: /var/backups/pos
+      BACKUP_REPLICA_PATH: /var/backups/replica
+      BACKUP_REQUIRE_REPLICA: 'true'
+      IMPORT_PATH: /var/imports/pos
+      LOG_LEVEL: warn
+    volumes:
+      - backups:/var/backups/pos
+      - imports:/var/imports/pos
+      - type: bind
+        source: ${BACKUP_DESTINATION:?}
+        target: /var/backups/replica
+        bind: { create_host_path: false }
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    networks: [store]
+    logging: *logging
+  frontend:
+    image: ${FRONTEND_IMAGE:?}
+    restart: unless-stopped
+    networks: [store]
+    logging: *logging
+  db:
+    image: ${DB_IMAGE:?}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pos
+      POSTGRES_DB: posdb
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      TZ: America/Sao_Paulo
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pos -d posdb']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    networks: [store]
+    logging: *logging
+  redis:
+    image: ${REDIS_IMAGE:?}
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes', '--appendfsync', 'everysec']
+    volumes: [redisdata:/data]
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    networks: [store]
+    logging: *logging
+networks:
+  store:
+    ipam:
+      config: [{ subnet: 172.29.73.0/24, ip_range: 172.29.73.128/25 }]
+volumes:
+  pgdata: {}
+  redisdata: {}
+  caddy_data: {}
+  backups: {}
+  imports: {}

@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import type { SignOptions } from 'jsonwebtoken';
+import { durationSeconds } from '../../../utils/duration.js';
 import { unauthorized } from '../../../errors.js';
 import type { LoginRequestDto, LoginResponseDto } from '../contracts/auth-contracts.js';
 import type { AuthRepository } from '../repository/auth-repository.js';
@@ -19,7 +19,7 @@ export function createLoginUseCase(deps: LoginUseCaseDeps) {
     }
 
     if (user.status !== 'active') {
-      throw unauthorized('user disabled');
+      throw unauthorized('invalid credentials');
     }
 
     const passwordMatches = await bcrypt.compare(input.password, user.passwordHash);
@@ -27,7 +27,10 @@ export function createLoginUseCase(deps: LoginUseCaseDeps) {
       throw unauthorized('invalid credentials');
     }
 
-    await deps.authRepository.updateLastLogin(user.id);
+    const ttlSeconds = durationSeconds(deps.jwtTtl);
+    if (!ttlSeconds) throw new Error('Invalid JWT_TTL');
+    const sessionId = await deps.authRepository.createSession(user.id, user.passwordHash, ttlSeconds);
+    if (!sessionId) throw unauthorized('invalid credentials');
 
     const token = jwt.sign(
       {
@@ -36,7 +39,11 @@ export function createLoginUseCase(deps: LoginUseCaseDeps) {
       },
       deps.jwtSecret,
       {
-        expiresIn: deps.jwtTtl as unknown as SignOptions['expiresIn'],
+        expiresIn: ttlSeconds,
+        algorithm: 'HS256',
+        issuer: 'pos-api',
+        audience: 'pos-web',
+        jwtid: sessionId,
       }
     );
 

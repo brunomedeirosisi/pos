@@ -73,7 +73,8 @@ export function UsersPage(): JSX.Element {
     mutationFn: usersService.create,
     onSuccess: () => {
       toast.show(t('common.saved'), 'success');
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['users'] });
       closeForm();
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
@@ -84,7 +85,8 @@ export function UsersPage(): JSX.Element {
       usersService.update(id, payload),
     onSuccess: () => {
       toast.show(t('common.saved'), 'success');
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['users'] });
       closeForm();
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
@@ -94,7 +96,8 @@ export function UsersPage(): JSX.Element {
     mutationFn: (id: string) => usersService.disable(id),
     onSuccess: () => {
       toast.show(t('common.saved'), 'success');
-      queryClient.invalidateQueries({ queryKey: ['users'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['users'] });
       setUserToDisable(null);
     },
     onError: (error: Error) => toast.show(error.message, 'error'),

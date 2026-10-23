@@ -280,15 +280,6 @@ export function DashboardPage(): JSX.Element {
     placeholderData: (previous) => previous,
   });
 
-  if (!canReadDashboard) {
-    return (
-      <div className="card">
-        <h2>{t('dashboard.heading')}</h2>
-        <p>{t('common.noPermission')}</p>
-      </div>
-    );
-  }
-
   const options = optionsQuery.data;
   const summary = summaryQuery.data;
   const salesByDay = salesByDayQuery.data;
@@ -342,6 +333,15 @@ export function DashboardPage(): JSX.Element {
       .join(', ');
     return `conic-gradient(${slices})`;
   }, [categoryItems]);
+
+  if (!canReadDashboard) {
+    return (
+      <div className="card">
+        <h2>{t('dashboard.heading')}</h2>
+        <p>{t('common.noPermission')}</p>
+      </div>
+    );
+  }
 
   const peakByCell = new Map<string, { orders: number; revenue: number }>();
   (peakHours?.items ?? []).forEach((item) => {

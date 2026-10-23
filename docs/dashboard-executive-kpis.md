@@ -50,6 +50,10 @@ Este documento descreve a implementação do dashboard executivo para o POS, com
   - Classe `A`: acumulado `<= 80%`
   - Classe `B`: acumulado `<= 95%`
   - Classe `C`: restante
+- Estoque crÃ­tico:
+  - calculado a partir da soma de `stock_movement`
+  - checkout do POS grava saÃ­das com `type = 'venda'`
+  - cancelamento de venda grava reversÃµes com `type = 'entrada'`
 
 ## Observações de modelo de dados
 
@@ -62,12 +66,17 @@ Foram adicionados via migração:
 - `sale.store_id`
 - `sale.channel`
 - tabela `stock_movement`
+- `stock_movement.sale_id` para rastrear movimentos gerados pelo fluxo de vendas
 
 Arquivo de migração:
 
 - `backend/sql/migrations/20260425_001_dashboard_executive_kpis.sql`
 
 Também foi atualizado o `backend/sql/init.sql` para ambientes novos.
+
+MigraÃ§Ã£o complementar:
+
+- `backend/sql/migrations/20260624_001_sale_stock_movements.sql`
 
 ## Frontend
 
@@ -81,4 +90,3 @@ Comportamento:
 - filtros persistidos na URL;
 - loading e atualização por widget;
 - manutenção de dados anteriores durante refetch (`placeholderData`), reduzindo flicker.
-

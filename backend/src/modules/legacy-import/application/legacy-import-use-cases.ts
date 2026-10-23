@@ -1,3 +1,4 @@
+import { assertDestructiveOperationEnabled } from '../../../utils/destructive-operation-policy.js';
 import { randomUUID } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { query } from '../../../db.js';
@@ -30,6 +31,7 @@ export async function queueLegacyImportUseCase(input: {
   ipAddress?: string | null;
   files: string[];
 }): Promise<{ importId: string }> {
+  if (input.overwrite) assertDestructiveOperationEnabled('legacy-overwrite');
   const insert = await query<{ id: string }>(
     `insert into system_legacy_import (session_id, session_dir, overwrite, status, created_by)
      values ($1, $2, $3, 'queued', $4)

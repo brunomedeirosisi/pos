@@ -2,12 +2,14 @@ import 'dotenv/config';
 import { app } from './app.js';
 import { getEnv } from './config/env.js';
 import { runPendingMigrations } from './services/migrations.js';
+import { ensureBootstrapAdmin } from './services/bootstrap-admin.js';
 import { initializeLegacyImportWorker } from './services/legacy-importer.js';
 import { logger } from './observability/logger.js';
 
 async function bootstrap(): Promise<void> {
   const env = getEnv();
   await runPendingMigrations();
+  await ensureBootstrapAdmin();
   await initializeLegacyImportWorker();
 
   const port = env.API_PORT;

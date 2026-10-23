@@ -1,0 +1,210 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-22T01:26:40.414Z",
+  "phase": "0 - initial implementation and validation",
+  "baseGitHead": "ac85924e7a94e836805e770c60db8141c783bca6",
+  "baseWasDirty": true,
+  "committed": false,
+  "deployed": false,
+  "runtime": {
+    "node": "24.21.0",
+    "npm": "12.2.0",
+    "nginx": "1.30.6"
+  },
+  "installedVersions": {
+    "backend/multer": "2.4.0",
+    "backend/yauzl": "3.4.0",
+    "backend/vitest": "4.1.12",
+    "frontend/vite": "6.4.5",
+    "frontend/react-router-dom": "7.18.4",
+    "frontend/react": "18.3.1",
+    "frontend/typescript": "5.9.3"
+  },
+  "tests": {
+    "backend": 99,
+    "frontend": 37,
+    "agent": 1,
+    "integration": 11,
+    "destructiveContainment": 2,
+    "passedTotal": 150,
+    "expectedFailures": [
+      {
+        "task": "TSK-013",
+        "case": "fractional line totals diverge from aggregate"
+      },
+      {
+        "task": "TSK-016",
+        "case": "anonymous checkout schema permits missing settlement"
+      }
+    ]
+  },
+  "validation": [
+    {
+      "workspace": "backend",
+      "results": [
+        {
+          "command": "npm ci --ignore-scripts --no-audit --no-fund",
+          "code": 0
+        },
+        {
+          "command": "npm run lint --if-present",
+          "code": 0
+        },
+        {
+          "command": "npm run typecheck",
+          "code": 0
+        },
+        {
+          "command": "npm test",
+          "code": 0
+        },
+        {
+          "command": "npm run build --if-present",
+          "code": 0
+        },
+        {
+          "command": "npm audit --json",
+          "code": 0
+        }
+      ]
+    },
+    {
+      "workspace": "frontend",
+      "results": [
+        {
+          "command": "npm ci --ignore-scripts --no-audit --no-fund",
+          "code": 0
+        },
+        {
+          "command": "npm run lint --if-present",
+          "code": 0
+        },
+        {
+          "command": "npm run typecheck",
+          "code": 0
+        },
+        {
+          "command": "npm test",
+          "code": 0
+        },
+        {
+          "command": "npm run build --if-present",
+          "code": 0
+        },
+        {
+          "command": "npm audit --json",
+          "code": 0
+        }
+      ]
+    },
+    {
+      "workspace": "agent",
+      "results": [
+        {
+          "command": "npm ci --ignore-scripts --no-audit --no-fund",
+          "code": 0
+        },
+        {
+          "command": "npm run lint --if-present",
+          "code": 0
+        },
+        {
+          "command": "npm run typecheck",
+          "code": 0
+        },
+        {
+          "command": "npm test",
+          "code": 0
+        },
+        {
+          "command": "npm run build --if-present",
+          "code": 0
+        },
+        {
+          "command": "npm audit --json",
+          "code": 0
+        }
+      ]
+    }
+  ],
+  "npmAudit": {
+    "backend": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "frontend": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "agent": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    }
+  },
+  "secretChecks": {
+    ".env": {
+      "presentLocally": true,
+      "jwtRotated": true
+    },
+    "backend/.env": {
+      "presentLocally": true,
+      "jwtRotated": true
+    }
+  },
+  "syntheticDataAndAgentSourcePreserved": true,
+  "fingerprintsSHA256": {
+    "backend/package.json": "38ba16641f262e2e19b3a73ba322a0876fe7f23f76ed1b60594bd1bcd6081185",
+    "backend/package-lock.json": "7b8c13771099c8b788474194239c6cdc9ea0f518279a7f6945941f92aadaf363",
+    "frontend/package.json": "91a5d39e3488cfa0a2117bde12a251875ae10032ee3f90418fc49d7e75a14d7e",
+    "frontend/package-lock.json": "c96670d525c6756c93144190fc223560c6e9e581c2cd2e4bf5882d67f3399937",
+    "agent/package.json": "93bf409d1593704b315b3e83b528ab3fecce25373fb52bd3b79a37ce8cccffd8",
+    "agent/package-lock.json": "102e6a4da86a3170145f0ca7b8caaecd099344b28171ff2348d6622d83486a7c",
+    ".nvmrc": "73fb1b615e2043a933be1c0895cde4358036acc28d785692509b822aa53c761f",
+    ".node-version": "73fb1b615e2043a933be1c0895cde4358036acc28d785692509b822aa53c761f",
+    "backend/Dockerfile": "457d0c121121ebae44e1655ee603081565ebc28ab779be578815a9c7680b4b0e",
+    "frontend/Dockerfile": "86953fdbd8f5dda421b8ff32efafcae3da59079237030be6fed98b0d366bd05a",
+    "frontend/vite.config.ts": "2f53230b8b4462b4b6695dbd406d6cb901fe74332efe4db887e0842f7d319538",
+    "frontend/tsconfig.json": "b7175d50a1fdf8d082b2717d69b4837b06568e00d5d4b95bd1f67692e9f449f4",
+    ".github/workflows/ci.yml": "507ae6edd33b75ba78106d85454e8632d58c03347cecbc05fcfb9cbd732e5162",
+    "infra/docker-compose.test.yml": "33aaecebe8a93ea56a0e63edc050299a26cd813ad469b193dc377f5b7c90af6c",
+    "infra/test-disposable.mjs": "4a44e1901420d03cde551755e009fa9589993a7480a45953c4e130531ac9de61",
+    "infra/check-repository-secrets.mjs": "505b41b13b3730b411d16bb7528ed415801edbe699cd1a0a4e652ca696d017c6",
+    "infra/setup-dev-env.mjs": "07c59acf4b01f39570c085e1816a9539c37c20e06f471379f4dd04229a02aca7",
+    "backend/sql/migrations/20261021_001_auth_sessions_and_login_limits.sql": "608bd3ae4f2354bde79e5187cf3a36fbad7322a24f4b3983082a67a5c09eeb9e"
+  },
+  "limitations": [
+    "Expected financial failures remain phase 3 work",
+    "Restore/overwrite are default-deny containment, not recovery proof",
+    "No physical printer or operator topology validation",
+    "CI configured but not run remotely",
+    "No operating-system image vulnerability scan",
+    "Development database password preserved; no history rewrite"
+  ],
+  "imageSmoke": {
+    "passed": true,
+    "checks": [
+      "API health",
+      "metrics token",
+      "login cookie",
+      "logout revocation",
+      "SPA deep-link fallback"
+    ],
+    "images": [
+      "[pos-phase0-tests-api:latest] sha256:0f4686d9d1d5f60f4be25cdab07ec7207bfc7d6dc6eb9819f9fc0ffb9af83798",
+      "[pos-phase0-tests-frontend:latest] sha256:dbbff8e1d5fb302b514b1cccac3fb3f5e54cb7b79bae8e1566f2a9d00d052258"
+    ],
+    "testProjectCleanedUp": true
+  }
+}

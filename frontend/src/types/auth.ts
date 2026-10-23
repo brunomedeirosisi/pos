@@ -13,6 +13,5 @@ export type LoginCredentials = {
 };
 
 export type LoginResponse = {
-  token: string;
   user: AuthUser;
 };

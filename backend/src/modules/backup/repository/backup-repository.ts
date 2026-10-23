@@ -3,7 +3,7 @@ import { query } from '../../../db.js';
 type BackupRow = {
   id: string;
   filename: string;
-  size_bytes: number | null;
+  size_bytes: number | string | null;
   created_at: string;
   checksum: string | null;
   metadata: unknown;

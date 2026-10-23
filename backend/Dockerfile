@@ -1,14 +1,16 @@
-FROM node:20.18.3-alpine3.20 AS deps
+FROM node:24.21.0-alpine3.23@sha256:9ec4a2e289874ed0d722e1772ec2de45d2801541db8612f3638b26f128c69ac2 AS deps
 WORKDIR /app
 ENV NODE_ENV=development
 COPY package*.json ./
+RUN npm install --global npm@12.2.0 --ignore-scripts --no-audit --no-fund
 RUN npm ci
 
-FROM node:20.18.3-alpine3.20 AS build
+FROM node:24.21.0-alpine3.23@sha256:9ec4a2e289874ed0d722e1772ec2de45d2801541db8612f3638b26f128c69ac2 AS build
 WORKDIR /app
 ENV NODE_ENV=development
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/package*.json ./
+RUN npm install --global npm@12.2.0 --ignore-scripts --no-audit --no-fund
 COPY tsconfig.json ./tsconfig.json
 COPY src ./src
 COPY openapi ./openapi
@@ -16,10 +18,12 @@ COPY sql ./sql
 RUN npm run build
 RUN npm prune --omit=dev
 
-FROM node:20.18.3-alpine3.20 AS runner
+FROM node:24.21.0-alpine3.23@sha256:9ec4a2e289874ed0d722e1772ec2de45d2801541db8612f3638b26f128c69ac2 AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-RUN addgroup -S pos && adduser -S pos -G pos
+RUN apk add --no-cache postgresql16-client=16.15-r0 \
+    && addgroup -S -g 10001 pos && adduser -S -u 10001 pos -G pos \
+    && install -d -o pos -g pos -m 0700 /var/backups/pos /var/backups/replica /var/backups/readonly
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/package*.json ./
 COPY --from=build /app/dist ./dist

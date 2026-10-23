@@ -19,7 +19,9 @@ describe('createLoginUseCase', () => {
         status: 'active',
       }),
       findActiveById: vi.fn(),
-      updateLastLogin: vi.fn().mockResolvedValue(undefined),
+      findActiveSession: vi.fn(),
+      createSession: vi.fn().mockResolvedValue('58f1dc97-11d5-4f6c-b462-a1fd7be458d2'),
+      revokeSession: vi.fn(),
     };
 
     const useCase = createLoginUseCase({
@@ -43,14 +45,15 @@ describe('createLoginUseCase', () => {
 
     expect(decoded.sub).toBe('user-1');
     expect(decoded.role).toBe('admin');
-    expect(repository.updateLastLogin).toHaveBeenCalledWith('user-1');
+    expect(repository.createSession).toHaveBeenCalledWith('user-1', passwordHash, 3600);
+    expect(decoded).toMatchObject({ jti: '58f1dc97-11d5-4f6c-b462-a1fd7be458d2', iss: 'pos-api', aud: 'pos-web' });
   });
 
   it('throws when user does not exist', async () => {
     const repository = {
       findByEmail: vi.fn().mockResolvedValue(null),
       findActiveById: vi.fn(),
-      updateLastLogin: vi.fn(),
+      findActiveSession: vi.fn(), createSession: vi.fn(), revokeSession: vi.fn(),
     };
 
     const useCase = createLoginUseCase({

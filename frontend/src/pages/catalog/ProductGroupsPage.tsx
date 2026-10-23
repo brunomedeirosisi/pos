@@ -49,7 +49,8 @@ export function ProductGroupsPage(): JSX.Element {
     mutationFn: (values: FormValues) => productGroupsService.create(buildPayload(values)),
     onSuccess: () => {
       toast.show(t('common.saved'), 'success');
-      queryClient.invalidateQueries({ queryKey: ['product-groups'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['product-groups'] });
       closeForm();
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
@@ -62,7 +63,8 @@ export function ProductGroupsPage(): JSX.Element {
     },
     onSuccess: () => {
       toast.show(t('common.saved'), 'success');
-      queryClient.invalidateQueries({ queryKey: ['product-groups'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['product-groups'] });
       closeForm();
     },
     onError: (error: Error) => toast.show(error.message, 'error'),

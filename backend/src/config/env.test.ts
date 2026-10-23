@@ -45,4 +45,64 @@ describe('parseEnv', () => {
     });
     expect(parsed.REDIS_PASSWORD).toBeUndefined();
   });
+
+  it('accepts empty bootstrap admin env vars as undefined', () => {
+    const parsed = parseEnv({
+      ...makeBaseEnv(),
+      BOOTSTRAP_ADMIN_EMAIL: '',
+      BOOTSTRAP_ADMIN_PASSWORD: '',
+      BOOTSTRAP_ADMIN_FULL_NAME: '',
+    });
+
+    expect(parsed.BOOTSTRAP_ADMIN_EMAIL).toBeUndefined();
+    expect(parsed.BOOTSTRAP_ADMIN_PASSWORD).toBeUndefined();
+    expect(parsed.BOOTSTRAP_ADMIN_FULL_NAME).toBeUndefined();
+  });
+
+  it('requires full bootstrap admin configuration when any bootstrap field is provided', () => {
+    expect(() =>
+      parseEnv({
+        ...makeBaseEnv(),
+        BOOTSTRAP_ADMIN_EMAIL: 'admin@example.com',
+      })
+    ).toThrowError(/BOOTSTRAP_ADMIN_EMAIL, BOOTSTRAP_ADMIN_PASSWORD, and BOOTSTRAP_ADMIN_FULL_NAME must be set together/);
+  });
+
+  it('parses bootstrap admin settings when all fields are present', () => {
+    const parsed = parseEnv({
+      ...makeBaseEnv(),
+      BOOTSTRAP_ADMIN_EMAIL: 'admin@example.com',
+      BOOTSTRAP_ADMIN_PASSWORD: 'StrongAdminPassword123!',
+      BOOTSTRAP_ADMIN_FULL_NAME: 'Platform Admin',
+    });
+
+    expect(parsed.BOOTSTRAP_ADMIN_EMAIL).toBe('admin@example.com');
+    expect(parsed.BOOTSTRAP_ADMIN_FULL_NAME).toBe('Platform Admin');
+  });
+});
+
+describe('phase zero security configuration', () => {
+  it('requires production metrics protection and rejects placeholders', () => {
+    expect(() => parseEnv({ ...makeBaseEnv(), NODE_ENV: 'production' })).toThrow(/METRICS_TOKEN/);
+    expect(() => parseEnv({ ...makeBaseEnv(), JWT_SECRET: 'change_me_secret_longer_than_thirty_two_characters' })).toThrow(/placeholder/);
+  });
+  it.each(['true', '1', '0.0.0.0/0', '::/0', 'uniquelocal', '192.0.2.1/99'])('rejects broad or implicit proxy trust %s', (value) => {
+    expect(() => parseEnv({ ...makeBaseEnv(), TRUSTED_PROXY_CIDRS: value })).toThrow(/TRUSTED_PROXY_CIDRS/);
+  });
+  it('accepts explicit trusted proxy hosts and rejects unbounded TTLs', () => {
+    expect(parseEnv({ ...makeBaseEnv(), TRUSTED_PROXY_CIDRS: '127.0.0.1/32, ::1' }).TRUSTED_PROXY_CIDRS).toBe('127.0.0.1/32, ::1');
+    expect(() => parseEnv({ ...makeBaseEnv(), JWT_TTL: '31d' })).toThrow(/JWT_TTL/);
+    expect(() => parseEnv({ ...makeBaseEnv(), ENABLE_DATABASE_RESTORE: 'yes' })).toThrow(/ENABLE_DATABASE_RESTORE/);
+  });
+});
+
+describe('phase one backup configuration', () => {
+  it('requires a replica path when replica acknowledgement is mandatory', () => {
+    expect(() => parseEnv({ ...makeBaseEnv(), BACKUP_REQUIRE_REPLICA: 'true', BACKUP_REPLICA_PATH: '' })).toThrow(/BACKUP_REPLICA_PATH/);
+    expect(parseEnv({ ...makeBaseEnv(), BACKUP_REQUIRE_REPLICA: 'true', BACKUP_REPLICA_PATH: '/mounted-replica' }).BACKUP_REQUIRE_REPLICA).toBe(true);
+  });
+  it('requires pool room for the dedicated lock and normal queries', () => {
+    expect(() => parseEnv({ ...makeBaseEnv(), POSTGRES_POOL_MAX: '1' })).toThrow(/POSTGRES_POOL_MAX/);
+    expect(parseEnv({ ...makeBaseEnv(), POSTGRES_POOL_MAX: '2' }).POSTGRES_POOL_MAX).toBe(2);
+  });
 });

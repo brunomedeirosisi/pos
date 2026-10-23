@@ -28,6 +28,9 @@ export function createTempDiskUpload({ folder, fileSize, files = 1 }: TempUpload
     limits: {
       fileSize,
       files,
+      fields: 10,
+      fieldSize: 4096,
+      parts: files + 10,
     },
   });
 }

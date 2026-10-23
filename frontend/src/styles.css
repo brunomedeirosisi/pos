@@ -704,6 +704,10 @@ textarea:disabled {
   margin-top: var(--space-16);
 }
 
+.wrap-actions {
+  flex-wrap: wrap;
+}
+
 .form-error {
   color: #dc2626;
   font-size: 0.78rem;
@@ -931,6 +935,29 @@ textarea:disabled {
   color: var(--color-text-strong);
 }
 
+.receipt-summary-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: 14px;
+  border: 1px dashed rgba(61, 111, 194, 0.35);
+  border-radius: var(--radius-md);
+  background: rgba(61, 111, 194, 0.06);
+}
+
+.receipt-summary-box .row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--color-text-strong);
+}
+
+.receipt-summary-box .total-row {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
 .balance-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -1040,6 +1067,19 @@ textarea:disabled {
 .receipt-code {
   letter-spacing: 0.05em;
   font-weight: 700;
+}
+
+.matrix-receipt-card {
+  padding: 18px;
+}
+
+.matrix-receipt-text {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.92rem;
+  line-height: 1.28;
+  color: #111827;
 }
 
 .text-right {
@@ -1248,6 +1288,10 @@ textarea:disabled {
 }
 
 @media print {
+  .printable-card .table-wrapper { overflow: visible; }
+  .printable-table thead { display: table-header-group; }
+  .printable-table tr { break-inside: avoid; }
+
   body {
     background: #ffffff;
   }

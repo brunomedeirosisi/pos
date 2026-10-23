@@ -7,7 +7,6 @@ import type {
   Customer,
   CustomerInput,
   CustomerDetails,
-  CustomerPayment,
   CustomerPaymentInput,
   CustomerPaymentsFilters,
   CustomerPaymentsResponse,

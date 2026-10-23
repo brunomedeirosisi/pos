@@ -1,19 +1,19 @@
 import { create } from 'zustand';
 import { authService } from '../services/auth';
 import type { AuthUser, LoginCredentials } from '../types/auth';
-import { setAuthToken, onUnauthorized } from '../api';
+import { onUnauthorized } from '../api';
+import { queryClient } from '../lib/queryClient';
+import { usePosStore } from './pos';
+import { advanceSessionGeneration, currentSessionGeneration } from '../lib/session-lifecycle';
 
 type AuthState = {
   user: AuthUser | null;
-  token: string | null;
   initialized: boolean;
   initializing: boolean;
   login: (credentials: LoginCredentials) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   initialize: () => Promise<void>;
 };
-
-const STORAGE_KEY = 'pos.auth.token';
 
 const normalizePermissions = (permission: string | string[]): string[] =>
   Array.isArray(permission) ? permission : [permission];
@@ -30,19 +30,36 @@ export const hasPermission = (user: AuthUser | null, permission: string | string
 
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
-  token: null,
   initialized: false,
   initializing: false,
   async login(credentials) {
-    const { token, user } = await authService.login(credentials);
-    localStorage.setItem(STORAGE_KEY, token);
-    setAuthToken(token);
-    set({ token, user, initialized: true, initializing: false });
+    if (pendingLogout) await pendingLogout;
+    set({ user: null, initialized: true, initializing: true });
+    const generation = clearPrivateState();
+    try {
+      const { user } = await authService.login(credentials);
+      if (generation !== currentSessionGeneration()) return;
+      setLogoutPending(false);
+      set({ user, initialized: true, initializing: false });
+      notifyOtherTabs('login');
+    } catch (error) {
+      if (generation === currentSessionGeneration()) set({ user: null, initialized: true, initializing: false });
+      throw error;
+    }
   },
-  logout() {
-    localStorage.removeItem(STORAGE_KEY);
-    setAuthToken(null);
-    set({ token: null, user: null, initialized: true, initializing: false });
+  async logout() {
+    if (pendingLogout) return pendingLogout;
+    set({ user: null, initialized: true, initializing: false });
+    clearPrivateState();
+    setLogoutPending(true);
+    notifyOtherTabs('logout');
+    if (!pendingLogout) {
+      pendingLogout = authService.logout()
+        .then(() => setLogoutPending(false))
+        .catch(() => { /* Keep the logout marker; a reload must not silently restore the cookie. */ })
+        .finally(() => { pendingLogout = null; });
+    }
+    await pendingLogout;
   },
   async initialize() {
     const state = get();
@@ -50,31 +67,71 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return;
     }
     set({ initializing: true });
+    const generation = currentSessionGeneration();
     try {
-      const storedToken = localStorage.getItem(STORAGE_KEY);
-      if (!storedToken) {
-        setAuthToken(null);
-        set({ token: null, user: null });
+      if (logoutIsPending()) {
+        await authService.logout();
+        setLogoutPending(false);
         return;
       }
-
-      setAuthToken(storedToken);
       const { user } = await authService.me();
-      set({ token: storedToken, user });
-    } catch (error) {
-      localStorage.removeItem(STORAGE_KEY);
-      setAuthToken(null);
-      set({ token: null, user: null });
+      if (generation === currentSessionGeneration()) set({ user });
+    } catch {
+      if (generation === currentSessionGeneration()) set({ user: null });
     } finally {
-      set({ initializing: false, initialized: true });
+      if (generation === currentSessionGeneration()) set({ initializing: false, initialized: true });
     }
   },
 }));
 
+let pendingLogout: Promise<void> | null = null;
+let memoryLogoutPending = false;
+const logoutKey = 'pos.logoutPending';
+const changeKey = 'pos.auth.change';
+
+function setLogoutPending(value: boolean): void {
+  memoryLogoutPending = value;
+  try {
+    if (value) localStorage.setItem(logoutKey, '1'); else localStorage.removeItem(logoutKey);
+  } catch { /* Storage may be unavailable in a restricted browser. */ }
+}
+
+function logoutIsPending(): boolean {
+  try { return memoryLogoutPending || localStorage.getItem(logoutKey) === '1'; } catch { return memoryLogoutPending; }
+}
+
+function clearPrivateState(): number {
+  const generation = advanceSessionGeneration();
+  // A limpeza local é imediata; o QueryClient trata cancelamentos em segundo plano.
+  void queryClient.cancelQueries();
+  queryClient.clear();
+  usePosStore.getState().reset();
+  return generation;
+}
+
+function notifyOtherTabs(kind: 'login' | 'logout'): void {
+  try { localStorage.setItem(changeKey, JSON.stringify({ kind, nonce: `${Date.now()}-${Math.random()}` })); } catch { /* Same-tab controls still apply. */ }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (event) => {
+    if (event.key !== changeKey || !event.newValue) return;
+    try {
+      const { kind } = JSON.parse(event.newValue) as { kind: string };
+      if (kind !== 'login' && kind !== 'logout') return;
+      clearPrivateState();
+      useAuthStore.setState({ user: null, initialized: kind === 'logout', initializing: false });
+      // initialize já trata falhas; a notificação entre abas não aguarda a rede.
+      if (kind === 'login') void useAuthStore.getState().initialize();
+    } catch { /* Ignore unrelated/malformed storage messages. */ }
+  });
+}
+
 onUnauthorized(() => {
   const state = useAuthStore.getState();
-  if (state.token) {
-    state.logout();
+  if (state.user) {
+    // logout já trata falhas e mantém o marcador; o callback 401 não aguarda a rede.
+    void state.logout();
   }
 });
 

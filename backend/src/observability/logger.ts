@@ -13,6 +13,7 @@ export const logger = pino({
   redact: {
     paths: [
       'req.headers.authorization',
+      'req.headers.cookie',
       'req.body.password',
       'req.body.confirmation',
       'err.stack',
@@ -22,4 +23,3 @@ export const logger = pino({
   },
   timestamp: pino.stdTimeFunctions.isoTime,
 });
-

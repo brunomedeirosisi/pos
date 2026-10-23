@@ -1,11 +1,7 @@
-import jwt from 'jsonwebtoken';
+import { verifySessionToken } from '../domain/session-token.js';
 import { unauthorized } from '../../../errors.js';
 import type { AuthenticatedUser } from '../domain/auth-types.js';
 import type { AuthRepository } from '../repository/auth-repository.js';
-
-type JwtPayload = {
-  sub: string;
-};
 
 export type ResolveAuthTokenUseCaseDeps = {
   authRepository: AuthRepository;
@@ -13,23 +9,17 @@ export type ResolveAuthTokenUseCaseDeps = {
 };
 
 export function createResolveAuthTokenUseCase(deps: ResolveAuthTokenUseCaseDeps) {
-  return async (token: string | null): Promise<AuthenticatedUser> => {
+  return async (token: string | null): Promise<AuthenticatedUser & { sessionId: string }> => {
     if (!token) {
       throw unauthorized();
     }
 
-    let payload: JwtPayload;
-    try {
-      payload = jwt.verify(token, deps.jwtSecret) as JwtPayload;
-    } catch {
-      throw unauthorized('invalid token');
-    }
-
-    const user = await deps.authRepository.findActiveById(payload.sub);
+    const payload = verifySessionToken(token, deps.jwtSecret);
+    const user = await deps.authRepository.findActiveSession(payload.sub, payload.jti);
     if (!user) {
       throw unauthorized();
     }
 
-    return user;
+    return { ...user, sessionId: payload.jti };
   };
 }

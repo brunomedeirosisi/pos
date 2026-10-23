@@ -1,0 +1,322 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-22T14:21:26.019Z",
+  "request": "Run tests using Docker; fix discovered bugs and update documentation/seed if needed",
+  "baseGitHead": "ac85924e7a94e836805e770c60db8141c783bca6",
+  "baseWasDirty": true,
+  "command": "node infra/test-disposable.mjs --docker --images --backups --seeds",
+  "exitCode": 0,
+  "execution": {
+    "host": "Node orchestrates Docker and image HTTP smoke only; no local npm/dependency requirement in --docker mode",
+    "testSuites": "Dedicated Node 24.21.0 containers with npm 12.2.0, existing lockfiles and npm ci --ignore-scripts",
+    "dockerEngine": "29.8.0",
+    "compose": "5.5.1",
+    "node": "24.21.0",
+    "npm": "12.2.0",
+    "postgres": "16 / native clients 16.15"
+  },
+  "tests": {
+    "backendUnit": 142,
+    "backendIntegration": 69,
+    "backendRegression": 4,
+    "frontend": 67,
+    "agent": 1,
+    "measurementControls": 7,
+    "total": 290,
+    "failed": 0,
+    "expectedFailures": 0,
+    "skipped": 0,
+    "additionalLintAndEmptySelectionControls": 16,
+    "lint": "passed",
+    "typechecks": "passed",
+    "builds": "passed"
+  },
+  "bugsFixed": [
+    {
+      "id": "container-test-execution",
+      "before": "The previous harness ran integration/regression on host despite Docker dependencies",
+      "after": "--docker executes all workspace suites/checks in dedicated test images; CI uses this command"
+    },
+    {
+      "id": "TSK-016 / TEC-016",
+      "before": "Checkout accepted missing method/amount, implicitly inferred tender for some methods or created anonymous completed debt; one expected failure",
+      "after": "HTTP schema, use-case guard, frontend request type and OpenAPI require explicit non-null payment method/amount; normal regression, four direct cases and eighteen HTTP/PG cases cover settlement"
+    },
+    {
+      "id": "historical-benchmark-seed",
+      "before": "Sale subtotal100/total90 versus item sum30; customer payments exceeded charges",
+      "after": "Subtotal/total30, explicit customer credit, initial amount0, payments10 each, outstanding1800000; synthetic cost6 and wrong-database guard"
+    }
+  ],
+  "seeds": {
+    "syntheticOnly": true,
+    "project": "pos-seed-tests",
+    "results": [
+      {
+        "file": "infra/performance/seed.sql",
+        "sales": 120000,
+        "items": 360000,
+        "payments": 0,
+        "inconsistentSales": 0,
+        "outstanding": 0,
+        "wrongDatabaseRejected": true,
+        "repeatedSeed": "rejected without changing rows"
+      },
+      {
+        "file": "backend/sql/benchmarks/phase4_seed.sql",
+        "sales": 120000,
+        "items": 360000,
+        "payments": 180000,
+        "inconsistentSales": 0,
+        "outstanding": 1800000,
+        "wrongDatabaseRejected": true,
+        "repeatedSeed": "same counts and monetary invariants"
+      }
+    ],
+    "cleanup": true
+  },
+  "backupAndRecovery": {
+    "postgres": "pg_dump (PostgreSQL) 16.15",
+    "psql": "psql (PostgreSQL) 16.15",
+    "uid": 10001,
+    "backupMs": 132,
+    "simulationMs": 189,
+    "restored": {
+      "users": 2,
+      "customers": 1,
+      "products": 1,
+      "sales": 1,
+      "saleItems": 1,
+      "stockMovements": 1,
+      "foreignKeys": 19
+    },
+    "syntheticOnly": true,
+    "backups": [
+      {
+        "filename": "backup_2026-10-22-14-13-37_3cd6348a-f0d4-4d3d-ae05-b4aab8da3712.zip",
+        "checksum": "abd3b715f3fb660ddc341bd6c4bc24d12c9b42cbc1bfa9da9315daddd65ac1a2",
+        "sizeBytes": 7385
+      },
+      {
+        "filename": "backup_2026-10-22-14-13-38_42df805b-7bb8-49a0-9885-fe5d1bc9f312.zip",
+        "checksum": "d796803745df073a72f5b42f2d7f8c7290775413b312007aa1d637f099a8f939",
+        "sizeBytes": 7902
+      }
+    ],
+    "lockConflicts": [
+      "create",
+      "upload",
+      "delete",
+      "retention"
+    ],
+    "storageFailures": [
+      "readonly",
+      "free-space-reserve",
+      "replica-checksum",
+      "replica-unwritable",
+      "ENOSPC-cleanup",
+      "restore-size-budget"
+    ],
+    "sourceDatabasePreserved": true,
+    "uploadAndDeleteVerified": true,
+    "persistenceAfterApiRecreation": true,
+    "restoredAfterApiRecreation": true
+  },
+  "smoke": {
+    "health": true,
+    "metricsAuthorization": true,
+    "cookieLogin": true,
+    "sessionRevocation": true,
+    "spaFallback": true,
+    "backups": true,
+    "apiRecreationPersistence": true
+  },
+  "images": {
+    "api": "sha256:c0708421b7c0b52b9936caee5936b65d11e326e13c720ab4e4e4d4b6743b888b",
+    "frontend": "sha256:47c9033130f1cf9423e82645abeee7096002d66af62f907bb4d059117d7128fd",
+    "backendTests": "sha256:44596ef7eaed494a3b08930be465c3693c0a20443677a5a707f1c832d5c7bf30",
+    "frontendTests": "sha256:c6eac1c2de9228a0a86cef75f348aee5802b02b28eec37ad9743dff14d08145e",
+    "agentTests": "sha256:bc17d76cb66959a9458d41ce7c77464ee74c92c3d0addd4312dc764a13b54aca"
+  },
+  "verification": {
+    "openApiRequiredPaymentFieldsAndNonNullability": "passed in Docker",
+    "ciDockerCommand": "parsed and verified in Docker",
+    "testedBackendImageSourceMatchesWorkspace": true,
+    "composeConfig": "passed",
+    "repositorySecretGuard": "passed on host",
+    "relativeDocLinksChecked": 15,
+    "scopedWhitespaceDiagnostics": [],
+    "wholeTreePreexistingWhitespace": "backend/sql/init.sql trailing blank line remains unchanged"
+  },
+  "cleanup": {
+    "projects": [
+      "pos-phase0-tests",
+      "pos-seed-tests"
+    ],
+    "containersRemaining": 0,
+    "volumesRemaining": 0,
+    "networksRemaining": 0,
+    "separateProjectLabelChecks": true,
+    "applicationComposeSelected": false,
+    "operationalDatabaseMigrated": false
+  },
+  "preservation": {
+    "environmentFiles": true,
+    "lockfiles": true,
+    "agentSources": true,
+    "syntheticDbfData": true,
+    "mainCompose": true,
+    "currentBenchmarkSeed": true,
+    "initSql": true,
+    "priorDirtyChangesPreserved": true,
+    "filesRemoved": 0,
+    "noNewDependencies": true,
+    "noCommitOrPush": true,
+    "noOperationalDeployment": true
+  },
+  "log": {
+    "file": "../test-evidence/docker-validation-20261022.log.gz",
+    "format": "gzip, UTF-8 complete final execution log with ANSI terminal color sequences removed",
+    "sha256": "b23e38282e6b3d24dc2cbc10ae5046b875db0a1aaf992be8859e023bf02db397",
+    "compressedBytes": 8371
+  },
+  "limitations": [
+    "Existing pending credit-limit/inactive-customer and non-negative-stock controls are not implemented by these settlement fixes",
+    "Other recovery/import/history/KPI roadmap debts retain their prior status",
+    "Physical printer, deployment topology, browser/device acceptance and load capacity were not exercised",
+    "Frontend build retains the existing bundle >500kB warning (TSK-037)",
+    "Prior HTTP performance reports are preserved snapshots of earlier source; no updated throughput claim"
+  ],
+  "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "change": "modified",
+      "sha256": "f9ddb10a165ebe4da7029f84eb8823fb247a0357c716dd67812400d82f6f795f"
+    },
+    {
+      "path": "README.md",
+      "change": "modified",
+      "sha256": "27567fda08ec15cbe5f4213cdb6c53cedab32f2ec7e9399e2538e6b09e826c23"
+    },
+    {
+      "path": "backend/openapi/openapi.yaml",
+      "change": "modified",
+      "sha256": "561bb582b35bfd057974b11649379d6afd4fb5bfabe8556fc61bf3fe5b530adb"
+    },
+    {
+      "path": "backend/sql/benchmarks/phase4_seed.sql",
+      "change": "modified",
+      "sha256": "259afce9cb6b2846735bb17c01c0371a1b5de1d03de1223e69b93243f8986ac8"
+    },
+    {
+      "path": "backend/src/modules/sales/application/sales-use-cases.test.ts",
+      "change": "modified",
+      "sha256": "babed60bbe4767afee5918bb83e84d678e443606c3ada14147d3add28c8ad9af"
+    },
+    {
+      "path": "backend/src/modules/sales/application/sales-use-cases.ts",
+      "change": "modified",
+      "sha256": "7a4fa625a5bd31f6a06681c026c038a6ad343f2594f3829593ed4c6221c479a5"
+    },
+    {
+      "path": "backend/src/modules/sales/contracts/sales-contracts.test.ts",
+      "change": "modified",
+      "sha256": "9c87e4464c14d6b20df630ebb65cf304b91f1f5933eab92ca9db4faf02f80d7c"
+    },
+    {
+      "path": "backend/src/modules/sales/contracts/sales-contracts.ts",
+      "change": "modified",
+      "sha256": "6db7fa5c37f37b46db0707554dceec06309c77723e98149146aa9adc2b5928b7"
+    },
+    {
+      "path": "backend/src/utils/checkout-decimal.test.ts",
+      "change": "modified",
+      "sha256": "2ff8f8ff99af316c0d257bec6309aab5c6cc96b2e422019c39b0da6ac4980069"
+    },
+    {
+      "path": "backend/test/integration/checkout-settlement.test.ts",
+      "change": "new",
+      "sha256": "a8e3e96d1632d6414749b3e2d71674a46fa6da716d3756ec7797762baba326c4"
+    },
+    {
+      "path": "backend/test/regression/financial-debt.test.ts",
+      "change": "modified",
+      "sha256": "c10097f4244ea4b46d8fa917824e07fd5ca076009c27bf6544eb1c57b3f1eeac"
+    },
+    {
+      "path": "docs/performance/phase4-benchmark.md",
+      "change": "modified",
+      "sha256": "3cc32537bbd6772d3978f03fd8e96bf31d79174dee9fc96803de484904c74fb9"
+    },
+    {
+      "path": "docs/performance/phase6-http-benchmark.md",
+      "change": "modified",
+      "sha256": "679b0ad3e1e12234794937400f15d10188b474eaa01c9818b61b870d800c7d1e"
+    },
+    {
+      "path": "docs/technical-audit/02-inventario-problemas.md",
+      "change": "modified",
+      "sha256": "41fa47f53fd502fb88382ba869ea845f76abc6613e57bed7c01b2a47665178ed"
+    },
+    {
+      "path": "docs/technical-audit/03-backlog-tecnico.md",
+      "change": "modified",
+      "sha256": "23a6991e78547b0ea607b3e017ccaf06996ca42b42775bb6484ee68350461347"
+    },
+    {
+      "path": "docs/technical-audit/04-roadmap-implementacao.md",
+      "change": "modified",
+      "sha256": "efdd6c7b621854b8ce5ac20b771878ae755b3d0192c0c690ccea3ce5db6b6e45"
+    },
+    {
+      "path": "docs/technical-audit/20-validacao-docker-e-correcoes.md",
+      "change": "new",
+      "sha256": "9a849ee8da3cde6d4d39a55750bd1810976caceee13eb7a36c317128f97de9c9"
+    },
+    {
+      "path": "docs/test-evidence/docker-validation-20261022.log.gz",
+      "change": "new",
+      "sha256": "b23e38282e6b3d24dc2cbc10ae5046b875db0a1aaf992be8859e023bf02db397"
+    },
+    {
+      "path": "docs/testing-docker.md",
+      "change": "new",
+      "sha256": "e0eb15bde098845d92a24583ce9fd12dd3bb4baa3252749fa55ba18470eff760"
+    },
+    {
+      "path": "frontend/src/types/sales.ts",
+      "change": "modified",
+      "sha256": "e4c10091a98902ea55a315619e1f99600985353d372ab34e105af8eaf8d14709"
+    },
+    {
+      "path": "infra/Dockerfile.tests",
+      "change": "new",
+      "sha256": "a404bd9932837a117df8d31d6683c4cc39331ea84462ed5e263d04c46ad63da0"
+    },
+    {
+      "path": "infra/Dockerfile.tests.dockerignore",
+      "change": "new",
+      "sha256": "a05ebfccfac5309143fd152a19bd35bb809cc3393fb7b9d36d498e2548219c32"
+    },
+    {
+      "path": "infra/check-seeds-disposable.mjs",
+      "change": "new",
+      "sha256": "1dcf6b409feba9356e1cde54fa5fe4d5369418728bb7885a70de36d375fd0ff4"
+    },
+    {
+      "path": "infra/docker-compose.test-runners.yml",
+      "change": "new",
+      "sha256": "4428586246f484fcabf1d03dcf56529df21413ba6c5cb7f7f10c7d554ced1d6b"
+    },
+    {
+      "path": "infra/run-workspace-checks.mjs",
+      "change": "new",
+      "sha256": "054191c806272c3c3f021270c9b6d3afdc036e7fb2b92ddbf538204665cc7e67"
+    },
+    {
+      "path": "infra/test-disposable.mjs",
+      "change": "modified",
+      "sha256": "4546e698d811f417cfd338212f2c94ecc8aa0de9a0d65ab83aad5270733800a5"
+    }
+  ]
+}

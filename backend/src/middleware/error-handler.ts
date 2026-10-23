@@ -45,7 +45,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
         },
         'Handled internal error'
       );
-      return res.status(500).json({
+      return res.status(err.statusCode).json({
         message: 'internal_error',
         request_id: requestId,
       });

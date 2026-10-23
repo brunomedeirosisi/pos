@@ -18,7 +18,94 @@ tags:
   - name: Administration
 security:
   - bearerAuth: []
+  - cookieAuth: []
 paths:
+  /api/v1/store-info:
+    get:
+      security: []
+      summary: Public store identity for installer pairing
+      responses:
+        '200': { description: Store UUID and print mode; no secrets. }
+        '503': { description: Store is not configured. }
+  /api/v1/print-agent/claim:
+    post:
+      security: [{ printAgentToken: [] }]
+      summary: Claim the next job for the single principal printer
+      description: Queue mode only. One live reservation per printer. Response contains job metadata plus content, locale and claim_token, or job=null. Content is bounded to 1 MiB.
+      responses:
+        '200': { description: Claimed job or null; poll every two seconds while idle. }
+        '403': { description: Invalid agent token. }
+        '503': { description: Queue disabled. }
+  /api/v1/print-agent/jobs/{id}/start:
+    post:
+      security: [{ printAgentToken: [] }]
+      summary: Acknowledge start BEFORE invoking the spooler
+      parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { claim_token: { type: string, format: uuid } }
+              required: [claim_token]
+      responses:
+        '204': { description: Current claim is now spooling. }
+        '409': { description: Claim expired or invalid; do not print. }
+  /api/v1/print-agent/jobs/{id}/finish:
+    post:
+      security: [{ printAgentToken: [] }]
+      summary: Acknowledge submitted/uncertain output or rejection before output
+      parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                claim_token: { type: string, format: uuid }
+                outcome: { type: string, enum: [submitted, uncertain, failed] }
+              required: [claim_token, outcome]
+      responses:
+        '204': { description: Idempotent acknowledgement; submitted means spooler accepted, not paper output. }
+        '409': { description: Completion incompatible with claim/state. }
+  /api/v1/print-agent/jobs/{id}:
+    get:
+      security: [{ printAgentToken: [] }]
+      summary: Inspect metadata during agent crash recovery
+      parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: Job metadata. }
+        '404': { description: Job not found. }
+  /api/v1/print-agent/status:
+    get:
+      security: [{ printAgentToken: [] }]
+      summary: Agent heartbeat and queue counts for local diagnostics
+      responses:
+        '200': { description: Last poll time, online flag (30 seconds) and counts by state. }
+  /api/v1/print-jobs/{id}:
+    get:
+      summary: Job metadata for authenticated sales readers
+      parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200':
+          description: Job status; no receipt content or claim secret.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PrintJob' }
+        '404': { description: Job not found. }
+  /api/v1/print-jobs/sale/{id}:
+    get:
+      summary: Last twenty jobs for this sale (sales:read)
+      parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '200': { description: List of PrintJob metadata. }
+  /api/v1/print-jobs/agent-status:
+    get:
+      summary: Agent heartbeat/counts for authenticated sales readers
+      responses:
+        '200': { description: Online flag, last poll and queue counts. }
   /api/v1/health:
     get:
       tags:
@@ -71,7 +158,11 @@ paths:
       tags:
         - Auth
       summary: Authenticate user
-      description: Exchanges user credentials for a JWT bearer token.
+      description: >
+        Authenticates the user, sets an HttpOnly session cookie for browser clients,
+        and returns the authenticated user profile. The backend still accepts Bearer
+        tokens for non-browser clients, but the web application does not persist the
+        JWT in browser storage anymore.
       security: []
       requestBody:
         required: true
@@ -82,6 +173,11 @@ paths:
       responses:
         '200':
           description: Authentication succeeded.
+          headers:
+            Set-Cookie:
+              description: HttpOnly authentication cookie for browser sessions.
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -90,12 +186,27 @@ paths:
           $ref: '#/components/responses/ValidationError'
         '401':
           $ref: '#/components/responses/UnauthorizedError'
+  /api/v1/auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: Clear browser session
+      description: Clears the HttpOnly authentication cookie used by browser clients.
+      security: []
+      responses:
+        '204':
+          description: Session cookie cleared.
+          headers:
+            Set-Cookie:
+              description: Expired authentication cookie.
+              schema:
+                type: string
   /api/v1/auth/me:
     get:
       tags:
         - Auth
       summary: Return authenticated user
-      description: Returns details about the currently authenticated user.
+      description: Returns details about the currently authenticated user resolved from a bearer token or auth cookie.
       responses:
         '200':
           description: Authenticated user details.
@@ -482,6 +593,11 @@ paths:
       tags:
         - Customers
       summary: Payment history report
+      description: >
+        Returns every selected payment in one repeatable-read snapshot, up to 5000 rows.
+        Legacy page/page_size query parameters are accepted but never truncate this report.
+        Use the payments list endpoint for pagination. Narrow filters if the selection exceeds
+        the report limit. Counts, unique identities and decimal sums are checked before returning.
       parameters:
         - $ref: '#/components/parameters/ResourceId'
         - in: query
@@ -530,6 +646,18 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
         '404':
           $ref: '#/components/responses/NotFoundError'
+        '413':
+          description: Selection exceeds 5000 payments; message payment_report_limit_exceeded, details.limit and details.count. No partial report is returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '422':
+          description: Counts, identities or exact decimal sums cannot be reconciled; message payment_report_inconsistent. No partial report is returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
   /api/v1/customers/{customerId}/payments/{paymentId}/receipt:
     get:
       tags:
@@ -821,6 +949,12 @@ paths:
       tags:
         - Sales
       summary: Register sale
+      description: >
+        The API recalculates official item prices, subtotal, discount validation,
+        total, pending amount, and change on the server. Client-submitted monetary
+        fields are treated as hints only and normalized from the product catalog
+        before persistence. Once the sale is completed, aggregated stock movements
+        are also written per product with type `venda`.
       requestBody:
         required: true
         content:
@@ -862,6 +996,66 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
         '403':
           $ref: '#/components/responses/ForbiddenError'
+  /api/v1/sales/{id}/receipt:
+    get:
+      tags:
+        - Sales
+      summary: Get sale receipt
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+        - name: locale
+          in: query
+          description: Receipt language.
+          schema:
+            type: string
+            enum:
+              - pt-BR
+              - en
+      responses:
+        '200':
+          description: Sale receipt payload and plain-text matrix layout.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaleReceipt'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+  /api/v1/sales/{id}/receipt/print:
+    post:
+      tags:
+        - Sales
+      summary: Print sale receipt
+      parameters:
+        - $ref: '#/components/parameters/ResourceId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaleReceiptPrintRequest'
+      responses:
+        '202':
+          description: Durable print request accepted; inspect job status.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaleReceiptPrintResult'
+        '200':
+          description: Receipt sent to the configured printer agent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SaleReceiptPrintResult'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
   /api/v1/sales/{id}/cancel:
     post:
       tags:
@@ -869,7 +1063,10 @@ paths:
       summary: Cancel sale
       description: >
         Cancels a sale when permitted by RBAC policy. Previously cancelled sales
-        return 404 to prevent idempotency violations.
+        return 404 to prevent idempotency violations. Successful cancellation also
+        writes the inverse stock movements with type `entrada`. If the cancellation
+        would create a customer credit balance because prior customer payments are
+        already registered, the API blocks the operation.
       parameters:
         - $ref: '#/components/parameters/ResourceId'
       requestBody:
@@ -885,6 +1082,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Sale'
+        '409':
+          $ref: '#/components/responses/ConflictError'
         '404':
           $ref: '#/components/responses/NotFoundError'
         '401':
@@ -1081,6 +1280,49 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
         '403':
           $ref: '#/components/responses/ForbiddenError'
+  /api/v1/admin/backups/preflight:
+    get:
+      tags: [Administration]
+      summary: Check backup tooling and storage readiness
+      description: Checks PostgreSQL 16 clients, writable storage, atomic publication support, free-space reserve and configured replica. Requires system:backup:read. A configured replica does not prove that its physical storage is off-host.
+      responses:
+        '200':
+          description: Backup tooling and configured storage are ready.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ready, serverMajor, pgDumpVersion, psqlVersion, primary, replica, retentionCount]
+                properties:
+                  ready: { type: boolean, enum: [true] }
+                  serverMajor: { type: integer, enum: [16] }
+                  pgDumpVersion: { type: string }
+                  psqlVersion: { type: string }
+                  primary:
+                    type: object
+                    properties:
+                      writable: { type: boolean }
+                      availableBytes: { type: integer, format: int64 }
+                  replica:
+                    type: object
+                    properties:
+                      configured: { type: boolean }
+                      required: { type: boolean }
+                      storage: { type: object, nullable: true }
+                  retentionCount: { type: integer }
+        '503':
+          description: Tooling, PostgreSQL compatibility or storage check failed. No readiness guarantee is issued.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ready: { type: boolean, enum: [false] }
+                  message: { type: string }
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
   /api/v1/admin/backup:
     post:
       tags:
@@ -1088,6 +1330,8 @@ paths:
       summary: Create backup
       description: Triggers a full database backup and registers the archive.
       responses:
+        '409':
+          $ref: '#/components/responses/ConflictError'
         '201':
           description: Backup created.
           content:
@@ -1117,6 +1361,8 @@ paths:
               required:
                 - file
       responses:
+        '409':
+          $ref: '#/components/responses/ConflictError'
         '201':
           description: Backup uploaded.
           content:
@@ -1137,6 +1383,8 @@ paths:
       parameters:
         - $ref: '#/components/parameters/BackupFilename'
       responses:
+        '409':
+          $ref: '#/components/responses/ConflictError'
         '204':
           description: Backup removed.
         '401':
@@ -1433,9 +1681,6 @@ components:
     ProductWrite:
       type: object
       properties:
-        legacy_code:
-          type: string
-          nullable: true
         name:
           type: string
         barcode:
@@ -1514,9 +1759,6 @@ components:
     CustomerWrite:
       type: object
       properties:
-        legacy_code:
-          type: string
-          nullable: true
         name:
           type: string
         cpf:
@@ -1639,7 +1881,9 @@ components:
         amount:
           type: number
           format: float
-          exclusiveMinimum: 0
+          minimum: 0.01
+          maximum: 999999999999.99
+          multipleOf: 0.01
         payment_date:
           type: string
           format: date
@@ -1857,11 +2101,27 @@ components:
           $ref: '#/components/schemas/CustomerSummary'
         payments:
           type: array
+          maxItems: 5000
           items:
             $ref: '#/components/schemas/CustomerPayment'
+        coverage:
+          type: object
+          properties:
+            complete:
+              type: boolean
+              enum: [true]
+            row_count:
+              type: integer
+              minimum: 0
+              maximum: 5000
+            row_limit:
+              type: integer
+              enum: [5000]
+          required: [complete, row_count, row_limit]
         summary:
           $ref: '#/components/schemas/CustomerPaymentsSummary'
       required:
+        - coverage
         - generated_at
         - company
         - customer
@@ -1915,6 +2175,10 @@ components:
           type: string
           nullable: true
         total:
+          type: number
+          format: float
+          nullable: true
+        pending_amount:
           type: number
           format: float
           nullable: true
@@ -2019,6 +2283,10 @@ components:
         emission_date:
           type: string
           format: date
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
         order_number:
           type: string
           nullable: true
@@ -2034,6 +2302,24 @@ components:
           type: string
           format: uuid
           nullable: true
+        payment_method:
+          type: string
+          enum:
+            - cash
+            - card
+            - bank
+            - other
+            - credit
+            - credit_with_entry
+          nullable: true
+        amount_paid:
+          type: number
+          format: float
+          nullable: true
+        change_amount:
+          type: number
+          format: float
+          nullable: true
         subtotal:
           type: number
           format: float
@@ -2041,6 +2327,9 @@ components:
           type: number
           format: float
         total:
+          type: number
+          format: float
+        pending_amount:
           type: number
           format: float
         status:
@@ -2083,25 +2372,46 @@ components:
         quantity:
           type: number
           format: float
-          minimum: 0
+          minimum: 0.001
+          maximum: 99999999999.999
+          multipleOf: 0.001
         unit_price:
           type: number
           format: float
           minimum: 0
+          maximum: 999999999999.99
+          multipleOf: 0.01
+          description: Optional client preview price. The API recalculates the official unit price from the catalog.
         total:
           type: number
           format: float
           nullable: true
+          minimum: 0
+          maximum: 999999999999.99
+          multipleOf: 0.01
+          description: Optional client preview line total. The API recalculates the official line total from the catalog.
       required:
         - product_id
         - quantity
-        - unit_price
     SaleCreate:
       type: object
+      description: >
+        The checkout request only needs product ids, quantities, discount, and
+        payment information. The API recalculates official catalog prices and
+        final totals before saving the sale. Calculation policy line-half-up-money-2-quantity-3/v1:
+        round each line half up to cents, then sum lines and subtract the discount.
+        Money uses at most 2 decimal places; quantity uses at most 3. Excess precision,
+        positive lines rounded to zero and numeric(14,scale) overflow receive HTTP 400.
+        payment_method and amount_paid are required and cannot be null. Cash/card/bank/other
+        require full settlement. Credit requires customer_id and zero payment; credit_with_entry
+        requires customer_id and a positive payment no greater than the total.
       properties:
         emission_date:
           type: string
           format: date
+        paid_at:
+          type: string
+          format: date-time
         order_number:
           type: string
           nullable: true
@@ -2117,18 +2427,54 @@ components:
           type: string
           format: uuid
           nullable: true
+        payment_method:
+          type: string
+          enum:
+            - cash
+            - card
+            - bank
+            - other
+            - credit
+            - credit_with_entry
+        amount_paid:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 999999999999.99
+          multipleOf: 0.01
+          description: Explicit amount tendered; never inferred by the API.
+        change_amount:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 999999999999.99
+          multipleOf: 0.01
+          nullable: true
+          description: Optional client preview field. The API recalculates the official change amount.
         subtotal:
           type: number
-          format: float
+          format: double
+          minimum: 0
+          maximum: 999999999999.99
+          multipleOf: 0.01
           nullable: true
+          description: Optional client preview subtotal. The API recalculates the official subtotal from the catalog.
         discount:
           type: number
-          format: float
+          format: double
+          minimum: 0
+          maximum: 999999999999.99
+          multipleOf: 0.01
           nullable: true
+          description: Requested absolute discount amount. The API validates it against the role percentage limit.
         total:
           type: number
-          format: float
+          format: double
+          minimum: 0
+          maximum: 999999999999.99
+          multipleOf: 0.01
           nullable: true
+          description: Optional client preview total. The API recalculates the official total from the catalog.
         source:
           type: string
           nullable: true
@@ -2142,12 +2488,167 @@ components:
             $ref: '#/components/schemas/SaleItemWrite'
       required:
         - items
+        - payment_method
+        - amount_paid
     SaleCancel:
       type: object
       properties:
         reason:
           type: string
           nullable: true
+    SaleReceiptCustomer:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        legacy_code:
+          type: string
+          nullable: true
+        name:
+          type: string
+        cpf:
+          type: string
+          nullable: true
+      required:
+        - id
+        - name
+    SaleReceiptSeller:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+      required:
+        - id
+        - name
+    SaleReceiptMeta:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        code:
+          type: string
+        emission_date:
+          type: string
+          format: date
+        paid_at:
+          type: string
+          format: date-time
+          nullable: true
+        order_number:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum:
+            - draft
+            - completed
+            - cancelled
+        subtotal:
+          type: number
+          format: float
+        discount:
+          type: number
+          format: float
+        total:
+          type: number
+          format: float
+        pending_amount:
+          type: number
+          format: float
+        payment_method:
+          type: string
+          enum:
+            - cash
+            - card
+            - bank
+            - other
+            - credit
+            - credit_with_entry
+          nullable: true
+        payment_term_name:
+          type: string
+          nullable: true
+        amount_paid:
+          type: number
+          format: float
+          nullable: true
+        change_amount:
+          type: number
+          format: float
+          nullable: true
+      required:
+        - id
+        - code
+        - emission_date
+        - status
+        - subtotal
+        - discount
+        - total
+    SaleReceipt:
+      type: object
+      properties:
+        company:
+          $ref: '#/components/schemas/CompanyInfo'
+        sale:
+          $ref: '#/components/schemas/SaleReceiptMeta'
+        customer:
+          allOf:
+            - $ref: '#/components/schemas/SaleReceiptCustomer'
+          nullable: true
+        seller:
+          allOf:
+            - $ref: '#/components/schemas/SaleReceiptSeller'
+          nullable: true
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SaleItem'
+        generated_at:
+          type: string
+          format: date-time
+        plain_text:
+          type: string
+      required:
+        - company
+        - sale
+        - items
+        - generated_at
+        - plain_text
+    SaleReceiptPrintRequest:
+      type: object
+      description: Queue mode requires request_id. Retry the same UUID for the same logical request; use a new UUID only for an explicit additional copy.
+      properties:
+        request_id: { type: string, format: uuid }
+        locale: { type: string, enum: [pt-BR, en] }
+        copies: { type: integer, minimum: 1, maximum: 10 }
+    SaleReceiptPrintResult:
+      type: object
+      description: Queue mode returns job_id/status/requested_at and never asserts physical printing. Legacy direct mode returns printed_at as its acknowledgement time.
+      properties:
+        receipt_code: { type: string }
+        printer_model: { type: string }
+        printed_at: { type: string, format: date-time }
+        job_id: { type: string, format: uuid }
+        status: { type: string, enum: [queued, claimed, spooling, submitted, failed, uncertain] }
+        requested_at: { type: string, format: date-time }
+        copies: { type: integer }
+      required: [receipt_code, printer_model, copies]
+    PrintJob:
+      type: object
+      description: Operator metadata only; content and claim_token are never included.
+      properties:
+        job_id: { type: string, format: uuid }
+        sale_id: { type: string, format: uuid }
+        status: { type: string, enum: [queued, claimed, spooling, submitted, failed, uncertain] }
+        copies: { type: integer }
+        receipt_code: { type: string }
+        requested_at: { type: string, format: date-time }
+        result_code: { type: string, nullable: true }
     LoginRequest:
       type: object
       properties:
@@ -2524,12 +3025,9 @@ components:
     LoginResponse:
       type: object
       properties:
-        token:
-          type: string
         user:
           $ref: '#/components/schemas/AuthenticatedUser'
       required:
-        - token
         - user
     ErrorResponse:
       type: object
@@ -2567,7 +3065,15 @@ components:
         - message
         - issues
   securitySchemes:
+    printAgentToken:
+      type: apiKey
+      in: header
+      name: x-print-agent-token
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: pos_auth

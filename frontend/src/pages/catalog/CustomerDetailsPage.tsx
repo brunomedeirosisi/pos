@@ -117,8 +117,9 @@ export function CustomerDetailsPage(): JSX.Element {
       );
       setRecentPayment(data);
       if (id) {
-        queryClient.invalidateQueries({ queryKey: ['customer', id] });
-        queryClient.invalidateQueries({ queryKey: ['customer-payments', id], exact: false });
+        // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+        void queryClient.invalidateQueries({ queryKey: ['customer', id] });
+        void queryClient.invalidateQueries({ queryKey: ['customer-payments', id], exact: false });
       }
       setPaymentModalOpen(false);
     },
@@ -206,7 +207,8 @@ export function CustomerDetailsPage(): JSX.Element {
 
   const handlePrintReceipt = (paymentId: string) => {
     if (!id) return;
-    navigate(`/catalog/customers/${id}/payments/${paymentId}/receipt`);
+    // BrowserRouter: a navegação não bloqueia esta ação da interface.
+    void navigate(`/catalog/customers/${id}/payments/${paymentId}/receipt`);
   };
 
   const handlePrintHistory = () => {
@@ -217,7 +219,8 @@ export function CustomerDetailsPage(): JSX.Element {
     if (normalizedPaymentFilters.method) params.set('method', normalizedPaymentFilters.method);
     params.set('sort', normalizedPaymentFilters.sort);
     const queryString = params.toString();
-    navigate(`/catalog/customers/${id}/payments/history${queryString ? `?${queryString}` : ''}`);
+    // BrowserRouter: a navegação não bloqueia esta ação da interface.
+    void navigate(`/catalog/customers/${id}/payments/history${queryString ? `?${queryString}` : ''}`);
   };
 
   const onSubmitPayment = paymentForm.handleSubmit((values) => {

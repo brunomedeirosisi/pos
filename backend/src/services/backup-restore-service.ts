@@ -1,5 +1,7 @@
+import { assertDestructiveOperationEnabled } from '../utils/destructive-operation-policy.js';
 import { query } from '../db.js';
-import { badRequest, notFound, HttpError } from '../errors.js';
+import { withBackupLock, type BackupLease } from './backup-lock.js';
+import { notFound, HttpError } from '../errors.js';
 import { getEnv } from '../config/env.js';
 import { logAudit } from '../utils/audit.js';
 import {
@@ -13,7 +15,7 @@ import {
 } from '../utils/backup.js';
 
 type Actor = {
-  userId: string;
+  userId: string | null;
   ipAddress?: string | null;
 };
 
@@ -21,8 +23,6 @@ type OperationStatus = 'running' | 'completed' | 'failed' | 'rolled_back' | 'war
 type OperationType = 'backup' | 'restore' | 'retention';
 
 const env = getEnv();
-const BACKUP_LOCK_KEY = 2_024_0917;
-let processLock = false;
 
 async function ensureOperationSchema(): Promise<void> {
   await query(`
@@ -94,30 +94,9 @@ async function finishOperation(
   );
 }
 
-async function withBackupLock<T>(work: () => Promise<T>): Promise<T> {
-  if (processLock) {
-    throw badRequest('backup operation already in progress');
-  }
-
-  processLock = true;
-  let advisoryLocked = false;
-  try {
-    const { rows } = await query<{ locked: boolean }>('select pg_try_advisory_lock($1) as locked', [BACKUP_LOCK_KEY]);
-    advisoryLocked = Boolean(rows[0]?.locked);
-    if (!advisoryLocked) {
-      throw badRequest('backup operation already in progress');
-    }
-
-    return await work();
-  } finally {
-    if (advisoryLocked) {
-      await query('select pg_advisory_unlock($1)', [BACKUP_LOCK_KEY]).catch(() => {});
-    }
-    processLock = false;
-  }
-}
-
-export async function enforceRetentionPolicy(actor: Actor | null, context: string): Promise<void> {
+export async function enforceRetentionPolicy(actor: Actor | null, context: string, lease?: BackupLease): Promise<void> {
+  if (!lease) return withBackupLock((ownedLease) => enforceRetentionPolicy(actor, context, ownedLease));
+  lease.assertHeld();
   const operationId = await createOperation('retention', actor, { context }, env.BACKUP_OPERATION_TIMEOUT_MS);
 
   try {
@@ -138,7 +117,9 @@ export async function enforceRetentionPolicy(actor: Actor | null, context: strin
 
     const deleted: string[] = [];
     for (const row of rows) {
+      lease.assertHeld();
       await deleteBackupFile(row.filename);
+      lease.assertHeld();
       await query('delete from system_backup where id = $1', [row.id]);
       deleted.push(row.filename);
     }
@@ -166,11 +147,12 @@ export async function enforceRetentionPolicy(actor: Actor | null, context: strin
 }
 
 export async function createManagedBackup(actor: Actor, prefix = 'backup'): Promise<BackupCreateResult> {
-  return withBackupLock(async () => {
+  return withBackupLock(async (lease) => {
     const operationId = await createOperation('backup', actor, { prefix }, env.BACKUP_OPERATION_TIMEOUT_MS);
 
     try {
-      const backup = await createBackupArchive(prefix, env.BACKUP_OPERATION_TIMEOUT_MS);
+      const backup = await createBackupArchive(prefix, env.BACKUP_OPERATION_TIMEOUT_MS, lease.signal);
+      lease.assertHeld();
 
       await query(
         `insert into system_backup (filename, size_bytes, created_by, checksum, metadata)
@@ -178,7 +160,7 @@ export async function createManagedBackup(actor: Actor, prefix = 'backup'): Prom
         [backup.filename, backup.sizeBytes, actor.userId, backup.checksum, JSON.stringify(backup.metadata)]
       );
 
-      await enforceRetentionPolicy(actor, 'backup:create');
+      await enforceRetentionPolicy(actor, 'backup:create', lease);
 
       await logAudit({
         userId: actor.userId,
@@ -210,7 +192,8 @@ export async function restoreBackupWithRollback({
   actor: Actor;
   filename: string;
 }): Promise<{ restored: boolean; rollbackApplied: boolean; operationId: string; snapshot: string; status: 'ok' | 'rolled_back' }> {
-  return withBackupLock(async () => {
+  assertDestructiveOperationEnabled('restore');
+  return withBackupLock(async (lease) => {
     const operationId = await createOperation(
       'restore',
       actor,
@@ -254,7 +237,8 @@ export async function restoreBackupWithRollback({
         ipAddress: actor.ipAddress ?? null,
       });
 
-      const snapshot = await createBackupArchive('snapshot', env.BACKUP_OPERATION_TIMEOUT_MS);
+      const snapshot = await createBackupArchive('snapshot', env.BACKUP_OPERATION_TIMEOUT_MS, lease.signal);
+      lease.assertHeld();
       snapshotFilename = snapshot.filename;
 
       await query(
@@ -274,7 +258,8 @@ export async function restoreBackupWithRollback({
         ]
       );
 
-      await enforceRetentionPolicy(actor, 'backup:pre-restore-snapshot');
+      // Retention during restore is deferred until target/snapshot pinning is delivered (TSK-010).
+      lease.assertHeld();
 
       await restoreBackupArchive({
         filename: target.filename,

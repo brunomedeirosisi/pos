@@ -1,0 +1,298 @@
+{
+  "schemaVersion": 1,
+  "phase": "4 - first cut",
+  "recordedAt": "2026-10-22T13:12:47.601Z",
+  "baseGitHead": "ac85924e7a94e836805e770c60db8141c783bca6",
+  "baseWasDirty": true,
+  "scope": [
+    "TSK-024 / TEC-024 payment-history-report cut",
+    "Complete bounded report, repeatable-read snapshot and exact row reconciliation",
+    "Frontend reconciliation before rendering table or Print action",
+    "Calendar-date filter bindings stable in America/Sao_Paulo"
+  ],
+  "reportContract": {
+    "rowLimit": 5000,
+    "completeSelection": true,
+    "legacyPaging": "validated but does not truncate report",
+    "listPagination": "preserved",
+    "coverageFields": [
+      "complete",
+      "row_count",
+      "row_limit"
+    ],
+    "aboveLimit": {
+      "status": 413,
+      "message": "payment_report_limit_exceeded"
+    },
+    "inconsistentOrUnrepresentableAmounts": {
+      "status": 422,
+      "message": "payment_report_inconsistent"
+    },
+    "partialReportOnError": false
+  },
+  "tests": {
+    "backend": 138,
+    "frontend": 67,
+    "integration": 51,
+    "normalRegressions": 3,
+    "passedTotal": 259,
+    "expectedFailures": 1,
+    "remainingExpectedFailure": "TSK-016 anonymous checkout without settlement",
+    "newReportIntegrationCases": 13,
+    "newFrontendCases": 14,
+    "agent": "unchanged; not rerun"
+  },
+  "validation": [
+    {
+      "workspace": "backend",
+      "command": "npm run lint",
+      "exitCode": 0
+    },
+    {
+      "workspace": "backend",
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    {
+      "workspace": "backend",
+      "command": "npm test",
+      "exitCode": 0
+    },
+    {
+      "workspace": "frontend",
+      "command": "npm run lint",
+      "exitCode": 0
+    },
+    {
+      "workspace": "frontend",
+      "command": "npm run typecheck",
+      "exitCode": 0
+    },
+    {
+      "workspace": "frontend",
+      "command": "npm test",
+      "exitCode": 0
+    },
+    {
+      "command": "node infra/test-disposable.mjs --images --backups",
+      "exitCode": 0
+    },
+    {
+      "command": "OpenAPI YAML parse, report coverage and 413/422 contract assertions",
+      "exitCode": 0
+    },
+    {
+      "command": "node infra/check-repository-secrets.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "git diff --check -- [changed tracked product paths]",
+      "exitCode": 0
+    }
+  ],
+  "negativeProof": {
+    "target": "pre-cut report use case from dirty workspace snapshot",
+    "disposableProject": "pos-phase4-regression-proof",
+    "selectedCount": 1001,
+    "receivedCount": 1000,
+    "result": "failed as expected",
+    "correctedSourceRestored": true,
+    "disposableResourcesRemoved": true
+  },
+  "integrationScenarios": [
+    "Complete selections at 0/100/101/200/1001/5000 rows",
+    "5001 rows: HTTP 413 without a partial report; narrowing filters succeeds",
+    "Existing list pages and empty last page preserve total count; report paging never truncates",
+    "Calendar filters forced to America/Sao_Paulo, method filter, descending ties, customer isolation with equal names",
+    "Concurrent insertion leaves 1002 database rows but report retains 1001-row snapshot and matching summaries",
+    "Inconsistent repository aggregate and a JSON numeric aggregate losing its last cent: HTTP 422 without report",
+    "Denied permission, absent customer and invalid date interval"
+  ],
+  "frontendScenarios": [
+    "Render 1001 unique rows with last reference present and Print action",
+    "Block table and Print action on a legacy 1000-row truncated response",
+    "Reject incorrect totals, duplicate ids, invalid amounts and inconsistent coverage",
+    "Accept empty selection and complete older response without coverage",
+    "Localize limit and integrity errors in pt-BR/en"
+  ],
+  "images": {
+    "api": "sha256:f33d326e6c47a11dbad88f1ab526e8449d8b6c1141719a8f2960ddddb2083196",
+    "frontend": "sha256:698f0e9b7c2329b226e7a715a8d4681a8584468d76e869d5f720f02e00b9df99"
+  },
+  "backupRecheck": {
+    "postgres": "pg_dump (PostgreSQL) 16.15",
+    "psql": "psql (PostgreSQL) 16.15",
+    "uid": 10001,
+    "backupMs": 121,
+    "simulationMs": 185,
+    "restored": {
+      "users": 2,
+      "customers": 1,
+      "products": 1,
+      "sales": 1,
+      "saleItems": 1,
+      "stockMovements": 1,
+      "foreignKeys": 19
+    },
+    "syntheticOnly": true,
+    "backups": [
+      {
+        "filename": "backup_2026-10-22-13-10-42_aad20462-ed5d-4556-b6c2-49cffb7fb8eb.zip",
+        "checksum": "32f64af9aa218024fa19639ed7987ed8f04caec0fc43778cdd6d3215c29f70d1",
+        "sizeBytes": 7377
+      },
+      {
+        "filename": "backup_2026-10-22-13-10-42_e6a0a5c0-ed4f-460c-b20c-e2116b843c02.zip",
+        "checksum": "cd4096135cc609e240eca6713bdcc698a0cf49a0faf4ad4bfb3db679bc1034dc",
+        "sizeBytes": 7897
+      }
+    ],
+    "lockConflicts": [
+      "create",
+      "upload",
+      "delete",
+      "retention"
+    ],
+    "storageFailures": [
+      "readonly",
+      "free-space-reserve",
+      "replica-checksum",
+      "replica-unwritable",
+      "ENOSPC-cleanup",
+      "restore-size-budget"
+    ],
+    "sourceDatabasePreserved": true,
+    "uploadAndDeleteVerified": true,
+    "persistenceAfterApiRecreation": true,
+    "restoredAfterApiRecreation": true
+  },
+  "preservation": {
+    "noBaselineFilesDeleted": true,
+    "secretsUnchanged": true,
+    "manifestsAndLockfilesUnchanged": true,
+    "existingSyntheticDataFiles": 21,
+    "existingSyntheticDataUnchanged": true,
+    "agentSourceUnchanged": true,
+    "legacyImportIsolationUnchanged": true,
+    "checkoutArithmeticUnchanged": true,
+    "integrityGuardsMatch": true
+  },
+  "limits": [
+    "No browser-driven E2E, physical print pagination check, screen-reader or load test",
+    "Lists/selectors beyond page 1 remain pending under TSK-024",
+    "TSK-030 cache invalidation/direct references pending",
+    "TSK-026 business audit/log minimization and general TSK-031 error handling pending",
+    "Printer topology/authentication/idempotency TSK-034 and accessibility TSK-036 pending",
+    "Global debt/payment formulas unchanged; TSK-012 net-payment accounting and other phase-3 financial controls remain pending",
+    "Recovery, safe overwrite/import publication and input/job durability gates remain pending"
+  ],
+  "deployment": {
+    "schemaMigration": false,
+    "newNpmDependency": false,
+    "userDatabaseTouched": false,
+    "historyCorrection": false,
+    "commit": false,
+    "push": false,
+    "deploy": false,
+    "databaseRestoreEnabled": false,
+    "legacyOverwriteEnabled": false,
+    "printerNetworkExposureChanged": false
+  },
+  "files": [
+    {
+      "path": "backend/openapi/openapi.yaml",
+      "sha256": "060d31a354ba00a08cf2b5b648307bcdb132968723c1921d62007a7e70bee3bf",
+      "action": "modified"
+    },
+    {
+      "path": "backend/src/modules/customer-payments/application/customer-payments-use-cases.ts",
+      "sha256": "a60e4ff2155687661d9982b7bc0a9c93510a9658fb649ab5bcff9ba5966c4876",
+      "action": "modified"
+    },
+    {
+      "path": "backend/src/modules/customer-payments/contracts/customer-payments-contracts.ts",
+      "sha256": "0066765abed995825b16603e22625957964b966cafc7b6f790a3bf097a0fa345",
+      "action": "modified"
+    },
+    {
+      "path": "backend/src/modules/customer-payments/domain/customer-payments-domain.ts",
+      "sha256": "bec673b6ec5175d85e0aa5671b4e1e08af5f7ea4dafcb77265d36f5f2d13ed12",
+      "action": "modified"
+    },
+    {
+      "path": "backend/src/modules/customer-payments/domain/payment-report-integrity.ts",
+      "sha256": "32257cbe5df1fa4ceee145ec10006fa61ce68331dad2b551c7ceedc0a6bc0a00",
+      "action": "created"
+    },
+    {
+      "path": "backend/test/integration/payment-report.test.ts",
+      "sha256": "bdab30ed702a382b083388bf4a98fa399235199cea01414501342c03a2a4c501",
+      "action": "created"
+    },
+    {
+      "path": "docs/payments.md",
+      "sha256": "ebe9bc30b1091a0519335eb5bacdd7eb0c5a5ce2b549f7c2be99777f79c0066a",
+      "action": "modified"
+    },
+    {
+      "path": "docs/technical-audit/02-inventario-problemas.md",
+      "sha256": "e10e7187cdbf726183b6c5c406ad767a8cc83077751e09520742227003346267",
+      "action": "modified"
+    },
+    {
+      "path": "docs/technical-audit/03-backlog-tecnico.md",
+      "sha256": "431c440cfc37a3c49ff90d4b8bab9787ed9093f7801d65f3c3ca806ec512d628",
+      "action": "modified"
+    },
+    {
+      "path": "docs/technical-audit/04-roadmap-implementacao.md",
+      "sha256": "6b3c474ae054902f4495d3d25edeb45d4e4f304e78647e0e583598c9d884d6fd",
+      "action": "modified"
+    },
+    {
+      "path": "docs/technical-audit/14-fase-quatro-primeiro-corte.md",
+      "sha256": "777ad211fa6bbdad51ee80a8638a5f4af2f2aa64386944946124f70287fbe661",
+      "action": "created"
+    },
+    {
+      "path": "frontend/src/api.ts",
+      "sha256": "8595d471160815a507ee8ac73773969d596480918f5f47aecbd7a917323b6bc5",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/lib/i18n.ts",
+      "sha256": "9e670a0550d11260892d339528b00be3c1e4f6bb21eef6df8ff76a18cbfa9b76",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/pages/catalog/CustomerPaymentHistoryReportPage.test.tsx",
+      "sha256": "aa66e2a7249400ad120ae5b3990a517dcc720eda1bf67ce3c21ba7d5a87986d7",
+      "action": "created"
+    },
+    {
+      "path": "frontend/src/pages/catalog/CustomerPaymentHistoryReportPage.tsx",
+      "sha256": "24aef90f11f81622da0401c6331bf9babd82bd4f25a30386819825c6cf1988d0",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/styles.css",
+      "sha256": "a31e2b4288fc43e489950a6677d2ed46230dc1e229bf1328a698ce7810c1f9b2",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/types/catalog.ts",
+      "sha256": "5e543845bf9c40bfa9458b69875e9e13f21c3f3064f533be7b8a256b1577e28d",
+      "action": "modified"
+    },
+    {
+      "path": "frontend/src/utils/payment-report-integrity.ts",
+      "sha256": "32257cbe5df1fa4ceee145ec10006fa61ce68331dad2b551c7ceedc0a6bc0a00",
+      "action": "created"
+    },
+    {
+      "path": "README.md",
+      "sha256": "297c58fe638d9b73aed9dd05f98c099fd309b69dd74daf70529301743ac1fb83",
+      "action": "modified"
+    }
+  ]
+}

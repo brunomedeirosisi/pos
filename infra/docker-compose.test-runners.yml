@@ -1,0 +1,39 @@
+# Merge with docker-compose.test.yml; never with the application Compose.
+services:
+  redis:
+    # Keep test DB/Redis loopback guards unchanged by sharing only this
+    # disposable network namespace. No host Redis port is needed in this mode.
+    network_mode: service:db
+    ports: !reset []
+    depends_on:
+      db: { condition: service_healthy }
+  api:
+    environment:
+      REDIS_HOST: db
+  backend-tests:
+    profiles: ['runners']
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.tests
+      args: { WORKSPACE: backend }
+    network_mode: service:db
+    environment:
+      TEST_POSTGRES_PORT: 5432
+      TEST_REDIS_PORT: 6379
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+  frontend-tests:
+    profiles: ['runners']
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.tests
+      args: { WORKSPACE: frontend }
+    network_mode: none
+  agent-tests:
+    profiles: ['runners']
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.tests
+      args: { WORKSPACE: agent }
+    network_mode: none

@@ -68,11 +68,14 @@ create table if not exists payment_term (
 create table if not exists sale (
   id uuid primary key default gen_random_uuid(),
   emission_date date not null default now(),
-  paid_at timestamptz,
+  paid_at timestamptz not null default now(),
   order_number text,
   seller_id uuid references seller(id),
   customer_id uuid references customer(id),
   payment_term_id uuid references payment_term(id),
+  payment_method text check (payment_method in ('cash', 'card', 'bank', 'other', 'credit', 'credit_with_entry')),
+  amount_paid numeric(14,2),
+  change_amount numeric(14,2) not null default 0,
   subtotal numeric(14,2),
   discount numeric(14,2),
   refund_amount numeric(14,2) not null default 0,
@@ -109,6 +112,7 @@ create index if not exists idx_sale_item_product on sale_item(product_id);
 create table if not exists stock_movement (
   id uuid primary key default gen_random_uuid(),
   product_id uuid not null references product(id) on delete cascade,
+  sale_id uuid references sale(id) on delete set null,
   date date not null default now(),
   type text not null,
   quantity numeric(14,3) not null,
@@ -118,6 +122,8 @@ create table if not exists stock_movement (
 );
 
 create index if not exists idx_stock_movement_product on stock_movement(product_id);
+create index if not exists idx_stock_movement_sale on stock_movement(sale_id);
+create index if not exists idx_stock_movement_sale_product_type on stock_movement(sale_id, product_id, type);
 create index if not exists idx_stock_movement_product_date on stock_movement(product_id, date desc);
 
 create index if not exists idx_product_name_trgm on product using gin (name gin_trgm_ops);
@@ -235,8 +241,3 @@ on conflict (name) do update set
   permissions = excluded.permissions,
   discount_limit = excluded.discount_limit;
 
-insert into app_user (email, password_hash, full_name, role_id)
-select 'admin@localhost.com', crypt('magazine', gen_salt('bf', 10)), 'System Administrator', id
-from app_role
-where name = 'admin'
-on conflict (email) do nothing;

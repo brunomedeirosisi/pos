@@ -1,66 +1,60 @@
 name: CI
-
 on:
   pull_request:
   push:
-    branches:
-      - main
-      - master
-
+    branches: [main, master]
 permissions:
   contents: read
-
 jobs:
-  backend:
-    name: Backend
+  workspaces:
+    name: Validate ${{ matrix.workspace }}
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        workspace: [backend, frontend, agent]
     defaults:
       run:
-        working-directory: backend
+        working-directory: ${{ matrix.workspace }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
-
-      - name: Install
-        run: npm install
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Test
-        run: npm test
-
-  frontend:
-    name: Frontend
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: ${{ matrix.workspace }}/package-lock.json
+      - run: npm install --global npm@12.2.0 --ignore-scripts --no-audit --no-fund
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run lint
+        if: matrix.workspace != 'agent'
+      - run: npm run lint:rules
+        if: matrix.workspace != 'agent'
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build --if-present
+      - run: npm audit --audit-level=low
+      - name: Repository secret guard
+        if: matrix.workspace == 'backend'
+        run: node ../infra/check-repository-secrets.mjs
+  disposable:
+    name: PostgreSQL, Redis and images
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: 20
-
-      - name: Install
-        run: npm install
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Test
-        run: npm test
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Containerized workspaces, seeds, images and backup recovery
+        run: node infra/test-disposable.mjs --docker --images --backups --seeds
+  installer-windows:
+    name: Windows installer contracts and launcher
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - name: Windows PowerShell 5.1, DPAPI and launcher tests
+        shell: powershell
+        run: ./infra/installer/Test-Installer.ps1 -NodePath (Get-Command node.exe).Source

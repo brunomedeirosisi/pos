@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-22T21:57:35.631Z",
+  "request": "Implementar instalador Windows para dois caixas e uma impressora, com documentação técnica e de uso",
+  "baseGitHead": "ac85924e7a94e836805e770c60db8141c783bca6",
+  "baseWasDirty": true,
+  "version": "1.0.0-store.1",
+  "distribution": {
+    "path": "artifacts/POS-Loja-1.0.0-store.1.zip",
+    "manifestVersion": "1.0.0-store.1",
+    "filesVerified": 22,
+    "zipSha256": "a5aa2030b78091b0476a039bb7f5b97befab151483399fa24dcb8cbda43833df",
+    "zipSize": 284337240,
+    "passed": true,
+    "codeSigned": false,
+    "nodeVersion": "24.21.0",
+    "nodeArchiveSha256": "158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541",
+    "images": {
+      "proxy": "sha256:3067cc4e02c091399edbd5d65f85a3ff4d511574aecadb47f280c3761e68852e",
+      "db": "sha256:81bd698b4594e751a3269e4dcd3e03a4a0ec0daf7b72e7aa1abd43cce9887542",
+      "api": "sha256:a4fb8b2dc267b8aaf090903d8cb4e8ac66e7ee3fc851f8ec0d0785ae0eac884e",
+      "redis": "sha256:4df5c34dc41256fc4ed293482cb34281e17d133077e9aa3c6a87fda60a356c65",
+      "frontend": "sha256:87aeb1bd92dbe7c38b3cf87ff9a5c5c35129866f1bdd2fde33566f5707fdbfcc"
+    },
+    "bundleMatchesCurrentScriptsAndGuides": true
+  },
+  "tests": {
+    "docker": {
+      "command": "node infra/test-disposable.mjs --docker --images --backups",
+      "exitCode": 0,
+      "backendUnit": 143,
+      "backendIntegration": 74,
+      "backendRegression": 4,
+      "measurementControls": 7,
+      "frontend": 67,
+      "agent": 7,
+      "total": 302,
+      "failed": 0,
+      "skipped": 0,
+      "additionalLintAndEmptySelectionControls": 16,
+      "lint": "passed",
+      "typechecks": "passed",
+      "builds": "passed",
+      "seeds": {
+        "command": "node infra/test-disposable.mjs --docker --images --backups --seeds (primeira execução)",
+        "performance": "passed",
+        "phase4": "passed",
+        "note": "Seeds passaram antes da falha inicial de status HTTP; a suíte final foi repetida sem --seeds porque os seeds não mudaram."
+      },
+      "realBackupRestoreAndApiRecreation": true
+    },
+    "windows": {
+      "command": "infra/installer/Test-Installer.ps1 -NodePath <Node Windows>",
+      "passed": 58,
+      "failed": 0,
+      "real": [
+        "PowerShell parser",
+        "DPAPI CurrentUser",
+        "private DACL",
+        "native argument quoting",
+        "C# compilation and launcher",
+        "tamper rejection before script execution",
+        "hidden WinForms construction",
+        "HTTPS retry and identity check"
+      ],
+      "mocked": [
+        "Docker install/commands",
+        "certificate trust",
+        "firewall",
+        "startup shortcuts",
+        "printer output"
+      ]
+    },
+    "store": {
+      "version": "1.0.0-store.1",
+      "atUtc": "2026-10-22T21:56:25.397Z",
+      "project": "pos-installer-smoke",
+      "images": {
+        "proxy": "sha256:3067cc4e02c091399edbd5d65f85a3ff4d511574aecadb47f280c3761e68852e",
+        "db": "sha256:81bd698b4594e751a3269e4dcd3e03a4a0ec0daf7b72e7aa1abd43cce9887542",
+        "api": "sha256:a4fb8b2dc267b8aaf090903d8cb4e8ac66e7ee3fc851f8ec0d0785ae0eac884e",
+        "redis": "sha256:4df5c34dc41256fc4ed293482cb34281e17d133077e9aa3c6a87fda60a356c65",
+        "frontend": "sha256:87aeb1bd92dbe7c38b3cf87ff9a5c5c35129866f1bdd2fde33566f5707fdbfcc"
+      },
+      "imagesLoadedFromArchive": false,
+      "httpsIdentityVerified": true,
+      "independentSessions": 2,
+      "emptyInitialCatalog": true,
+      "sales": 2,
+      "submittedJobs": 2,
+      "requestDeduplicated": true,
+      "uncertainJobNotReprinted": true,
+      "openApiLoaded": true,
+      "persistedAfterApiRecreation": true,
+      "noJournalReprint": true,
+      "replicatedBackup": true,
+      "replicaSha256": "47ee460f5e8c18e2ee7ea295c74c6d1c096f56a9d715ba51e126028a2b5a5226",
+      "bootstrapRemoved": true,
+      "physicalPrinting": "simulated",
+      "windowsGlobalChanges": false,
+      "passed": true,
+      "note": "As imagens do mesmo images.tar já tinham sido carregadas nas primeiras tentativas. O ensaio final reutilizou e verificou cada ID; não houve mudança de imagem entre essas tentativas."
+    },
+    "remoteCi": "configured; not executed in this session"
+  },
+  "bugsFixed": [
+    "HTTP 503 was incorrectly sanitized to status 500; preserve status without leaking details",
+    "Docker dynamic IP allocation could consume the static reverse-proxy address; reserve dynamic upper half of subnet",
+    "HTTPS by IP through Docker NAT needed default_sni for clients without SNI",
+    "Wait for initial HTTPS certificate issuance, preserve CA/UUID validation and use TLS 1.2 in PowerShell 5.1",
+    "PowerShell WinForms coordinate expression required explicit parentheses",
+    "Use read-only ZIP entry streams and dispose launcher process before packaging; ZIP entry names use forward slashes"
+  ],
+  "data": {
+    "productionSeed": "none; real release smoke confirmed empty catalog",
+    "existingEnvAndPosDataUnchanged": true,
+    "protectedInputCount": 23,
+    "actualStoreInstalled": false,
+    "windowsGlobalChanges": false
+  },
+  "limits": [
+    "No physical two-PC or printer test; follow HOMOLOGACAO.md",
+    "No signed commercial installer certificate provided; package is unsigned",
+    "Docker/WSL, assigned private IP, printer driver, login context and real off-host backup must be prepared/homologated",
+    "Business and recovery gates in the existing roadmap remain pending; restore/overwrite disabled"
+  ],
+  "logs": [
+    "docs/test-evidence/installer-docker-20261022.log.gz",
+    "docs/test-evidence/installer-windows-20261022.log.gz",
+    "docs/test-evidence/installer-store-20261022.log.gz"
+  ]
+}

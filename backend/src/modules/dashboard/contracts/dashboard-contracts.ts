@@ -6,7 +6,11 @@ export type DashboardChannel = (typeof dashboardChannelValues)[number];
 const optionalDateSchema = z
   .string()
   .trim()
-  .min(1)
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD')
+  .refine((value) => {
+    const parsed = new Date(value);
+    return Number(value.slice(0, 4)) > 0 && !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+  }, 'Invalid calendar date')
   .pipe(z.coerce.date())
   .optional();
 
@@ -22,7 +26,9 @@ const optionalChannelSchema = z
 const dashboardFilterObjectSchema = z.object({
   startDate: optionalDateSchema,
   endDate: optionalDateSchema,
-  timezone: z.string().trim().min(1).max(80).optional(),
+  timezone: z.string().trim().min(1).max(80).refine((value) => {
+    try { new Intl.DateTimeFormat('en', { timeZone: value }); return true; } catch { return false; }
+  }, 'Invalid timezone').optional(),
   storeId: z.string().trim().min(1).max(120).optional(),
   sellerId: optionalUuidSchema,
   categoryId: optionalUuidSchema,
@@ -31,9 +37,21 @@ const dashboardFilterObjectSchema = z.object({
 });
 
 function withDateRangeRefinement<T extends z.ZodTypeAny>(schema: T): z.ZodEffects<T> {
-  return schema.refine((value: any) => !value.startDate || !value.endDate || value.startDate <= value.endDate, {
-    message: 'startDate must be less than or equal to endDate',
-    path: ['startDate'],
+  return schema.superRefine((value: any, context) => {
+    const timezone = value.timezone ?? 'America/Recife';
+    let today: string;
+    try {
+      const parts = new Intl.DateTimeFormat('en', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+      const part = (key: string) => parts.find((item) => item.type === key)!.value;
+      today = `${part('year')}-${part('month')}-${part('day')}`;
+    } catch { return; } // The timezone field already carries the validation issue.
+    const start = value.startDate ?? new Date(`${today.slice(0, 7)}-01`);
+    const end = value.endDate ?? new Date(today);
+    if (!(start instanceof Date) || !(end instanceof Date)) return;
+    const days = (end.getTime() - start.getTime()) / 86400000;
+    if (days < 0 || days >= 366) {
+      context.addIssue({ code: z.ZodIssueCode.custom, path: ['startDate'], message: 'Date range must be ordered and contain at most 366 days' });
+    }
   });
 }
 

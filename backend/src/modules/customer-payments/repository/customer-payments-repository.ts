@@ -70,6 +70,7 @@ export interface CustomerPaymentsRepository {
   ): Promise<CustomerPaymentInsertRecord>;
   getPaymentById(customerId: string, paymentId: string, client?: PoolClient): Promise<CustomerPaymentRecord | null>;
   getPaidBefore(customerId: string, paymentId: string, paymentDate: Date, createdAt: Date, client?: PoolClient): Promise<number>;
+  getSalesPaidBefore(customerId: string, createdAt: Date, client?: PoolClient): Promise<number>;
 }
 
 export class PgCustomerPaymentsRepository implements CustomerPaymentsRepository {
@@ -97,7 +98,11 @@ export class PgCustomerPaymentsRepository implements CustomerPaymentsRepository 
     const { rows } = await query<{ total_charges: string | null; total_paid: string | null }>(
       `select
          (select coalesce(sum(s.total), 0) from sale s where s.customer_id = $1 and s.status = 'completed') as total_charges,
-         (select coalesce(sum(cp.amount), 0) from customer_payment cp where cp.customer_id = $1) as total_paid`,
+         (
+           (select coalesce(sum(s.amount_paid), 0) from sale s where s.customer_id = $1 and s.status = 'completed')
+           +
+           (select coalesce(sum(cp.amount), 0) from customer_payment cp where cp.customer_id = $1)
+         ) as total_paid`,
       [id],
       client
     );
@@ -285,6 +290,20 @@ export class PgCustomerPaymentsRepository implements CustomerPaymentsRepository 
            or (cp.payment_date = $2 and cp.created_at = $3 and cp.id < $4)
          )`,
       [customerId, paymentDate, createdAt, paymentId],
+      client
+    );
+
+    return Number(rows[0]?.total ?? 0);
+  }
+
+  async getSalesPaidBefore(customerId: string, createdAt: Date, client?: PoolClient): Promise<number> {
+    const { rows } = await query<{ total: string | null }>(
+      `select coalesce(sum(s.amount_paid), 0) as total
+       from sale s
+       where s.customer_id = $1
+         and s.status = 'completed'
+         and s.paid_at <= $2`,
+      [customerId, createdAt],
       client
     );
 

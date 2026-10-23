@@ -1,7 +1,10 @@
 import type { Request, RequestHandler } from 'express';
 import { Counter, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
+import { timingSafeEqual } from 'node:crypto';
+import { asyncHandler } from '../utils/async-handler.js';
 
-const registry = new Registry();
+export const metricsRegistry = new Registry();
+const registry = metricsRegistry;
 
 collectDefaultMetrics({
   register: registry,
@@ -30,28 +33,29 @@ const errorCounter = new Counter({
   registers: [registry],
 });
 
-function resolveRoute(req: Request): string {
+function resolveRoute(req: Request, statusCode: number): string {
   if (!req.route?.path) {
-    return req.path;
+    return statusCode === 401 ? '__unauthenticated__' : '__unmatched__';
   }
 
   const joined = `${req.baseUrl}${String(req.route.path)}`.replace(/\/{2,}/g, '/');
-  return joined || req.path;
+  return joined || '__unmatched__';
 }
 
 export const metricsMiddleware: RequestHandler = (req, res, next) => {
   const startedAt = process.hrtime.bigint();
 
   res.on('finish', () => {
-    const route = resolveRoute(req);
+    const route = resolveRoute(req, res.statusCode);
+    const method = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'].includes(req.method) ? req.method : 'OTHER';
     const statusCode = String(res.statusCode);
     const durationSeconds = Number(process.hrtime.bigint() - startedAt) / 1_000_000_000;
 
-    requestCounter.inc({ method: req.method, route, status_code: statusCode });
-    requestDuration.observe({ method: req.method, route, status_code: statusCode }, durationSeconds);
+    requestCounter.inc({ method, route, status_code: statusCode });
+    requestDuration.observe({ method, route, status_code: statusCode }, durationSeconds);
 
     if (res.statusCode >= 500) {
-      errorCounter.inc({ method: req.method, route });
+      errorCounter.inc({ method, route });
     }
   });
 
@@ -64,10 +68,12 @@ function isMetricsTokenValid(req: Request): boolean {
     return process.env.NODE_ENV !== 'production';
   }
 
-  return req.header('x-metrics-token') === expected;
+  const actual = Buffer.from(req.header('x-metrics-token') ?? '');
+  const secret = Buffer.from(expected);
+  return actual.length === secret.length && timingSafeEqual(actual, secret);
 }
 
-export const metricsHandler: RequestHandler = async (req, res) => {
+export const metricsHandler: RequestHandler = asyncHandler(async (req, res) => {
   if (!isMetricsTokenValid(req)) {
     res.status(401).json({ message: 'unauthorized' });
     return;
@@ -75,5 +81,5 @@ export const metricsHandler: RequestHandler = async (req, res) => {
 
   res.setHeader('Content-Type', registry.contentType);
   res.send(await registry.metrics());
-};
+});
 

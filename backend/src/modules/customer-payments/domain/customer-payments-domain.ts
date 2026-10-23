@@ -81,12 +81,12 @@ export function buildPaymentFilterClauses(customerId: string, filters: PaymentLi
   const conditions = ['p.customer_id = $1'];
 
   if (filters.start_date) {
-    params.push(filters.start_date);
+    params.push(toDateOnly(filters.start_date));
     conditions.push(`p.payment_date >= $${params.length}`);
   }
 
   if (filters.end_date) {
-    params.push(filters.end_date);
+    params.push(toDateOnly(filters.end_date));
     conditions.push(`p.payment_date <= $${params.length}`);
   }
 

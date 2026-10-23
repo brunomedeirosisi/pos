@@ -1,0 +1,70 @@
+name: pos-phase0-tests
+services:
+  db:
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    environment:
+      POSTGRES_USER: pos_test
+      POSTGRES_PASSWORD: synthetic-test-password
+      POSTGRES_DB: pos_phase0_test
+    ports:
+      - '127.0.0.1::5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ../backend/sql/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U pos_test -d pos_phase0_test']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  redis:
+    image: redis:7-alpine@sha256:892022f9f18c26c92c30e15194d132f90044af87b94a491a75429bbc3982eab1
+    command: ['redis-server', '--appendonly', 'no', '--save', '']
+    ports:
+      - '127.0.0.1::6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  api:
+    profiles: ['images']
+    build: ../backend
+    environment:
+      NODE_ENV: production
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: pos_test
+      POSTGRES_PASSWORD: synthetic-test-password
+      POSTGRES_DB: pos_phase0_test
+      REDIS_HOST: redis
+      JWT_SECRET: synthetic_jwt_key_for_disposable_tests_only_2026
+      METRICS_TOKEN: synthetic_metrics_key_for_disposable_tests_2026
+      CORS_ALLOWED_ORIGINS: http://localhost
+      BOOTSTRAP_ADMIN_EMAIL: phase0@example.test
+      BOOTSTRAP_ADMIN_PASSWORD: synthetic_admin_password_only_2026
+      BOOTSTRAP_ADMIN_FULL_NAME: Phase Zero Test
+      IMPORT_PATH: /tmp/pos-imports
+      BACKUP_PATH: /var/backups/pos
+      BACKUP_REPLICA_PATH: /var/backups/replica
+      BACKUP_REQUIRE_REPLICA: 'true'
+    volumes:
+      - test_backups:/var/backups/pos
+      - test_backup_replicas:/var/backups/replica
+      - test_readonly:/var/backups/readonly:ro
+    tmpfs:
+      - /var/backups/limited:size=1m,uid=10001,gid=10001,mode=0700
+    ports:
+      - '127.0.0.1::8080'
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+  frontend:
+    profiles: ['images']
+    build: ../frontend
+    ports:
+      - '127.0.0.1::8080'
+volumes:
+  test_backups: {}
+  test_backup_replicas: {}
+  test_readonly: {}

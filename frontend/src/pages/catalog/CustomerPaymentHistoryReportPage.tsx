@@ -1,3 +1,4 @@
+import { isCompletePaymentReport } from '../../utils/payment-report-integrity';
 import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -50,12 +51,13 @@ export function CustomerPaymentHistoryReportPage(): JSX.Element {
     return <div className="printable-page">{t('common.loading')}</div>;
   }
 
-  if (reportQuery.isError || !reportQuery.data) {
+  const completeReport = reportQuery.data && isCompletePaymentReport(reportQuery.data);
+  if (reportQuery.isError || !reportQuery.data || !completeReport) {
     const error = reportQuery.error as Error | undefined;
     return (
       <div className="printable-page">
         <div className="printable-card">
-          <p className="empty-state">{error?.message ?? t('customers.paymentHistoryError')}</p>
+          <p className="empty-state">{error?.message ?? t('customers.paymentHistoryIncomplete')}</p>
           <button type="button" className="button secondary" onClick={() => navigate(-1)}>
             {t('common.back')}
           </button>
@@ -99,6 +101,7 @@ export function CustomerPaymentHistoryReportPage(): JSX.Element {
           <p>{customer.phone ?? '-'}</p>
         </div>
 
+        <p role="status">{t('customers.completePaymentHistory', { count: payments.length })}</p>
         <div className="receipt-grid">
           <div>
             <span>{t('customers.totalCharges')}</span>

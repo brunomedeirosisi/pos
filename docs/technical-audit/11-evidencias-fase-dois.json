@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 1,
+  "phase": "2 - first cut",
+  "recordedAt": "2026-10-22T11:28:07.831Z",
+  "baseGitHead": "ac85924e7a94e836805e770c60db8141c783bca6",
+  "baseWasDirty": true,
+  "scope": [
+    "TSK-019 / TEC-019: global serialization on the SQL session that owns the lock",
+    "Rebuild disposable shared staging on every attempt, preserve committed publication checkpoints",
+    "Preserve committed checkpoint when subsequent logging fails"
+  ],
+  "runtime": {
+    "node": "24.21.0",
+    "npm": "12.2.0",
+    "pgDump": "16.15",
+    "psql": "16.15"
+  },
+  "tests": {
+    "backendUnit": 112,
+    "postgresAndRedisIntegration": 19,
+    "newRealPostgresImportCases": 5,
+    "destructiveContainment": 2,
+    "passedThisCut": 133,
+    "expectedFinancialFailures": 2,
+    "frontendAndAgentUnitTests": "unchanged; not rerun in this cut"
+  },
+  "validation": [
+    {
+      "command": "npm run typecheck",
+      "workspace": "backend",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run lint",
+      "workspace": "backend",
+      "exitCode": 0
+    },
+    {
+      "command": "npm test",
+      "workspace": "backend",
+      "exitCode": 0
+    },
+    {
+      "command": "npm run build",
+      "workspace": "backend",
+      "exitCode": 0
+    },
+    {
+      "command": "node infra/test-disposable.mjs --images --backups",
+      "exitCode": 0
+    },
+    {
+      "command": "node infra/check-repository-secrets.mjs",
+      "exitCode": 0
+    },
+    {
+      "command": "git diff --check -- [changed tracked paths]",
+      "exitCode": 0
+    }
+  ],
+  "negativeProof": {
+    "target": "pre-cut worker from dirty workspace snapshot; only processor export added for test access",
+    "database": "pos_phase0_test on separate disposable project pos-phase2-regression-proof",
+    "scenario": "kill A during stock transaction after payment commit, run B, retry A in fresh process",
+    "expectedFailure": true,
+    "assertion": {
+      "domain": "stock movements of A",
+      "expected": 1,
+      "received": 0
+    },
+    "correctedSourceRestored": true,
+    "disposableProjectRemoved": true
+  },
+  "positiveScenarios": [
+    "Two independent Node worker processes: B cannot change staging or start checkpoints while A publishes",
+    "Killed A, intervening B, restarted A: one payment 7.50 and one stock movement per fixture",
+    "Redelivery of completed import is ignored",
+    "Missing optional MOV_EST yields empty staging",
+    "Post-commit payment log failure preserves completed checkpoint and no payment replay",
+    "Terminated lock connection rolls back open SQL transaction and ownership is reusable"
+  ],
+  "imageSmoke": {
+    "apiImage": "sha256:5f590febd917c1005cf180d035078b81904aed914e868c2ed825a8ec1a4ca683",
+    "api": true,
+    "metricsAuthentication": true,
+    "login": true,
+    "sessionRevocation": true,
+    "spaFallback": true,
+    "backup": {
+      "backupMs": 126,
+      "simulationMs": 184,
+      "restored": {
+        "users": 2,
+        "customers": 1,
+        "products": 1,
+        "sales": 1,
+        "saleItems": 1,
+        "stockMovements": 1,
+        "foreignKeys": 19
+      },
+      "sourceDatabasePreserved": true,
+      "persistenceAfterApiRecreation": true,
+      "restoreAfterApiRecreation": true,
+      "storageFailureChecks": [
+        "readonly",
+        "free-space-reserve",
+        "replica-checksum",
+        "replica-unwritable",
+        "ENOSPC-cleanup",
+        "restore-size-budget"
+      ]
+    }
+  },
+  "preservation": {
+    "deletedBaselineFiles": 0,
+    "secretsUnchanged": true,
+    "manifestsAndLocksUnchanged": true,
+    "existingSyntheticDataFiles": 21,
+    "existingSyntheticDataUnchanged": true,
+    "agentSourceUnchanged": true,
+    "onlyListedFilesChanged": true
+  },
+  "remaining": [
+    "Phase 1 independent recovery journal, persistent snapshot/target pinning, coordinated cutover and UI outcomes",
+    "TSK-004 validated atomic publication and overwrite scope",
+    "TSK-018 stable cross-session payment/movement identity and legitimate duplicate policy",
+    "TSK-020 input/Redis durability, dispatch reconciliation, readiness and graceful shutdown"
+  ],
+  "destructiveFeatures": {
+    "databaseRestore": "remains disabled by default",
+    "legacyOverwrite": "remains disabled by default"
+  },
+  "deployment": {
+    "schemaMigration": false,
+    "commit": false,
+    "push": false,
+    "deploy": false,
+    "userDatabaseTouched": false
+  },
+  "files": [
+    {
+      "path": "backend/src/services/legacy-import/execution-lock.ts",
+      "sha256": "1a556dedae02d5ca8a9ca89625776994cb6accdca1f43f764158458b29056789",
+      "action": "created"
+    },
+    {
+      "path": "backend/src/services/legacy-import/worker.phase5.test.ts",
+      "sha256": "249fd5c8513acc05c1376de31bc53643ad6c4943745cf2389dfa91beef2c4120",
+      "action": "modified"
+    },
+    {
+      "path": "backend/src/services/legacy-import/worker.ts",
+      "sha256": "3e20367af68f7e41c4f48196dcbdcbb51bb49ae70c7c87d745b36ec292c1fa5f",
+      "action": "modified"
+    },
+    {
+      "path": "backend/test/integration/legacy-import.test.ts",
+      "sha256": "234da6844867c9618985e0b1fd5874b69a5f5870d3117ef87999cd8de3cbd86b",
+      "action": "created"
+    },
+    {
+      "path": "backend/test/support/import-process.ts",
+      "sha256": "997af819f7d0f4c22dcfe05caa1d4c7ea7014f32cab06e578b563bbf16b91c1f",
+      "action": "created"
+    },
+    {
+      "path": "docs/technical-audit/02-inventario-problemas.md",
+      "sha256": "5d77e5d2363fc9bea7ef2f0827895a96f6a3b0e7d8445ebe0267a64e919f00c1",
+      "action": "modified"
+    },
+    {
+      "path": "docs/technical-audit/03-backlog-tecnico.md",
+      "sha256": "744a9086788972aa10399de700cb425c97517d0d57be354fb9c318e60722f136",
+      "action": "modified"
+    },
+    {
+      "path": "docs/technical-audit/04-roadmap-implementacao.md",
+      "sha256": "94dbc328b87c308c4798e4d702d868c78a60327cffd658a23e83056067ecd434",
+      "action": "modified"
+    },
+    {
+      "path": "docs/technical-audit/10-fase-dois-primeiro-corte.md",
+      "sha256": "5b8997ea2f69f2d84ff547717e0b225c02ac343c755e24f80497d941be9ba857",
+      "action": "created"
+    },
+    {
+      "path": "README.md",
+      "sha256": "df65ab514796c9a0f1a72ddd976a615870a502250b1d52f7d87d8d2102cdd366",
+      "action": "modified"
+    }
+  ]
+}

@@ -28,9 +28,9 @@ type SidebarItem = {
 
 const primaryItems: SidebarItem[] = [
   { to: '/', labelKey: 'nav.dashboard', icon: 'dashboard', permissions: ['sales:read', 'reports:view'] },
+  { to: '/payments', labelKey: 'nav.payments', icon: 'payments', permissions: 'catalog:read' },
   { to: '/pos', labelKey: 'nav.pos', icon: 'pos', permissions: 'pos:checkout' },
   { to: '/sales', labelKey: 'nav.sales', icon: 'sales', permissions: 'sales:read' },
-  { to: '/payments', labelKey: 'nav.payments', icon: 'payments', permissions: 'catalog:read' },
 ];
 
 const catalogItems: SidebarItem[] = [
@@ -131,9 +131,10 @@ export function AppLayout(): JSX.Element {
     setIsSidebarOpen(false);
   }, [location.pathname]);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login', { replace: true });
+  const handleLogout = async () => {
+    await logout();
+    // BrowserRouter: a navegação não bloqueia esta ação da interface.
+    void navigate('/login', { replace: true });
   };
 
   const pageTitleKey = React.useMemo(() => {

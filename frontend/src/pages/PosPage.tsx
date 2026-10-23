@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import { decimalUnits, decimalNumber, isDecimalValue } from '../utils/checkout-decimal';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
@@ -8,20 +9,32 @@ import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { usePosStore } from '../store/pos';
 import { useToast } from '../components/ui/ToastProvider';
 import type { Product } from '../types/catalog';
-import type { SaleInput } from '../types/sales';
+import type { SaleInput, SalePaymentMethod } from '../types/sales';
 import { useHasPermission } from '../store/auth';
-import { getTodayIsoDate } from '../utils/date';
+import { Modal } from '../components/ui/Modal';
+import { useSaleReceiptActions } from '../hooks/useSaleReceiptActions';
+import { buildSaleInput } from './pos/buildSaleInput';
+import { tryCheckoutPricingPreview } from './pos/pricing';
+import { CurrencyInput } from '../components/ui/CurrencyInput';
+import { formatCurrencyBrl } from '../utils/number';
 
 const MIN_SEARCH_LENGTH = 2;
+const paymentMethodOptions: SalePaymentMethod[] = ['cash', 'card', 'bank', 'other', 'credit', 'credit_with_entry'];
 
 export function PosPage(): JSX.Element {
   const { t } = useTranslation();
   const toast = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const { isPrinting, printReceipt, openReceiptPreview } = useSaleReceiptActions();
 
   const [search, setSearch] = useState('');
   const [orderNumber, setOrderNumber] = useState('');
+  const [isCheckoutModalOpen, setCheckoutModalOpen] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<SalePaymentMethod>('cash');
+  const [amountPaid, setAmountPaid] = useState<number>(0);
+  const [entryAmount, setEntryAmount] = useState<number | null>(null);
+  const [completedSale, setCompletedSale] = useState<{ id: string; total: number } | null>(null);
   const debouncedSearch = useDebouncedValue(search, 300);
   const canCheckout = useHasPermission('pos:checkout');
 
@@ -38,8 +51,8 @@ export function PosPage(): JSX.Element {
   const setSeller = usePosStore((state) => state.setSeller);
   const paymentTermId = usePosStore((state) => state.paymentTermId);
   const setPaymentTerm = usePosStore((state) => state.setPaymentTerm);
-  const subtotal = usePosStore((state) => state.getSubtotal());
-  const total = usePosStore((state) => state.getTotal());
+  const cartSubtotal = usePosStore((state) => state.getSubtotal());
+  const cartTotal = usePosStore((state) => state.getTotal());
 
   const productsQuery = useQuery({
     queryKey: ['pos-products', debouncedSearch],
@@ -69,10 +82,13 @@ export function PosPage(): JSX.Element {
     mutationFn: (payload: SaleInput) => salesService.create(payload),
     onSuccess: (sale) => {
       toast.show(t('sales.saleCreated'), 'success');
-      queryClient.invalidateQueries({ queryKey: ['sales'] });
+      // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
+      void queryClient.invalidateQueries({ queryKey: ['sales'] });
+      void queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      setCheckoutModalOpen(false);
+      setCompletedSale({ id: sale.id, total: sale.total ?? checkoutTotal });
       reset();
       setOrderNumber('');
-      navigate(`/sales/${sale.id}`);
     },
     onError: (error: Error) => {
       toast.show(error.message, 'error');
@@ -85,9 +101,73 @@ export function PosPage(): JSX.Element {
   const paymentTerms = useMemo(() => paymentTermsQuery.data ?? [], [paymentTermsQuery.data]);
 
   const canSearch = debouncedSearch.length >= MIN_SEARCH_LENGTH || debouncedSearch.length === 0;
+  const isCreditSale = paymentMethod === 'credit' || paymentMethod === 'credit_with_entry';
+  const isCreditWithEntry = paymentMethod === 'credit_with_entry';
+  const validCheckoutPreview = useMemo(
+    () => tryCheckoutPricingPreview(items, discount, paymentMethod),
+    [items, discount, paymentMethod]
+  );
+  const checkoutPreview = validCheckoutPreview ?? { items: [], subtotal: 0, discount: 0, total: 0 };
+  const checkoutItems = checkoutPreview.items;
+  const checkoutSubtotal = checkoutPreview.subtotal;
+  const checkoutTotal = checkoutPreview.total;
+  const normalizedAmountPaid = amountPaid || 0;
+  const normalizedEntryAmount = entryAmount || 0;
+  const effectiveAmountPaid = paymentMethod === 'credit' ? 0 : isCreditWithEntry ? normalizedEntryAmount : normalizedAmountPaid;
+  const totalCents = decimalUnits(checkoutTotal, 2);
+  const paidCents = decimalUnits(effectiveAmountPaid, 2);
+  const pendingAmount = decimalNumber(totalCents > paidCents ? totalCents - paidCents : 0n, 2);
+  const calculatedChange = isCreditSale ? 0 : decimalNumber(paidCents > totalCents ? paidCents - totalCents : 0n, 2);
+  const paymentMethodLabels: Record<SalePaymentMethod, string> = useMemo(
+    () => ({
+      cash: t('customers.paymentMethods.cash'),
+      card: t('customers.paymentMethods.card'),
+      bank: t('customers.paymentMethods.bank'),
+      other: t('customers.paymentMethods.other'),
+      credit: t('customers.paymentMethods.credit'),
+      credit_with_entry: t('customers.paymentMethods.credit_with_entry'),
+    }),
+    [t]
+  );
+
+  useEffect(() => {
+    if (!isCheckoutModalOpen) {
+      return;
+    }
+    setPaymentMethod('cash');
+    setAmountPaid(cartTotal);
+    setEntryAmount(null);
+  }, [cartTotal, isCheckoutModalOpen]);
+
+  useEffect(() => {
+    if (!isCheckoutModalOpen) {
+      return;
+    }
+
+    if (paymentMethod === 'credit') {
+      setAmountPaid(0);
+      setEntryAmount(null);
+      return;
+    }
+
+    if (paymentMethod === 'credit_with_entry') {
+      setEntryAmount((current) => {
+        if (current == null) {
+          return checkoutTotal;
+        }
+
+        return Math.min(current, checkoutTotal);
+      });
+      return;
+    }
+
+    setAmountPaid(checkoutTotal);
+    setEntryAmount(null);
+  }, [checkoutTotal, isCheckoutModalOpen, paymentMethod]);
 
   function handleAddProduct(product: Product) {
-    addProduct(product, 'price_cash');
+    try { addProduct(product, 'price_cash'); }
+    catch { toast.show(t('sales.invalidCheckoutValue'), 'error'); }
   }
 
   function handleFinalize() {
@@ -99,23 +179,50 @@ export function PosPage(): JSX.Element {
       toast.show(t('sales.emptyCart'), 'error');
       return;
     }
+    setCheckoutModalOpen(true);
+  }
 
-    const payload: SaleInput = {
-      emission_date: getTodayIsoDate(),
-      order_number: orderNumber ? orderNumber : null,
-      customer_id: customerId,
-      seller_id: sellerId,
-      payment_term_id: paymentTermId,
-      subtotal,
+  function handleConfirmCheckout() {
+    if (!validCheckoutPreview) { toast.show(t('sales.invalidCheckoutValue'), 'error'); return; }
+    if (isCreditSale && !customerId) {
+      toast.show(t('sales.customerRequiredForCreditSale'), 'error');
+      return;
+    }
+
+    if (isCreditWithEntry && entryAmount == null) {
+      toast.show(t('sales.entryAmountRequired'), 'error');
+      return;
+    }
+
+    if (isCreditWithEntry && normalizedEntryAmount <= 0) {
+      toast.show(t('sales.entryAmountInvalid'), 'error');
+      return;
+    }
+
+    if (isCreditWithEntry && normalizedEntryAmount > checkoutTotal) {
+      toast.show(t('sales.entryAmountTooHigh'), 'error');
+      return;
+    }
+
+    if (!isCreditSale && normalizedAmountPaid < checkoutTotal) {
+      toast.show(t('sales.amountPaidTooLow'), 'error');
+      return;
+    }
+
+    const payload: SaleInput = buildSaleInput({
+      orderNumber,
+      customerId,
+      sellerId,
+      paymentTermId,
+      paymentMethod,
+      amountPaid: effectiveAmountPaid,
+      changeAmount: calculatedChange,
+      subtotal: checkoutSubtotal,
       discount,
-      total,
-      items: items.map((item) => ({
-        product_id: item.productId,
-        quantity: item.quantity,
-        unit_price: item.unitPrice,
-        total: item.total,
-      })),
-    };
+      total: checkoutTotal,
+      pendingAmount,
+      items: checkoutItems,
+    });
 
     finalizeMutation.mutate(payload);
   }
@@ -163,7 +270,7 @@ export function PosPage(): JSX.Element {
                 >
                   <strong>{product.name}</strong>
                   <span style={{ fontSize: '0.85rem', color: '#64748b' }}>{product.barcode ?? product.legacy_code ?? '—'}</span>
-                  <span style={{ fontWeight: 600 }}>R$ {(product.price_cash ?? 0).toFixed(2)}</span>
+                  <span style={{ fontWeight: 600 }}>{formatCurrencyBrl(product.price_cash ?? 0)}</span>
                 </button>
               ))}
           </div>
@@ -254,14 +361,19 @@ export function PosPage(): JSX.Element {
                     <td>
                       <input
                         type="number"
-                        min={1}
+                        min={0.001}
+                        step={0.001}
+                        max={99999999999.999}
                         value={item.quantity}
-                        onChange={(event) => updateQuantity(item.productId, Number(event.target.value))}
+                        onChange={(event) => {
+                          try { updateQuantity(item.productId, event.target.valueAsNumber); }
+                          catch { toast.show(t('sales.invalidQuantity'), 'error'); }
+                        }}
                         style={{ width: '80px' }}
                       />
                     </td>
-                    <td>R$ {item.unitPrice.toFixed(2)}</td>
-                    <td>R$ {item.total.toFixed(2)}</td>
+                    <td>{formatCurrencyBrl(item.unitPrice)}</td>
+                    <td>{formatCurrencyBrl(item.total)}</td>
                     <td>
                       <button type="button" className="button secondary" onClick={() => removeItem(item.productId)}>
                         {t('common.delete')}
@@ -277,26 +389,20 @@ export function PosPage(): JSX.Element {
         <div className="card">
           <div className="form-group">
             <label htmlFor="discount-input">{t('sales.discount')}</label>
-            <input
-              id="discount-input"
-              type="number"
-              step="0.01"
-              value={discount}
-              onChange={(event) => setDiscount(Number(event.target.value) || 0)}
-            />
+            <CurrencyInput id="discount-input" value={discount} onValueChange={(value) => setDiscount(value ?? 0)} />
           </div>
           <div className="totals">
             <div className="row">
               <span>{t('sales.subtotal')}</span>
-              <span>R$ {subtotal.toFixed(2)}</span>
+              <span>{formatCurrencyBrl(cartSubtotal)}</span>
             </div>
             <div className="row">
               <span>{t('sales.discount')}</span>
-              <span>R$ {discount.toFixed(2)}</span>
+              <span>{formatCurrencyBrl(discount)}</span>
             </div>
             <div className="row">
               <span>{t('sales.total')}</span>
-              <span>R$ {total.toFixed(2)}</span>
+              <span>{formatCurrencyBrl(cartTotal)}</span>
             </div>
           </div>
           <button
@@ -310,6 +416,168 @@ export function PosPage(): JSX.Element {
           </button>
         </div>
       </div>
+
+      <Modal
+        open={isCheckoutModalOpen}
+        onClose={() => {
+          if (finalizeMutation.isPending) return;
+          setCheckoutModalOpen(false);
+        }}
+        title={t('sales.checkoutSummary')}
+        width="520px"
+      >
+        <div className="form-grid vertical">
+          {!validCheckoutPreview && <p role="alert">{t('sales.invalidCheckoutValue')}</p>}
+          <div className="receipt-summary-box">
+            <div className="row">
+              <span>{t('sales.subtotal')}</span>
+              <strong>{formatCurrencyBrl(checkoutSubtotal)}</strong>
+            </div>
+            <div className="row">
+              <span>{t('sales.discount')}</span>
+              <strong>{formatCurrencyBrl(discount)}</strong>
+            </div>
+            <div className="row total-row">
+              <span>{t('sales.total')}</span>
+              <strong>{formatCurrencyBrl(checkoutTotal)}</strong>
+            </div>
+          </div>
+
+          {checkoutSubtotal !== cartSubtotal && (
+            <small className="text-muted">{t('sales.pricingAdjustedForPaymentMethod')}</small>
+          )}
+
+          <div className="form-group">
+            <label htmlFor="payment-method">{t('customers.paymentMethod')}</label>
+            <select
+              id="payment-method"
+              value={paymentMethod}
+              onChange={(event) => setPaymentMethod(event.target.value as SalePaymentMethod)}
+            >
+              {paymentMethodOptions.map((method) => (
+                <option key={method} value={method}>
+                  {paymentMethodLabels[method]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {!isCreditWithEntry && (
+            <div className="form-group">
+              <label htmlFor="amount-paid">{t('sales.amountPaid')}</label>
+              <CurrencyInput
+                id="amount-paid"
+                min={0}
+                value={paymentMethod === 'credit' ? 0 : amountPaid}
+                onValueChange={(value) => {
+                  if (isDecimalValue(value ?? 0, 2)) setAmountPaid(value ?? 0);
+                  else toast.show(t('sales.invalidCheckoutValue'), 'error');
+                }}
+                disabled={paymentMethod === 'credit'}
+              />
+              <small className="text-muted">{t('sales.changeAmount')}: {formatCurrencyBrl(calculatedChange)}</small>
+            </div>
+          )}
+
+          {isCreditWithEntry && (
+            <div className="form-group">
+              <label htmlFor="entry-amount">{t('sales.entryAmount')}</label>
+              <CurrencyInput
+                id="entry-amount"
+                min={0}
+                value={entryAmount}
+                onValueChange={(value) => {
+                  if (isDecimalValue(value ?? 0, 2)) setEntryAmount(value);
+                  else toast.show(t('sales.invalidCheckoutValue'), 'error');
+                }}
+              />
+              <small className="text-muted">{t('sales.pendingAmount')}: {formatCurrencyBrl(pendingAmount)}</small>
+            </div>
+          )}
+
+          {paymentMethod === 'credit' && (
+            <div className="form-group">
+              <small className="text-muted">{t('sales.pendingAmount')}: {formatCurrencyBrl(checkoutTotal)}</small>
+            </div>
+          )}
+
+          <div className="form-actions">
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => setCheckoutModalOpen(false)}
+              disabled={finalizeMutation.isPending}
+            >
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              className="button primary"
+              onClick={handleConfirmCheckout}
+              disabled={finalizeMutation.isPending || !validCheckoutPreview}
+            >
+              {finalizeMutation.isPending ? t('common.loading') : t('sales.confirmCheckout')}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={Boolean(completedSale)}
+        onClose={() => setCompletedSale(null)}
+        title={t('sales.receiptModalTitle')}
+        width="560px"
+      >
+        <div className="form-grid vertical">
+          <p className="text-muted">{t('sales.receiptPrompt')}</p>
+          <div className="receipt-summary-box">
+            <div className="row total-row">
+              <span>{t('sales.total')}</span>
+              <strong>{formatCurrencyBrl(completedSale?.total ?? 0)}</strong>
+            </div>
+          </div>
+          <div className="form-actions wrap-actions">
+            <button
+              type="button"
+              className="button primary"
+              disabled={!completedSale || isPrinting}
+              onClick={() => {
+                if (!completedSale) return;
+                printReceipt(completedSale.id);
+              }}
+            >
+              {isPrinting ? t('common.loading') : t('sales.printReceipt')}
+            </button>
+            <button
+              type="button"
+              className="button secondary"
+              disabled={!completedSale}
+              onClick={() => {
+                if (!completedSale) return;
+                openReceiptPreview(completedSale.id);
+              }}
+            >
+              {t('sales.openPrintableReceipt')}
+            </button>
+            <button
+              type="button"
+              className="button secondary"
+              disabled={!completedSale}
+              onClick={() => {
+                if (!completedSale) return;
+                // BrowserRouter: a navegação não bloqueia esta ação da interface.
+                void navigate(`/sales/${completedSale.id}`);
+                setCompletedSale(null);
+              }}
+            >
+              {t('sales.viewSale')}
+            </button>
+            <button type="button" className="button ghost" onClick={() => setCompletedSale(null)}>
+              {t('sales.finishWithoutPrinting')}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
