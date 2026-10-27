@@ -99,3 +99,12 @@ O release de loja usa `PRINT_MODE=queue`. `POST /api/v1/sales/:id/receipt/print`
 A tela de detalhes acompanha a fila e diferencia espera, envio ao Windows e resultado incerto. `GET /api/v1/print-jobs/sale/:id` exige `sales:read` e não expõe conteúdo/token. O agente usa credencial própria nas rotas `/api/v1/print-agent`; nenhum listener de impressora é publicado. Recibos são instantâneos imutáveis no enfileiramento; limites de cópias, tamanho, lease e capacidade são aplicados na API.
 
 Detalhes do contrato/estados/recuperação: [documentação técnica](instalacao/TECNICO.md). Operação em dois caixas e conferência antes de reimprimir: [guia de uso](instalacao/USO.md).
+
+
+## Impressora por caixa (1.0.0-store.2)
+
+No modo queue, printer_id seleciona um destino habilitado (principal por omissão para clientes legados). A chave idempotente inclui esse destino: mudar printer_id com o mesmo request_id retorna409. Histórico/resposta incluem printer_id e printer_name. Cada agente autentica x-print-printer-id junto com seu token exclusivo e só recebe/confirma trabalhos desse destino.
+
+O atalho configura o padrão da loja/navegador antes do login; PDV e detalhes permitem troca explícita. Offline permanece na fila escolhida, enquanto destino revogado bloqueia novo pedido. Uma nova via em outra impressora não cancela o trabalho anterior; confira papel/fila antes de reemitir.
+
+Pareamento autorizado, manutenção e diagnóstico: [IMPRESSORAS.md](instalacao/IMPRESSORAS.md). Contratos: backend/openapi/openapi.yaml. Evidências: [registro da evolução](technical-audit/24-impressoras-por-caixa.md).

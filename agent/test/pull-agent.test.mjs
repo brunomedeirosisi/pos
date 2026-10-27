@@ -48,3 +48,23 @@ test('invalid copies cannot reach printer or start boundary', () => fixture(asyn
   await assert.rejects(processPrintJob({ ...job, copies: 11 }, { directory, api: async (route) => { routes.push(route); }, print: async () => { printed = true; } }));
   assert.equal(printed, false); assert.equal(routes.length, 1); assert.ok(routes[0].endsWith('/finish'));
 }));
+
+test('a job routed to another printer never reaches the local spooler', () => fixture(async directory => {
+  let prints = 0;
+  await assert.rejects(processPrintJob({ ...job, printer_id: 'principal' }, { directory, printerId: '16ea02eb-436f-4dc1-9dad-80da00366ec8', api: async () => {}, print: async () => { prints++; } }));
+  assert.equal(prints, 0);
+}));
+test('transport binds every request to the configured printer without URL credentials', async () => {
+  const original = globalThis.fetch;
+  const printerId = '16ea02eb-436f-4dc1-9dad-80da00366ec8';
+  try {
+    globalThis.fetch = async (url, options) => {
+      assert.equal(url, 'https://store.example.test/api/v1/print-agent/claim');
+      assert.equal(options.headers['x-print-printer-id'], printerId);
+      assert.equal(options.headers['x-print-agent-token'], 's'.repeat(64));
+      return { ok: true, status: 200, json: async () => ({ job: null }) };
+    };
+    assert.deepEqual(await createApi('https://store.example.test', 's'.repeat(64), printerId)('/claim', {}), { job: null });
+    assert.throws(() => createApi('https://store.example.test', 's'.repeat(64), '../../principal'));
+  } finally { globalThis.fetch = original; }
+});

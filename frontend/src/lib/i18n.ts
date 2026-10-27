@@ -41,8 +41,30 @@ const baseCommon = {
 export const resources = {
   en: {
     translation: {
+      printers: {
+  "heading": "Printers",
+  "destination": "Print destination",
+  "loadError": "Printer status could not be loaded. No print request was sent.",
+  "retry": "Try again",
+  "unavailable": "Configured printer unavailable",
+  "chooseAnother": "Select an available printer explicitly before printing.",
+  "online": "Online",
+  "offline": "Offline — jobs will wait",
+  "noAutomaticReroute": "Jobs stay with the selected printer; no automatic rerouting.",
+  "enrollmentHelp": "Generate a code for each Terminal with a printer. Enter it in the Windows installer; each agent receives its own credential.",
+  "name": "Checkout / printer name",
+  "createCode": "Generate pairing code",
+  "codeHelp": "This code expires in 15 minutes. Give it only to the operator installing this checkout.",
+  "pairingCode": "Pairing code",
+  "expires": "Expires",
+  "queueRequired": "Printer pairing requires queue mode.",
+  "revoked": "Revoked",
+  "revoke": "Revoke agent",
+  "revokeHelp": "The agent will lose access. Queued jobs stay at this destination. An output already started may finish; verify the printer before issuing another copy."
+},
       brand: 'Magazine Medeiros',
       nav: {
+        printers: 'Printers',
         dashboard: 'Dashboard',
         pos: 'Sales',
         sales: 'Sales History',
@@ -445,8 +467,30 @@ export const resources = {
   },
   'pt-BR': {
     translation: {
+      printers: {
+  "heading": "Impressoras",
+  "destination": "Destino da impressão",
+  "loadError": "Não foi possível consultar as impressoras. Nenhum pedido de impressão foi enviado.",
+  "retry": "Tentar novamente",
+  "unavailable": "Impressora configurada indisponível",
+  "chooseAnother": "Selecione explicitamente uma impressora disponível antes de imprimir.",
+  "online": "Conectada",
+  "offline": "Desconectada — pedidos aguardarão",
+  "noAutomaticReroute": "Os pedidos permanecem na impressora selecionada, sem redirecionamento automático.",
+  "enrollmentHelp": "Gere um código para cada Terminal com impressora. Informe-o no instalador Windows; cada agente recebe uma credencial exclusiva.",
+  "name": "Nome do caixa / impressora",
+  "createCode": "Gerar código de pareamento",
+  "codeHelp": "O código expira em 15 minutos. Entregue-o somente ao operador que instala este caixa.",
+  "pairingCode": "Código de pareamento",
+  "expires": "Validade",
+  "queueRequired": "O pareamento requer o modo de impressão por fila.",
+  "revoked": "Revogada",
+  "revoke": "Revogar agente",
+  "revokeHelp": "O agente perderá acesso. Os pedidos aguardando permanecem nesse destino. Um envio já iniciado pode terminar; confira a impressora antes de emitir outra via."
+},
       brand: 'Magazine Medeiros',
       nav: {
+        printers: 'Impressoras',
         dashboard: 'Painel',
         pos: 'Vendas',
         sales: 'Histórico de vendas',

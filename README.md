@@ -22,19 +22,21 @@ Legacy import isolation: [phase-two implementation and remaining work](docs/tech
 
 Backup durability and coordination: [phase-one implementation](docs/technical-audit/08-fase-um-primeiro-corte.md) and [operational runbook](docs/backup-restore-runbook.md).
 
-## Instalação em loja Windows (2 caixas / 1 impressora)
+## Instalação em loja Windows (2 caixas / impressoras por caixa)
 
 O instalador tem dois modos: **Principal** (serviços Docker, banco, HTTPS e agente Windows) e **Terminal** (navegador e pareamento). As imagens prontas e o runtime estão no pacote; a loja não compila código nem executa seeds demonstrativos.
 
 - [Guia completo de instalação e operação](docs/instalacao/USO.md)
+- [Impressora por caixa, pareamento e manutenção](docs/instalacao/IMPRESSORAS.md)
 - [Arquitetura, build, segurança, atualização e recuperação assistida](docs/instalacao/TECNICO.md)
 - [Checklist de homologação física e operacional](docs/instalacao/HOMOLOGACAO.md)
-- [Registro da implementação e evidências](docs/technical-audit/22-instalador-windows.md)
+- [Registro do instalador inicial](docs/technical-audit/22-instalador-windows.md)
+- [Impressoras por caixa e evidências da evolução](docs/technical-audit/24-impressoras-por-caixa.md)
 
 Para gerar o pacote no Windows com Docker Linux/amd64:
 
 ```powershell
-./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.1'
+./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.2' -CompatibleFrom '1.0.0-store.1'
 ```
 
 Distribua o ZIP inteiro de `artifacts/POS-Loja-<versão>.zip` por canal confiável com seu SHA256. Extraia e abra `Instalar-POS.exe` no Caixa 1. O instalador gera `Terminal-POS` para o Caixa 2. A inicialização automática ocorre após login na conta Windows da instalação. Consulte os guias para os pré-requisitos de rede, Docker, impressora e backup externo e os gates de produto ainda pendentes antes de vendas reais.

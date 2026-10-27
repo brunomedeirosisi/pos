@@ -26,6 +26,7 @@ try {
   $null=Invoke-PosCompose $Root @('exec','-T','api','node','dist/scripts/store-backup.js','--check') $nextVersion
   $settings.version=$next.version;$settings.status='ready';Write-PosJson (Join-Path $Root 'settings.json') $settings
   Export-PosTerminal $Root $nextVersion
+  Write-PosUrlShortcut (Get-PosBrowserUrl $settings.serverUrl $settings.storeId 'principal')
   $startArgs=@('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',(Join-Path $nextVersion 'Start-POS.ps1'),'-Root',$Root)
   New-PosShortcut (Join-Path ([Environment]::GetFolderPath('Startup')) 'POS Principal.lnk') (Get-PosPowerShell) (($startArgs|ForEach-Object{ConvertTo-PosArgument $_}) -join ' ')
   Start-Process -FilePath (Get-PosPowerShell) -ArgumentList ((($startArgs+@('-Resume'))|ForEach-Object{ConvertTo-PosArgument $_}) -join ' ') -WindowStyle Hidden

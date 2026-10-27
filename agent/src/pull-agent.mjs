@@ -20,18 +20,19 @@ export async function saveJournal(directory, record) {
   if (record.acknowledged) await unlink(pending).catch(error => { if (error.code !== 'ENOENT') throw error; });
 }
 
-export function validateJob(job) {
-  return job && uuid.test(job.job_id) && uuid.test(job.claim_token) && typeof job.content === 'string' && job.content.trim().length > 0 && Buffer.byteLength(job.content) <= 1048576 && Number.isInteger(job.copies) && job.copies >= 1 && job.copies <= 10;
+export function validateJob(job, printerId = 'principal') {
+  return job && (job.printer_id === printerId || (printerId === 'principal' && job.printer_id === undefined)) && uuid.test(job.job_id) && uuid.test(job.claim_token) && typeof job.content === 'string' && job.content.trim().length > 0 && Buffer.byteLength(job.content) <= 1048576 && Number.isInteger(job.copies) && job.copies >= 1 && job.copies <= 10;
 }
 
-export function createApi(base, token) {
+export function createApi(base, token, printerId = 'principal') {
   const url = new URL(base);
   if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error('https_store_origin_required');
   if (typeof token !== 'string' || token.length < 32) throw new Error('agent_token_required');
+  if (printerId !== 'principal' && !uuid.test(printerId)) throw new Error('invalid_printer_id');
   return async (route, body) => {
     const response = await fetch(url.origin + '/api/v1/print-agent' + route, {
       method: body === undefined ? 'GET' : 'POST', redirect: 'error',
-      headers: { 'content-type': 'application/json', 'x-print-agent-token': token },
+      headers: { 'content-type': 'application/json', 'x-print-agent-token': token, 'x-print-printer-id': printerId },
       body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(10000),
     });
     if (!response.ok) { const error = new Error('print_api_' + response.status); error.status = response.status; throw error; }
@@ -78,8 +79,8 @@ export async function acknowledge(record, api, directory) {
   await saveJournal(directory, { ...record, phase: outcome, acknowledged: true });
 }
 
-export async function processPrintJob(job, { api, directory, print }) {
-  if (!validateJob(job)) {
+export async function processPrintJob(job, { api, directory, print, printerId = 'principal' }) {
+  if (!validateJob(job, printerId)) {
     if (job && uuid.test(job.job_id) && uuid.test(job.claim_token)) await api('/jobs/' + job.job_id + '/finish', { claim_token: job.claim_token, outcome: 'failed' });
     throw new Error('invalid_print_payload');
   }
@@ -106,7 +107,8 @@ export async function recoverJournal(directory, api) {
 
 export async function runAgent(config, token, { signal, print = job => printToWindows(job, config), onError = code => console.error('[print-agent]', code) } = {}) {
   if (!config.printerName || !path.isAbsolute(config.journalDirectory)) throw new Error('invalid_agent_configuration');
-  const api = createApi(config.serverUrl, token);
+  const printerId = config.printerId ?? 'principal';
+  const api = createApi(config.serverUrl, token, printerId);
   await mkdir(config.journalDirectory, { recursive: true });
   const lockPath = path.join(config.journalDirectory, 'agent.lock');
   let lock;
@@ -127,7 +129,7 @@ export async function runAgent(config, token, { signal, print = job => printToWi
         // Recover/acknowledge before claiming; never re-run a journaled spool.
         await recoverJournal(config.journalDirectory, api);
         const { job } = await api('/claim', {});
-        if (job) await processPrintJob(job, { api, directory: config.journalDirectory, print });
+        if (job) await processPrintJob(job, { api, directory: config.journalDirectory, print, printerId });
         else await delay(2000, undefined, { signal });
       } catch (error) {
         if (signal?.aborted) break;

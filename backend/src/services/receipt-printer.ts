@@ -6,11 +6,12 @@ import type { SaleReceiptDto, SaleReceiptLocale } from '../modules/sales/contrac
 
 export class ReceiptPrinterService {
   readonly printerModel = getEnv().PRINT_PRINTER_NAME;
-  async print(payload: { receipt: SaleReceiptDto; copies: number; locale: SaleReceiptLocale; requestId?: string }) {
+  async print(payload: { receipt: SaleReceiptDto; copies: number; locale: SaleReceiptLocale; requestId?: string; printerId?: string }) {
     if (getEnv().PRINT_MODE === 'queue') {
       if (!payload.requestId) throw badRequest('request_id is required for queued printing');
       return enqueuePrint({ ...payload, requestId: payload.requestId });
     }
+    if (payload.printerId && payload.printerId !== 'principal') throw badRequest('printer_selection_requires_queue_mode');
     await new PrintAgentService().print(payload);
   }
 }

@@ -78,3 +78,21 @@ Aprovação de impressão e operação: _____________ Data: __________
 Aprovação de recuperação e regras de negócio: ________________ Data: __________
 
 Guias: [uso](USO.md) e [técnico](TECNICO.md).
+
+
+## Ampliação 1.0.0-store.2 — impressora por caixa
+
+- [ ] Atualizar um Principal 1.0.0-store.1 em manutenção; preservar dados, credencial e trabalhos antigos. Receber novo pacote Terminal-POS.
+- [ ] Administrador gera código de 15 minutos; vendedor sem printers:manage não cadastra/revoga agentes.
+- [ ] Instalar Terminal com impressora sem Docker, sem compartilhar token do Principal e sem portas adicionais.
+- [ ] Abrir cada atalho antes do login; conferir o destino padrão após autenticar, inclusive com operadores diferentes no mesmo navegador.
+- [ ] Imprimir simultaneamente nos dois caixas e conferir que os papéis saem nos locais escolhidos. Verificar acentos, largura e driver de cada modelo.
+- [ ] Parar só o agente Terminal, enfileirar para ele e continuar imprimindo no Principal; nenhum pedido é transferido automaticamente.
+- [ ] Conferir resultado incerto antes de emitir outra via; a troca de destino não cancela a fila original.
+- [ ] Reparar e atualizar o Terminal com código vazio: identidade/token e journal permanecem. Simular resposta de pareamento perdida.
+- [ ] Reiniciar/logar cada máquina na conta operacional e conferir supervisor, impressora local e padrão de navegador.
+- [ ] Revogar Terminal: credencial perde acesso, novo enqueue é bloqueado, histórico/pedidos antigos permanecem; envio físico em curso pode terminar.
+- [ ] Novo pareamento usa outro destino/journal. Revogar anterior e reconciliar filas antes de reemitir em outra impressora.
+- [ ] Rever permissões/revogações/journals em ensaio de restauração isolado. Backup SQL não transporta segredos DPAPI entre máquinas.
+
+Roteiro detalhado: [IMPRESSORAS.md](IMPRESSORAS.md).

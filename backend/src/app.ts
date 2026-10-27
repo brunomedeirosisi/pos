@@ -24,7 +24,7 @@ import { errorHandler } from './middleware/error-handler.js';
 import { requireAuth } from './middleware/auth.js';
 import { attachRequestId, requestLoggingMiddleware } from './observability/request-context.js';
 import { metricsHandler, metricsMiddleware } from './observability/metrics.js';
-import { printAgentRouter, printJobsRouter } from './modules/print-jobs/print-jobs-router.js';
+import { printAgentRouter, printJobsRouter, printPrintersRouter } from './modules/print-jobs/print-jobs-router.js';
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
 const openApiPath = path.resolve(currentDir, '../openapi/openapi.yaml');
@@ -82,6 +82,7 @@ app.use('/api/v1/sellers', sellersRouter);
 app.use('/api/v1/payment-terms', paymentTermsRouter);
 app.use('/api/v1/sales', salesRouter);
 app.use('/api/v1/print-jobs', printJobsRouter);
+app.use('/api/v1/print-printers', printPrintersRouter);
 app.use('/api/v1/dashboard', dashboardRouter);
 app.use('/api/v1/users', usersRouter);
 app.use('/api/v1/roles', rolesRouter);

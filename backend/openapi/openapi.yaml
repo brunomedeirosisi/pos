@@ -27,11 +27,58 @@ paths:
       responses:
         '200': { description: Store UUID and print mode; no secrets. }
         '503': { description: Store is not configured. }
+  /api/v1/print-agent/enroll:
+    post:
+      security: []
+      summary: Redeem an administrator-issued print enrollment capability
+      description: Code expires in 15 minutes and binds one printer to one unique agent credential. A lost response may be retried with the same code and credential after consumption. Revoked credentials cannot be revived.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                code: { type: string, pattern: '^[a-f0-9]{48}$' }
+                token: { type: string, pattern: '^[a-f0-9]{64}$', writeOnly: true }
+              required: [code, token]
+      responses:
+        '200': { description: 'printer_id, display_name and store_id; never echoes the credential.' }
+        '403': { description: Invalid/expired enrollment or consumed by another credential or revoked. }
+  /api/v1/print-printers:
+    get:
+      summary: List printer identities and heartbeats (sales:read or printers:manage)
+      responses:
+        '200': { description: 'mode, store_id and printers with id/display_name/enabled/online/last_seen_at; never returns tokens or hashes or enrollment codes.' }
+  /api/v1/print-printers/enrollments:
+    post:
+      summary: Generate a 15-minute pairing code (printers:manage)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { display_name: { type: string, minLength: 1, maxLength: 100 } }
+              required: [display_name]
+      responses:
+        '201': { description: 'code, printer_id, expires_at and store_id. No-store response; the server stores only a hash.' }
+        '403': { description: Missing management permission. }
+        '409': { description: Too many pending enrollments (maximum twenty). }
+  /api/v1/print-printers/{id}/revoke:
+    post:
+      summary: Revoke a Terminal credential without moving jobs (printers:manage)
+      parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+      responses:
+        '204': { description: 'Access revoked. Jobs stay at the original destination; an output already started may complete.' }
+        '400': { description: Unknown printer or attempt to revoke the principal printer. }
+        '403': { description: Missing management permission. }
   /api/v1/print-agent/claim:
     post:
       security: [{ printAgentToken: [] }]
-      summary: Claim the next job for the single principal printer
-      description: Queue mode only. One live reservation per printer. Response contains job metadata plus content, locale and claim_token, or job=null. Content is bounded to 1 MiB.
+      summary: Claim the next job exclusively for the authenticated printer
+      description: Queue mode only. One live reservation per printer. x-print-printer-id selects the credential scope (principal if omitted for legacy compatibility). Response contains job metadata plus content, locale and claim_token, or job=null. Content is bounded to 1 MiB.
       responses:
         '200': { description: Claimed job or null; poll every two seconds while idle. }
         '403': { description: Invalid agent token. }
@@ -2621,7 +2668,7 @@ components:
         - plain_text
     SaleReceiptPrintRequest:
       type: object
-      description: Queue mode requires request_id. Retry the same UUID for the same logical request; use a new UUID only for an explicit additional copy.
+      description: Queue mode requires request_id. printer_id defaults to principal for existing clients; changing destination on the same request UUID is rejected. Retry the same UUID for the same logical request; use a new UUID only for an explicit additional copy.
       properties:
         request_id: { type: string, format: uuid }
         locale: { type: string, enum: [pt-BR, en] }
@@ -2642,6 +2689,8 @@ components:
       type: object
       description: Operator metadata only; content and claim_token are never included.
       properties:
+        printer_id: { type: string }
+        printer_name: { type: string }
         job_id: { type: string, format: uuid }
         sale_id: { type: string, format: uuid }
         status: { type: string, enum: [queued, claimed, spooling, submitted, failed, uncertain] }

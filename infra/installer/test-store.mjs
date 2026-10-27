@@ -12,6 +12,13 @@ assert.ok(bundleArg > 0 && process.argv[bundleArg + 1], 'Use --bundle artifacts/
 const bundle = path.resolve(process.argv[bundleArg + 1]);
 const manifest = JSON.parse(await readFile(path.join(bundle, 'manifest.json'), 'utf8'));
 assert.equal(manifest.mode, 'Principal');
+const upgradeIndex=process.argv.indexOf('--upgrade-from');
+const upgradeBundle=upgradeIndex>0?path.resolve(process.argv[upgradeIndex+1]):null;
+const previous=upgradeBundle?JSON.parse(await readFile(path.join(upgradeBundle,'manifest.json'),'utf8')):null;
+if(previous){
+  assert.equal(previous.mode,'Principal');assert.ok(manifest.compatibleFrom.includes(previous.version));
+  for(const key of ['db','redis','proxy'])assert.equal(previous.images[key],manifest.images[key],'Infrastructure images must match for this upgrade rehearsal');
+}
 const temporary = await mkdtemp(path.join(os.tmpdir(), 'pos-store-smoke-'));
 const replica = path.join(temporary, 'replica');
 await mkdir(replica);
@@ -23,7 +30,7 @@ await writeFile(composeFile, (await readFile(composeFile, 'utf8')).replaceAll('1
 const project = 'pos-installer-smoke';
 const override = path.join(temporary, 'test.compose.yml');
 // Only publication is overridden; network allocation still comes from the release.
-await writeFile(override, 'services:\n  proxy:\n    ports: !override\n      - "127.0.0.1::443"\n');
+await writeFile(override, 'services:\n  proxy:\n    ports: !override\n      - "127.0.0.1::443"\n  api:\n    environment:\n      PRINT_QUEUE_LEASE_SECONDS: 600\n');
 const secret = () => randomBytes(32).toString('hex');
 const agentToken = secret();
 const storeId = randomUUID();
@@ -51,12 +58,33 @@ try {
   console.log('Checking release images and starting isolated store...');
   if (!process.argv.includes('--reuse-images')) await run('docker', ['load', '--input', path.join(bundle, 'images.tar')]);
   for (const id of Object.values(manifest.images)) assert.equal(await run('docker', ['image', 'inspect', id, '--format', '{{.Id}}']), id);
+  if(previous){
+    if(!process.argv.includes('--reuse-images'))await run('docker',['load','--input',path.join(upgradeBundle,'images.tar')]);
+    for(const id of Object.values(previous.images))assert.equal(await run('docker',['image','inspect',id,'--format','{{.Id}}']),id);
+    env.API_IMAGE=previous.images.api;env.FRONTEND_IMAGE=previous.images.frontend;
+  }
   await compose(['up', '-d', '--wait', '--wait-timeout', '180', '--pull', 'never']);
   const binding = await compose(['port', 'proxy', '443']);
   assert.match(binding, /^127\.0\.0\.1:\d+$/);
   const ca = path.join(temporary, 'root.crt');
   await compose(['cp', 'proxy:/data/caddy/pki/authorities/local/root.crt', ca]);
   const childEnv = { ...env, NODE_EXTRA_CA_CERTS: ca, POS_SMOKE_URL: 'https://' + binding, POS_SMOKE_AGENT_TOKEN: agentToken, POS_SMOKE_DIRECTORY: temporary, POS_SMOKE_AGENT_MODULE: path.join(bundle, 'agent', 'pull-agent.mjs') };
+  let upgradeEvidence={};
+  if(previous){
+    const upgradeScript=path.join(source,'test-upgrade-client.mjs');
+    await run(process.execPath,[upgradeScript,'--before'],{env:childEnv,timeout:60000});
+    const contentSql="select id||':'||request_id||':'||encode(digest(content,'sha256'),'hex') from print_job order by id";
+    const contentBefore=await compose(['exec','-T','db','psql','-U','pos','-d','posdb','-At','-c',contentSql]);
+    console.log('Historical jobs prepared on previous API. Recreating services with the new release...');
+    await compose(['stop','api','frontend']);
+    env.API_IMAGE=manifest.images.api;env.FRONTEND_IMAGE=manifest.images.frontend;
+    await compose(['up','-d','--no-deps','--force-recreate','--wait','--wait-timeout','180','--pull','never','api','frontend']);
+    const contentAfter=await compose(['exec','-T','db','psql','-U','pos','-d','posdb','-At','-c',contentSql]);
+    assert.equal(contentAfter,contentBefore,'Migration changed historical request IDs or receipt snapshots');
+    upgradeEvidence=JSON.parse((await run(process.execPath,[upgradeScript,'--after'],{env:childEnv,timeout:60000})).split(/\r?\n/).at(-1));
+    upgradeEvidence.legacyReceiptContentPreserved=true;
+    childEnv.POS_SMOKE_UPGRADED='true';
+  }
   const first = JSON.parse((await run(process.execPath, [childScript], { env: childEnv, timeout: 60000 })).split(/\r?\n/).at(-1));
   console.log('Two HTTPS sessions and outbound queue passed. Creating replicated backup...');
   await compose(['exec', '-T', 'api', 'node', 'dist/scripts/store-backup.js', '--check']);
@@ -71,7 +99,7 @@ try {
   const second = JSON.parse((await run(process.execPath, [childScript, '--verify'], { env: childEnv, timeout: 60000 })).split(/\r?\n/).at(-1));
   const apiEnv = await compose(['exec', '-T', 'api', 'node', '-e', 'console.log(Boolean(process.env.BOOTSTRAP_ADMIN_PASSWORD))']);
   assert.equal(apiEnv, 'false');
-  evidence = { version: manifest.version, atUtc: new Date().toISOString(), project, images: manifest.images, imagesLoadedFromArchive: !process.argv.includes('--reuse-images'), ...first, ...second, replicatedBackup: true, replicaSha256: replicaHash, bootstrapRemoved: true, physicalPrinting: 'simulated', windowsGlobalChanges: false, passed: true };
+  evidence = { version: manifest.version, atUtc: new Date().toISOString(), project, images: manifest.images, imagesLoadedFromArchive: !process.argv.includes('--reuse-images'), ...first, ...second, upgradeFrom: previous?.version ?? null, ...upgradeEvidence, replicatedBackup: true, replicaSha256: replicaHash, bootstrapRemoved: true, physicalPrinting: 'simulated', windowsGlobalChanges: false, passed: true };
   const evidenceArg = process.argv.indexOf('--evidence');
   if (evidenceArg > 0) await writeFile(path.resolve(process.argv[evidenceArg + 1]), JSON.stringify(evidence, null, 2) + '\n');
   console.log(JSON.stringify(evidence));

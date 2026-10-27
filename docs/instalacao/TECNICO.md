@@ -2,7 +2,7 @@
 
 ## Escopo e arquitetura
 
-Implantação prevista: dois caixas Windows x64, uma impressora central e uma instância de loja. O Principal hospeda Docker Desktop Linux/amd64, PostgreSQL 16, Redis 7, API, frontend Nginx e proxy Caddy. O Terminal usa navegador. O agente de impressão é um processo Node Windows sem servidor HTTP e faz conexões de saída HTTPS.
+Implantação prevista: dois caixas Windows x64, uma instância de loja e uma impressora por caixa quando configurada. O Principal hospeda Docker Desktop Linux/amd64, PostgreSQL 16, Redis 7, API, frontend Nginx e proxy Caddy. O Terminal usa navegador e pode executar seu próprio agente de impressão Windows, sem Docker. O agente de impressão é um processo Node Windows sem servidor HTTP e faz conexões de saída HTTPS.
 
 ```mermaid
 flowchart LR
@@ -13,7 +13,9 @@ flowchart LR
   A --> D[(PostgreSQL / fila de impressão)]
   A --> R[(Redis / importação)]
   W[Agente Windows no Caixa 1] -->|Consulta autenticada HTTPS| P
-  W --> S[Spooler Windows / impressora]
+  W --> S[Spooler Windows / impressora Caixa 1]
+  WT[Agente Windows no Caixa 2] -->|HTTPS autenticado / destino próprio| P
+  WT --> ST[Spooler Windows / impressora Caixa 2]
   A --> V[Backup local + réplica externa]
 ```
 
@@ -29,6 +31,8 @@ O instalador não seleciona o Compose de desenvolvimento. Gera um projeto estáv
 | `Instalar-POS.ps1` | GUI WinForms Principal/Terminal; `-ValidateOnly` valida pacote e `-UiCheck` constrói a UI sem exibir/instalar. |
 | `Pos.Common.ps1` | Hashes, validação de pacote/IP, ACL privada, DPAPI, argumentos nativos, execução Docker, TLS/identidade e atalhos. |
 | `Pos.Install.ps1` | Primeiro provisionamento, reparo da mesma versão, credenciais, backup inicial e exportação do Terminal. |
+| `Pos.Terminal.ps1` | Pareamento individual, DPAPI, instalação/reparo do Terminal e URL de destino público. |
+| `Start-Terminal.ps1` / `Parar-Terminal.ps1` / `Diagnosticar-Terminal.ps1` | Ciclo de vida do agente Terminal após login, sem Docker ou portas de entrada. |
 | `Firewall-POS.ps1` | Único auxiliar elevado: regra TCP443 para IP atribuído, rede Privada e LocalSubnet; permite retirar somente essa regra. |
 | `Start-POS.ps1` | Supervisor após login: aguarda Docker, inicia serviços/agente e realiza backup vencido. |
 | `Parar-POS.ps1` | Sinal de parada, espera do agente e parada dos containers sem remover dados. |
@@ -47,7 +51,7 @@ No computador de desenvolvimento Windows x64, use Git, Docker Desktop Linux/amd6
 
 ```powershell
 ./infra/installer/Test-Installer.ps1 -NodePath (Get-Command node.exe).Source
-./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.1'
+./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.2' -CompatibleFrom '1.0.0-store.1'
 ```
 
 O runtime Windows obtido pelo builder também é usado nos testes; Node instalado localmente não é exigido pelo build. O parâmetro `-NodePath` do teste é opcional para uma execução manual sem Node. O build exige acesso à rede para dependências/imagens/runtime. Seus temporários ficam em uma pasta `pos-store-build-*` sob o Temp do usuário, informada no log.
@@ -63,7 +67,7 @@ artifacts/POS-Loja-<versão>/
   agent/pull-agent.mjs
   images.tar
   manifest.json
-  documentacao/USO.md / TECNICO.md / HOMOLOGACAO.md
+  documentacao/USO.md / TECNICO.md / HOMOLOGACAO.md / IMPRESSORAS.md
   LEIA-ME.txt
 artifacts/POS-Loja-<versão>.zip
 artifacts/POS-Loja-<versão>.zip.sha256
@@ -76,7 +80,7 @@ Para assinar um release, forneça `-SigningThumbprint` com um certificado de cod
 Atualizações futuras precisam declarar a versão de origem após ensaio de upgrade:
 
 ```powershell
-./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.2' -CompatibleFrom '1.0.0-store.1'
+./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.3' -CompatibleFrom '1.0.0-store.2'
 ```
 
 `CompatibleFrom` é uma declaração do mantenedor, não uma prova automática de compatibilidade de schema. O gate de release deve incluir migrações, leitura de dados anteriores, backup/restore em alvo isolado e preservação de operações. O problema de checksums/privilégios de migração da TSK-038 continua pendente; não aprove releases apenas por esse campo.
@@ -97,7 +101,7 @@ Um lock de arquivo do Windows serializa instalador/atualizador. Reparar preserva
 
 ## HTTPS, pareamento e rede
 
-Caddy gera CA própria da instalação e certificado para o IP configurado. A opção default_sni seleciona esse certificado para clientes que acessam por IP sem enviar SNI, inclusive através do NAT do Docker. O verificador HTTPS aguarda a emissão inicial mantendo validação de CA/identidade e TLS 1.2. A chave privada permanece no volume caddy_data. O Principal exporta apenas root.crt público e confia nele em CurrentUser/Root. O pacote Terminal contém certificado público, SHA256, UUID/origem da loja, launcher e scripts; não contém segredos, imagens, banco, chave de CA ou agente.
+Caddy gera CA própria da instalação e certificado para o IP configurado. A opção default_sni seleciona esse certificado para clientes que acessam por IP sem enviar SNI, inclusive através do NAT do Docker. O verificador HTTPS aguarda a emissão inicial mantendo validação de CA/identidade e TLS 1.2. A chave privada permanece no volume caddy_data. O Principal exporta apenas root.crt público e confia nele em CurrentUser/Root. O pacote Terminal contém certificado público, SHA256, UUID/origem da loja, launcher, scripts, runtime Node e agente. Não contém segredos de loja, imagens Docker, banco ou chave privada de CA. O token de cada Terminal é gerado localmente e pareado por código autorizado pelo administrador.
 
 O operador confirma origem/endereço/fingerprint do pareamento. O Terminal verifica hashes locais, importa a CA recebida de fonte confiável, faz HTTPS com validação normal e exige o UUID esperado em `GET /api/v1/store-info`. Não baixa e confia automaticamente em uma CA fornecida pela rede. O agente usa NODE_EXTRA_CA_CERTS; nenhuma validação TLS é desativada.
 
@@ -107,7 +111,7 @@ O auxiliar elevado de firewall valida IP privado atribuído e perfil Privado. A 
 
 O atalho na pasta Inicializar chama PowerShell oculto, no usuário interativo da instalação. O supervisor usa lock de arquivo para evitar instâncias duplicadas e aguarda Docker. Não registra serviço SYSTEM nem pressupõe acesso de Session 0 à impressora. Docker e spooler precisam ser homologados nessa conta após login/reboot.
 
-O worker é iniciado com runtime do release e segredo por ambiente. Há um único agente lógico `principal`. O supervisor registra estado/PIDs em runtime-status.json e tenta backup quando o último sucesso ultrapassa 24h; em falha, tenta depois de uma hora. A agenda depende da sessão/supervisor; não garante execução com PC desligado ou usuário desconectado.
+O worker é iniciado com runtime do release e segredo por ambiente. O Principal mantém o destino `principal`; cada Terminal pareado recebe um UUID próprio. O supervisor registra estado/PIDs em runtime-status.json e tenta backup quando o último sucesso ultrapassa 24h; em falha, tenta depois de uma hora. A agenda depende da sessão/supervisor; não garante execução com PC desligado ou usuário desconectado.
 
 A CLI de backup usa createManagedBackup e o mesmo preflight/lock/replicação/catalogação/retenção da aplicação. Ator nulo identifica execução de sistema, sem fingir um usuário humano. A instalação exige réplica; o caminho externo deve existir e ser acessível no container pelo UID 10001, com capacidade de publicação exclusiva/hardlinks. O verificador não demonstra que o dispositivo está fisicamente fora do host. Réplicas externas não sofrem retenção automática. Arquivos importados e Redis/AOF também têm volumes persistentes, mas isso não garante idempotência da importação.
 
@@ -117,7 +121,7 @@ O atualizador valida o pacote e CompatibleFrom antes de mudar a versão. Faz bac
 
 ## Fila de impressão e invariantes
 
-Migração aditiva: `20261022_001_print_jobs.sql`. A tabela print_job guarda request_id único, sale_id, snapshot de texto/código/cópias/locale, estado, token de reserva e timestamps. print_agent_state registra o último polling. O snapshot é do pedido de impressão, não substitui os snapshots financeiros/históricos ainda pendentes em outras tarefas.
+Migrações aditivas: `20261022_001_print_jobs.sql` e `20261023_001_print_printers.sql`. A segunda preserva os trabalhos/destino existentes, adiciona cadastro de impressoras e códigos de pareamento, FK de destino e snapshot do nome no trabalho. A tabela print_job guarda request_id único, sale_id, snapshot de texto/código/cópias/locale, estado, token de reserva e timestamps. print_agent_state registra o último polling. O snapshot é do pedido de impressão, não substitui os snapshots financeiros/históricos ainda pendentes em outras tarefas.
 
 ```mermaid
 stateDiagram-v2
@@ -132,13 +136,15 @@ stateDiagram-v2
   uncertain --> submitted: confirmação tardia da mesma reserva
 ```
 
-- Enqueue/transição de claim usam advisory lock transacional do único destino. Candidatos são ordenados por data/UUID e reservados com FOR UPDATE SKIP LOCKED.
+- Enqueue/transição de claim usam advisory lock transacional por destino. Candidatos são ordenados por data/UUID e reservados com FOR UPDATE SKIP LOCKED.
 - request_id UUID deduplica a mesma solicitação. Reuso com venda/cópias/locale diferentes retorna 409. O primeiro texto permanece imutável no retry.
-- No máximo um claim/spool vivo para o destino. Lease padrão 120 segundos. Reservas não iniciadas podem voltar à fila; spools expirados tornam-se incertos e não são repetidos automaticamente.
-- Conteúdo limitado a 1 MiB e cópias entre 1 e 10. Limite padrão de 500 trabalhos pendentes; ao atingir, novas solicitações recebem 503, preservando retries idempotentes já existentes.
+- No máximo um claim/spool vivo por destino, com locks independentes entre impressoras. Lease padrão 120 segundos. Reservas não iniciadas podem voltar à fila; spools expirados tornam-se incertos e não são repetidos automaticamente.
+- Conteúdo limitado a 1 MiB e cópias entre 1 e 10. Limite padrão de 500 trabalhos pendentes por impressora; ao atingir, novas solicitações recebem 503, preservando retries idempotentes já existentes.
 - O agente grava e sincroniza journal antes da fronteira de início, espera /start e só depois chama Out-Printer. Após sucesso/erro, grava resultado antes de confirmar à API.
 - Reinício confirma resultados guardados sem chamar a impressora novamente. Journals reconhecidos são arquivados localmente; o journal não guarda conteúdo do recibo. Caso de protocolo inconsistente exige revisão, sem forçar repetição.
 - submitted significa aceitação pelo Windows; não comprova papel. Exatamente uma saída física não pode ser garantida por esse transporte. Em resultados incertos, o operador decide por nova via após conferir papel/spooler.
+
+Credenciais de Terminal ficam como SHA256 em print_printer; o token de ambiente continua exclusivo do Principal.
 
 Variáveis da API: PRINT_MODE=queue, PRINT_AGENT_TOKEN_SHA256 (64 hex), PRINT_PRINTER_NAME, PRINT_QUEUE_LEASE_SECONDS (60–600), PRINT_QUEUE_MAX_PENDING (10–10.000, padrão 500), STORE_ID (UUID). O Compose da loja usa queue; a execução anterior de desenvolvimento continua direct por padrão. O antigo agente HTTP/loopback permanece disponível para compatibilidade, mas não é executado pelo instalador.
 
@@ -153,13 +159,27 @@ Consulte também `backend/openapi/openapi.yaml`, servido pela API.
 | GET /api/v1/print-jobs/{id} | Sessão + sales:read | Metadados, sem texto/token. |
 | GET /api/v1/print-jobs/sale/{id} | Sessão + sales:read | Últimos vinte trabalhos; UI mostra os cinco mais recentes. |
 | GET /api/v1/print-jobs/agent-status | Sessão + sales:read | Heartbeat/contagens. |
-| POST /api/v1/print-agent/claim | x-print-agent-token | job com texto/token ou null. |
-| POST /api/v1/print-agent/jobs/{id}/start | Token de agente + claim_token | 204 ou 409; não imprimir se não confirmado. |
+| POST /api/v1/print-agent/claim | x-print-agent-token + x-print-printer-id | job com texto/token ou null. |
+| POST /api/v1/print-agent/jobs/{id}/start | Token de agente + x-print-printer-id + claim_token | 204 ou 409; não imprimir se não confirmado. |
 | POST /api/v1/print-agent/jobs/{id}/finish | Token de agente + claim_token | outcome submitted/uncertain/failed; confirmação idempotente. |
-| GET /api/v1/print-agent/jobs/{id} | Token de agente | Metadados para recuperação do journal. |
+| GET /api/v1/print-agent/jobs/{id} | Token de agente + x-print-printer-id | Metadados para recuperação do journal. |
 | GET /api/v1/print-agent/status | Token de agente | Diagnóstico local. |
 
-O token de agente é comparado por hash e timingSafeEqual, separado da sessão humana. Rotas de agente ficam antes do middleware de sessão e exigem o token próprio; não ficam abertas. O frontend gera UUID por ação, anuncia fila/resultado em vez de afirmar impressão física e atualiza o histórico enquanto há trabalho pendente. Nunca reenvia impressão como consequência automática de timeout de consulta.
+O token de agente é comparado por hash e timingSafeEqual, separado da sessão humana. Cabeçalho x-print-printer-id seleciona a identidade e todas as operações de agente são limitadas a ela; sua omissão mantém compatibilidade com agentes antigos do Principal. Start, finish e recuperação não aceitam trabalhos de outro destino, mesmo com claim_token conhecido. Rotas de agente ficam antes do middleware de sessão e exigem o token próprio; não ficam abertas. O frontend gera UUID por ação, anuncia fila/resultado em vez de afirmar impressão física e atualiza o histórico enquanto há trabalho pendente. Nunca reenvia impressão como consequência automática de timeout de consulta.
+
+## Cadastro, pareamento e destino do navegador
+
+GET /api/v1/print-printers exige sales:read ou printers:manage e retorna identidade/estado, sem tokens/hashes/códigos. POST /print-printers/enrollments exige printers:manage e gera capacidade aleatória de 192 bits, validade de 15 minutos e limite de vinte pendências; apenas o hash fica no banco. O perfil admin com wildcard já possui a permissão. Não são inseridos usuários/vendas demonstrativos.
+
+POST /print-agent/enroll recebe código e token aleatório de 256 bits, gerado e salvo no DPAPI do Terminal antes da chamada. O consumo é serializado por lock da linha: somente uma credencial pode reivindicar o código. Uma resposta perdida pode ser recuperada com o mesmo código/token consumidos, sem criar outra identidade; revogação impede esse replay. Respostas são no-store, tokens não são devolvidos e auditoria guarda apenas identidades públicas.
+
+POST /print-printers/{id}/revoke exige printers:manage, desabilita o Terminal e remove o hash de sua credencial. Não apaga nem transfere trabalhos. Principal não é revogável por esse endpoint. Uma operação física já iniciada pode terminar; revogação não é cancelamento de spool.
+
+Cada pedido guarda printer_id e printer_name imutáveis. O servidor valida destino habilitado antes de um novo enqueue e inclui o destino na comparação idempotente. Offline não muda o destino. O worker valida a identidade do trabalho antes de iniciar o spool. O journal Terminal fica em print-journal/<printerId>, preservando registros de pareamentos antigos.
+
+O atalho usa somente pos_store/pos_printer públicos. main.tsx captura a preferência antes do redirect de autenticação, em chave de navegador por UUID da loja. Seleção explícita aparece no PDV/detalhes; cadastro removido/revogado bloqueia o botão, sem cair automaticamente no Principal. Preferências não substituem autorização: cada sessão com sales:read pode imprimir nos destinos habilitados da loja, enquanto cada agente só consulta seu próprio destino.
+
+Fluxos do operador, reparo sem novo código, troca de dispositivo e comandos de diagnóstico/parada: [IMPRESSORAS.md](IMPRESSORAS.md). A credencial DPAPI/journal do Terminal não está no backup SQL. Recuperação deve rever revogações, estado físico e journals antes de retomar filas antigas.
 
 ## Dados e recuperação assistida
 
@@ -179,7 +199,7 @@ Troca de máquina/conta/IP/CA requer plano assistido: backup externo validado, a
 Reprodução do ensaio de release, após construir o pacote (requer Node no host e Docker Compose com suporte a `!override`):
 
 ```powershell
-node infra/installer/test-store.mjs --bundle artifacts/POS-Loja-1.0.0-store.1 --evidence docs/test-evidence/installer-store-20261022.json
+node infra/installer/test-store.mjs --bundle artifacts/POS-Loja-1.0.0-store.2 --evidence docs/test-evidence/installer-multiprinter-20261023.json
 ```
 
 Esse ensaio usa o projeto fixo `pos-installer-smoke`, volumes próprios sintéticos, porta efêmera somente em loopback e sub-rede de teste `172.29.74.0/24`. Limpa apenas esse projeto no início/fim. Não execute dois ensaios simultâneos. A saída do spooler é injetada/simulada; HTTPS, duas sessões, fila, API, banco, backup e bind externo são reais. O teste não comprova que o diretório temporário de réplica está fisicamente em outro dispositivo.

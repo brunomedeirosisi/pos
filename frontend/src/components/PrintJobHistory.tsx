@@ -12,7 +12,7 @@ export function PrintJobHistory({ saleId }: { saleId: string }) {
   return <section aria-label={t('sales.printJobs')} className="card" aria-live="polite">
     <h2>{t('sales.printJobs')}</h2>
     <ul>{jobs.data.slice(0, 5).map(job => <li key={job.job_id}>
-      {job.receipt_code} — {t('sales.printStatus.' + job.status)} ({job.copies})
+      {job.receipt_code} — {job.printer_name} — {t('sales.printStatus.' + job.status)} ({job.copies})
       {job.status === 'uncertain' && <p>{t('sales.printUncertainHelp')}</p>}
     </li>)}</ul>
   </section>;

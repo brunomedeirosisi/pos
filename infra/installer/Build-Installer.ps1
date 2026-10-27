@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$Version='1.0.0-store.1',[string[]]$CompatibleFrom=@(),[string]$SigningThumbprint='')
+param([string]$Version='1.0.0-store.2',[string[]]$CompatibleFrom=@(),[string]$SigningThumbprint='')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Pos.Common.ps1')
 if($Version -notmatch '^[0-9A-Za-z][0-9A-Za-z.-]{0,79}$'){throw 'Versao invalida.'}
@@ -59,7 +59,7 @@ $null=New-Item -ItemType Directory -Path (Join-Path $bundle 'agent')
 Copy-Item -LiteralPath (Join-Path $repoRoot 'agent\src\pull-agent.mjs') -Destination (Join-Path $bundle 'agent\pull-agent.mjs')
 if((Invoke-PosProcess $node @('--version')) -ne ('v'+$nodeVersion)){throw 'Versao do runtime inesperada.'}
 & (Join-Path $PSScriptRoot 'Test-Installer.ps1') -NodePath $node
-foreach($name in @('Instalar-POS.ps1','Pos.Common.ps1','Pos.Install.ps1','Firewall-POS.ps1','Start-POS.ps1','Parar-POS.ps1','Diagnosticar-POS.ps1','Atualizar-POS.ps1','Desativar-POS.ps1','store.compose.yml','Caddyfile')) {
+foreach($name in @('Instalar-POS.ps1','Pos.Common.ps1','Pos.Install.ps1','Pos.Terminal.ps1','Start-Terminal.ps1','Parar-Terminal.ps1','Diagnosticar-Terminal.ps1','Firewall-POS.ps1','Start-POS.ps1','Parar-POS.ps1','Diagnosticar-POS.ps1','Atualizar-POS.ps1','Desativar-POS.ps1','store.compose.yml','Caddyfile')) {
   $source=Join-Path $PSScriptRoot $name;$target=Join-Path $bundle $name
   if($name.EndsWith('.ps1')){[IO.File]::WriteAllText($target,[IO.File]::ReadAllText($source),(New-Object Text.UTF8Encoding($true)))}else{Copy-Item -LiteralPath $source -Destination $target}
 }
@@ -68,7 +68,7 @@ Copy-Item -LiteralPath (Join-Path $repoRoot 'backend\sql\init.sql') -Destination
 $compiler=Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
 $null=Invoke-PosProcess $compiler @('/nologo','/target:winexe','/platform:x64','/reference:System.Windows.Forms.dll','/reference:System.Web.Extensions.dll',('/out:'+(Join-Path $bundle 'Instalar-POS.exe')),(Join-Path $PSScriptRoot 'Launcher.cs'))
 $null=New-Item -ItemType Directory -Path (Join-Path $bundle 'documentacao')
-foreach($name in @('USO.md','TECNICO.md','HOMOLOGACAO.md')){Copy-Item -LiteralPath (Join-Path $repoRoot ('docs\instalacao\'+$name)) -Destination (Join-Path $bundle ('documentacao\'+$name))}
+foreach($name in @('USO.md','TECNICO.md','HOMOLOGACAO.md','IMPRESSORAS.md')){Copy-Item -LiteralPath (Join-Path $repoRoot ('docs\instalacao\'+$name)) -Destination (Join-Path $bundle ('documentacao\'+$name))}
 $readme='POS Loja '+$Version+[Environment]::NewLine+'Extraia o ZIP completo e execute Instalar-POS.exe. Leia documentacao/USO.md antes de instalar.'+[Environment]::NewLine+'Principal: mesmo usuario Windows que executa Docker Desktop e a impressora. Terminal: copie somente Terminal-POS gerado pelo Principal.'+[Environment]::NewLine+'O pacote nao inclui dados sinteticos de vendas. Preserve dados/volumes e conclua homologacao de rede, impressora e recuperacao.'
 [IO.File]::WriteAllText((Join-Path $bundle 'LEIA-ME.txt'),$readme,(New-Object Text.UTF8Encoding($true)))
 if($SigningThumbprint){

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { salesService } from '../services/sales';
 import { useToast } from '../components/ui/ToastProvider';
 import type { SaleReceiptLocale } from '../types/sales';
+import { usePrinterDestination } from './usePrinterDestination';
 
 function resolveLocale(language: string): SaleReceiptLocale {
   return language === 'en' ? 'en' : 'pt-BR';
@@ -27,9 +28,14 @@ export function useSaleReceiptActions() {
   const toast = useToast();
   const queryClient = useQueryClient();
   const locale = resolveLocale(i18n.language);
+  const destination = usePrinterDestination();
 
   const printMutation = useMutation({
-    mutationFn: (saleId: string) => salesService.printReceipt(saleId, { locale, request_id: crypto.randomUUID() }),
+    mutationFn: (saleId: string) => {
+      if (!destination.canPrint) throw new Error(t('printers.chooseAnother'));
+      return salesService.printReceipt(saleId, { locale, request_id: crypto.randomUUID(), printer_id: destination.printerId });
+    },
+    retry: false,
     onSuccess: (result, saleId) => {
       // Refresh the history independently of the accepted print request.
       void queryClient.invalidateQueries({ queryKey: ['sale-print-jobs', saleId] });
@@ -50,6 +56,8 @@ export function useSaleReceiptActions() {
 
   return {
     isPrinting: printMutation.isPending,
+    canPrint: destination.canPrint,
+    printerSelection: destination.selection,
     printReceipt: (saleId: string) => printMutation.mutate(saleId),
     openReceiptPreview: (saleId: string, autoPrint = false) =>
       openSaleReceiptWindow(saleId, {

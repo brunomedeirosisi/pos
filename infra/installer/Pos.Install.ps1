@@ -100,12 +100,12 @@ function Install-PosPrincipalCore([string]$Bundle, $Options, [string]$Root=(Get-
   $arguments=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$helper,'-Address',$settings.serverIp,'-Project',$settings.project)
   $process=Start-Process -FilePath (Get-PosPowerShell) -ArgumentList (($arguments|ForEach-Object{ConvertTo-PosArgument $_}) -join ' ') -Verb RunAs -WindowStyle Hidden -PassThru -Wait
   if($process.ExitCode -ne 0){throw 'A regra de rede nao foi criada. Autorize apenas o auxiliar de firewall do POS.'}
-  $agentConfig=@{serverUrl=$settings.serverUrl;printerName=$settings.printerName;journalDirectory=(Join-Path $Root 'print-journal');printTimeoutMs=15000;stopFile=(Join-Path $Root 'stop.request')}
+  $agentConfig=@{printerId='principal';serverUrl=$settings.serverUrl;printerName=$settings.printerName;journalDirectory=(Join-Path $Root 'print-journal');printTimeoutMs=15000;stopFile=(Join-Path $Root 'stop.request')}
   Write-PosJson (Join-Path $Root 'agent.json') $agentConfig
   $settings.status='ready';Write-PosJson (Join-Path $Root 'settings.json') $settings
   $startArgs=@('-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-File',(Join-Path $version 'Start-POS.ps1'),'-Root',$Root)
   New-PosShortcut (Join-Path ([Environment]::GetFolderPath('Startup')) 'POS Principal.lnk') (Get-PosPowerShell) (($startArgs|ForEach-Object{ConvertTo-PosArgument $_}) -join ' ')
-  Write-PosUrlShortcut $settings.serverUrl
+  Write-PosUrlShortcut (Get-PosBrowserUrl $settings.serverUrl $settings.storeId 'principal')
   Export-PosTerminal $Root $version
   Write-PosStep ('Certificado SHA256 para conferir no Terminal: '+(Get-PosHash $ca))
   Start-Process -FilePath (Get-PosPowerShell) -ArgumentList ((($startArgs+@('-Resume'))|ForEach-Object{ConvertTo-PosArgument $_}) -join ' ') -WindowStyle Hidden
@@ -121,26 +121,11 @@ function Install-PosPrincipal([string]$Bundle, $Options, [string]$Root=(Get-PosI
 function Export-PosTerminal([string]$Root,[string]$Version) {
   $settings=Get-PosSettings $Root
   $destination=Join-Path $Root 'Terminal-POS';$null=New-Item -ItemType Directory -Path $destination -Force
-  foreach($name in @('Instalar-POS.exe','Instalar-POS.ps1','Pos.Common.ps1','Pos.Install.ps1','LEIA-ME.txt')){Copy-Item -LiteralPath (Join-Path $Version $name) -Destination (Join-Path $destination $name) -Force}
+  foreach($name in @('Instalar-POS.exe','Instalar-POS.ps1','Pos.Common.ps1','Pos.Install.ps1','Pos.Terminal.ps1','Start-Terminal.ps1','Parar-Terminal.ps1','Diagnosticar-Terminal.ps1','LEIA-ME.txt')){Copy-Item -LiteralPath (Join-Path $Version $name) -Destination (Join-Path $destination $name) -Force}
+  foreach($folder in @('runtime','agent','documentacao')){Copy-Item -LiteralPath (Join-Path $Version $folder) -Destination $destination -Recurse -Force}
   Copy-Item -LiteralPath (Join-Path $Root 'pki\root.crt') -Destination (Join-Path $destination 'root.crt') -Force
   Write-PosJson (Join-Path $destination 'pairing.json') @{schemaVersion=1;storeId=$settings.storeId;serverUrl=$settings.serverUrl;certificateSha256=(Get-PosHash (Join-Path $destination 'root.crt'))}
-  $files=@(Get-ChildItem -LiteralPath $destination -File | Where-Object Name -ne 'manifest.json' | ForEach-Object{@{path=$_.Name;sha256=(Get-PosHash $_.FullName)}})
+  $files=@(Get-ChildItem -LiteralPath $destination -Recurse -File | Where-Object {$_.FullName -ne (Join-Path $destination 'manifest.json')} | ForEach-Object{@{path=$_.FullName.Substring($destination.Length+1).Replace('\','/');sha256=(Get-PosHash $_.FullName)}})
   Write-PosJson (Join-Path $destination 'manifest.json') @{schemaVersion=1;version=$settings.version;mode='Terminal';files=$files}
 }
-function Install-PosTerminal([string]$Bundle) {
-  $manifest=Assert-PosBundle $Bundle
-  if($manifest.mode -ne 'Terminal'){throw 'Use o pacote Terminal-POS gerado pelo Principal.'}
-  $pair=Read-PosJson (Join-Path $Bundle 'pairing.json')
-  $guid=[Guid]::Empty;if($pair.schemaVersion -ne 1 -or -not [Guid]::TryParse($pair.storeId,[ref]$guid)){throw 'Pareamento invalido.'}
-  $uri=[Uri]$pair.serverUrl
-  Assert-PosPrivateIp $uri.Host
-  if($uri.Scheme -ne 'https' -or $uri.Port -ne 443 -or $uri.UserInfo -or $uri.AbsolutePath -ne '/'){throw 'Endereco de pareamento invalido.'}
-  Write-PosStep 'Confiando no certificado recebido do Principal e conferindo a loja...'
-  $thumbprint=Import-PosCertificate (Join-Path $Bundle 'root.crt') $pair.certificateSha256
-  try { Test-PosStore $pair.serverUrl $pair.storeId }
-  catch { throw 'O Principal nao respondeu com a identidade esperada. Confira IP, rede privada, firewall e login no Caixa 1.' }
-  $root=Get-PosTerminalRoot;Protect-PosFolder $root
-  Write-PosJson (Join-Path $root 'terminal.json') @{storeId=$pair.storeId;serverUrl=$pair.serverUrl;certificateThumbprint=$thumbprint}
-  Write-PosUrlShortcut $pair.serverUrl
-  Write-PosStep ('Terminal pronto. Abra '+$pair.serverUrl+'. Nao e necessario instalar Docker neste caixa.')
-}
+. (Join-Path $PSScriptRoot 'Pos.Terminal.ps1')

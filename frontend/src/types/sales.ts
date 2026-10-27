@@ -108,6 +108,7 @@ export type SaleReceipt = {
 };
 
 export type PrintSaleReceiptInput = {
+  printer_id?: string;
   request_id?: string;
   locale?: SaleReceiptLocale;
   copies?: number;
@@ -124,6 +125,8 @@ export type PrintSaleReceiptResult = {
 };
 
 export type PrintJob = {
+  printer_id: string;
+  printer_name: string;
   job_id: string;
   sale_id: string;
   status: 'queued' | 'claimed' | 'spooling' | 'submitted' | 'failed' | 'uncertain';

@@ -1,3 +1,4 @@
+import { PrinterDestinationSelector } from '../components/PrinterDestinationSelector';
 import { PrintJobHistory } from '../components/PrintJobHistory';
 import React, { useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
@@ -25,7 +26,7 @@ export function SaleDetailsPage(): JSX.Element | null {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [confirmCancelOpen, setConfirmCancelOpen] = React.useState(false);
-  const { isPrinting, printReceipt, openReceiptPreview } = useSaleReceiptActions();
+  const { isPrinting, canPrint, printerSelection, printReceipt, openReceiptPreview } = useSaleReceiptActions();
 
   const saleQuery = useQuery({
     queryKey: ['sale', id],
@@ -126,8 +127,9 @@ export function SaleDetailsPage(): JSX.Element | null {
         <span className={`badge ${statusClasses[sale.status]}`}>{saleStatusLabels[sale.status]}</span>
       </div>
 
+      <PrinterDestinationSelector selection={printerSelection} />
       <div className="form-actions wrap-actions" style={{ marginTop: '1rem' }}>
-        <button type="button" className="button primary" onClick={() => printReceipt(sale.id)} disabled={isPrinting}>
+        <button type="button" className="button primary" onClick={() => printReceipt(sale.id)} disabled={isPrinting || !canPrint}>
           {isPrinting ? t('common.loading') : t('sales.printReceipt')}
         </button>
         <button type="button" className="button secondary" onClick={() => openReceiptPreview(sale.id)}>

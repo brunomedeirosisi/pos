@@ -4,7 +4,7 @@
 
 O instalador usa `src/pull-agent.mjs`. O worker não abre porta: consulta a API por HTTPS com token exclusivo da loja, busca um trabalho por vez, registra journal local e envia o recibo para `Out-Printer`. O supervisor fornece token pelo ambiente e CA pelo `NODE_EXTRA_CA_CERTS`. Não execute o stub HTTP neste cenário.
 
-`POS_AGENT_CONFIG` aponta para JSON com `serverUrl`, `printerName`, `journalDirectory` absoluto, `printTimeoutMs` e `stopFile`. `PRINT_AGENT_TOKEN` deve ser fornecido pelo supervisor; o backend guarda seu SHA256. O runtime Windows vem no pacote e não exige npm.
+`POS_AGENT_CONFIG` aponta para JSON com `serverUrl`, `printerId` (principal ou UUID pareado), `printerName`, `journalDirectory` absoluto, `printTimeoutMs` e `stopFile`. `PRINT_AGENT_TOKEN` deve ser fornecido pelo supervisor; o backend guarda seu SHA256. O runtime Windows vem no pacote e não exige npm. Cada worker envia x-print-printer-id e credencial exclusiva; a API limita claim/start/finish/status/recuperação ao destino autenticado. Veja [impressoras por caixa](../docs/instalacao/IMPRESSORAS.md).
 
 `submitted` significa que o comando do spooler terminou com sucesso; não confirma saída física. Falha/interrupção depois da fronteira de envio produz `uncertain`. O journal permite reenviar a confirmação sem imprimir novamente. Nunca apague journal/estado de fila para forçar repetição. Arquivos reconhecidos ficam em `acknowledged` para diagnóstico; não contêm texto do recibo, mas são confidenciais. A aplicação ainda não oferece retenção automática desses registros.
 

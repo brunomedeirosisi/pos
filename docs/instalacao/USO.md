@@ -1,6 +1,6 @@
-# Instalação e uso na loja — dois caixas Windows, uma impressora
+# Instalação e uso na loja — dois caixas Windows e impressoras por caixa
 
-Este guia cobre o instalador Windows do POS: **Caixa 1 Principal**, com aplicação/banco/impressora, e **Caixa 2 Terminal**, que acessa pelo navegador. O pacote inclui um executável de entrada e arquivos auxiliares; extraia o ZIP inteiro. O executável não funciona isolado.
+Este guia cobre o instalador Windows do POS 1.0.0-store.2: **Caixa 1 Principal**, com aplicação/banco/impressora, e **Caixa 2 Terminal**, que acessa pelo navegador. O pacote inclui um executável de entrada e arquivos auxiliares; extraia o ZIP inteiro. O executável não funciona isolado.
 
 A instalação fica pronta para homologação da infraestrutura. Antes de vendas reais, conclua os controles de crédito/cliente inativo, estoque não negativo e recuperação operacional pendentes no roadmap. “Instalação concluída” não certifica essas regras de negócio nem a saída física da impressora.
 
@@ -15,12 +15,12 @@ No Caixa 1:
 - Configure a conexão da loja como **Privada** no Windows. Os dois caixas devem estar na mesma rede com comunicação entre si.
 - Prepare uma pasta de backup em outro dispositivo/computador, já acessível por essa conta e pelo Docker. Um diretório no próprio disco do Caixa 1 não protege contra perda desse disco. O verificador não comprova a localização física do destino.
 
-No Caixa 2: navegador, acesso à rede e o pacote de pareamento recebido do Caixa 1. Não são necessários Docker, Node, banco ou driver da impressora nesse terminal.
+No Caixa 2: navegador, acesso à rede e o pacote Terminal-POS recebido do Caixa 1. Para usar uma impressora própria, instale seu driver e selecione o modo Terminal com impressora; o runtime e o agente vêm no pacote. Docker e banco ficam no Principal. Veja [IMPRESSORAS.md](IMPRESSORAS.md).
 
 Receba o ZIP e seu SHA256 por um canal confiável. Confira o hash antes de extrair:
 
 ```powershell
-Get-FileHash ./POS-Loja-1.0.0-store.1.zip -Algorithm SHA256
+Get-FileHash ./POS-Loja-1.0.0-store.2.zip -Algorithm SHA256
 ```
 
 Compare com o valor fornecido pelo responsável pela versão. O build local padrão não possui assinatura digital do instalador; o runtime Node incluído tem sua assinatura e checksum verificados no build. Não desative antivírus/SmartScreen para contornar um pacote desconhecido. Uma distribuição comercial deve usar certificado de assinatura confiável.
@@ -49,12 +49,12 @@ Se houver erro, leia a mensagem e preserve os arquivos/dados. Executar novamente
 ## 3. Instalar o Terminal
 
 1. Copie **somente a pasta Terminal-POS**, inteira, do Caixa 1 para o Caixa 2 por um meio confiável, como um pendrive entregue pelo responsável.
-2. Execute seu **Instalar-POS.exe**. Esse pacote já abre no modo **Terminal**.
+2. Execute seu **Instalar-POS.exe**. Selecione **Terminal** para usar a impressora central, ou **Terminal com impressora** para parear uma impressora local com código gerado em Administração > Sistema > Impressoras. Siga [o roteiro completo](IMPRESSORAS.md).
 3. Confira o endereço e o SHA256 do certificado exibidos com os dados do pacote original do Principal. Confirme que o pacote veio da sua loja.
 4. O instalador confia no certificado somente para o usuário atual, confere a identidade UUID da loja via HTTPS e cria o atalho **POS Loja**.
 5. Abra o atalho e entre com um usuário autorizado. Crie contas individuais no cadastro de usuários para os operadores; evite compartilhar a senha do administrador.
 
-O pacote Terminal não contém senha do banco, token do agente, segredo de sessão, imagens Docker ou runtime Node. Não copie a pasta completa `POSStore`, `secrets.bin` ou as chaves da autoridade certificadora para o Caixa 2.
+O pacote Terminal não contém senha do banco, tokens de agente, segredo de sessão ou imagens Docker. Inclui runtime Node e worker para o modo opcional com impressora; sua credencial é criada e protegida localmente durante o pareamento. Não copie a pasta completa `POSStore`, `secrets.bin` ou as chaves da autoridade certificadora para o Caixa 2.
 
 ## 4. Rotina de abertura e fechamento
 
@@ -81,7 +81,7 @@ Esses comandos usam política de execução apenas nesse processo; não alteram 
 
 ## 5. Como funciona a impressão compartilhada
 
-Os dois caixas solicitam impressão à mesma aplicação. Os trabalhos ficam no PostgreSQL; o agente do Caixa 1 consulta a fila por HTTPS e entrega os textos à fila do Windows. Não é necessário compartilhar a porta 9222 ou abrir uma porta de impressão na rede.
+Os dois caixas solicitam impressão à mesma aplicação. Os trabalhos ficam no PostgreSQL, vinculados ao destino escolhido. Cada agente consulta somente a fila de sua impressora por HTTPS e entrega os textos ao Windows local. O atalho configura o destino padrão de cada caixa; o PDV permite seleção explícita. Não é necessário compartilhar a porta 9222 ou abrir uma porta de impressão na rede.
 
 Nos detalhes da venda, “Impressões” mostra os trabalhos recentes:
 
@@ -147,4 +147,4 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $posTools 'De
 
 `-RemoveTrust` também retira o certificado dessa conta do Principal. Dados/volumes/backups permanecem preservados. No Terminal, a retirada do atalho e da CA identificada em `%LOCALAPPDATA%\POSTerminal\terminal.json` é uma operação local assistida; não remova certificados sem conferir a identificação.
 
-Documentação técnica: [TECNICO.md](TECNICO.md). Checklist de aceitação: [HOMOLOGACAO.md](HOMOLOGACAO.md).
+Impressoras por caixa: [IMPRESSORAS.md](IMPRESSORAS.md). Documentação técnica: [TECNICO.md](TECNICO.md). Checklist de aceitação: [HOMOLOGACAO.md](HOMOLOGACAO.md).

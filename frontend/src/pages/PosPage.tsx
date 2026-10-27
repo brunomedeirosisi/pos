@@ -1,3 +1,4 @@
+import { PrinterDestinationSelector } from '../components/PrinterDestinationSelector';
 import { decimalUnits, decimalNumber, isDecimalValue } from '../utils/checkout-decimal';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -26,7 +27,7 @@ export function PosPage(): JSX.Element {
   const toast = useToast();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { isPrinting, printReceipt, openReceiptPreview } = useSaleReceiptActions();
+  const { isPrinting, canPrint, printerSelection, printReceipt, openReceiptPreview } = useSaleReceiptActions();
 
   const [search, setSearch] = useState('');
   const [orderNumber, setOrderNumber] = useState('');
@@ -428,6 +429,7 @@ export function PosPage(): JSX.Element {
       >
         <div className="form-grid vertical">
           {!validCheckoutPreview && <p role="alert">{t('sales.invalidCheckoutValue')}</p>}
+          <PrinterDestinationSelector selection={printerSelection} />
           <div className="receipt-summary-box">
             <div className="row">
               <span>{t('sales.subtotal')}</span>
@@ -540,7 +542,7 @@ export function PosPage(): JSX.Element {
             <button
               type="button"
               className="button primary"
-              disabled={!completedSale || isPrinting}
+              disabled={!completedSale || isPrinting || !canPrint}
               onClick={() => {
                 if (!completedSale) return;
                 printReceipt(completedSale.id);

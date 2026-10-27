@@ -1,0 +1,210 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-23T13:06:00.495Z",
+  "request": "Implementar Terminal com impressora, destino por caixa e agentes/fila isolados",
+  "baseGitHead": "01989f9618ac2d4773db96493b7c60ba2d99bf9a",
+  "baseWasDirty": false,
+  "version": "1.0.0-store.2",
+  "distribution": {
+    "manifestVersion": "1.0.0-store.2",
+    "filesVerified": 27,
+    "zipSha256": "203cac83b2c4493990569036e3ef14a4c86cfd9904ccccfa1efb189efaadca7d",
+    "zipSize": 284358594,
+    "passed": true,
+    "path": "artifacts/POS-Loja-1.0.0-store.2.zip",
+    "codeSigned": false,
+    "compatibleFrom": [
+      "1.0.0-store.1"
+    ],
+    "images": {
+      "proxy": "sha256:3067cc4e02c091399edbd5d65f85a3ff4d511574aecadb47f280c3761e68852e",
+      "db": "sha256:81bd698b4594e751a3269e4dcd3e03a4a0ec0daf7b72e7aa1abd43cce9887542",
+      "api": "sha256:90baeea9a0bf62b56e4f2f244f3472b54a2d4289c01a151dc6074cdfa87ff2f9",
+      "redis": "sha256:4df5c34dc41256fc4ed293482cb34281e17d133077e9aa3c6a87fda60a356c65",
+      "frontend": "sha256:2008edc1496e4563ef785e69135adc9641fe9ae685e4fe0937af51363ab65798"
+    },
+    "nodeVersion": "24.21.0",
+    "nodeArchiveSha256": "158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541",
+    "scriptsAndGuidesMatchSource": true,
+    "sourceComparisons": 20
+  },
+  "tests": {
+    "dockerFull": {
+      "command": "node infra/test-disposable.mjs --docker --images --backups",
+      "exitCode": 0,
+      "backendUnit": 144,
+      "backendIntegration": 81,
+      "backendRegression": 4,
+      "measurementControls": 7,
+      "frontendAtFullRun": 72,
+      "agent": 9,
+      "fullRunTotal": 317,
+      "lintAndEmptySelectionControls": 16,
+      "lint": "passed",
+      "typechecks": "passed",
+      "builds": "passed",
+      "backupRestoreAndRecreation": true,
+      "restoredForeignKeys": 21
+    },
+    "frontendFinal": {
+      "command": "docker compose -p pos-phase0-tests -f infra/docker-compose.test.yml -f infra/docker-compose.test-runners.yml --profile runners build frontend-tests; docker compose ... run --rm --no-deps frontend-tests",
+      "exitCode": 0,
+      "tests": 74,
+      "lint": "passed",
+      "typecheck": "passed",
+      "build": "passed",
+      "note": "Após acrescentar polling de conectividade e dois testes do hook, o frontend foi revalidado em Docker. Backend e agente permaneceram iguais."
+    },
+    "uniqueFinalTests": 319,
+    "failed": 0,
+    "skipped": 0,
+    "seeds": {
+      "performance": "passed",
+      "phase4": "passed",
+      "modified": false,
+      "note": "Os dois seeds passaram na primeira execução com --seeds; após corrigir OpenAPI a suíte foi repetida sem semear novamente."
+    },
+    "windows": {
+      "command": "infra/installer/Test-Installer.ps1 -NodePath <Node Windows>",
+      "passed": 83,
+      "failed": 0,
+      "globalChanges": "mocked",
+      "real": [
+        "PowerShell syntax",
+        "DPAPI CurrentUser",
+        "protected DACL",
+        "native argument quoting",
+        "C# compile/launcher",
+        "tamper rejection",
+        "hidden GUI construction"
+      ],
+      "terminalScenarios": [
+        "browser-only install",
+        "printer pairing with own credential",
+        "lost enrollment response and retry",
+        "repair preserves printer identity/token",
+        "no implicit downgrade to principal",
+        "journal per printer",
+        "shortcut contains only public routing IDs"
+      ]
+    },
+    "freshStore": {
+      "version": "1.0.0-store.2",
+      "atUtc": "2026-10-23T13:02:02.566Z",
+      "project": "pos-installer-smoke",
+      "images": {
+        "proxy": "sha256:3067cc4e02c091399edbd5d65f85a3ff4d511574aecadb47f280c3761e68852e",
+        "db": "sha256:81bd698b4594e751a3269e4dcd3e03a4a0ec0daf7b72e7aa1abd43cce9887542",
+        "api": "sha256:90baeea9a0bf62b56e4f2f244f3472b54a2d4289c01a151dc6074cdfa87ff2f9",
+        "redis": "sha256:4df5c34dc41256fc4ed293482cb34281e17d133077e9aa3c6a87fda60a356c65",
+        "frontend": "sha256:2008edc1496e4563ef785e69135adc9641fe9ae685e4fe0937af51363ab65798"
+      },
+      "imagesLoadedFromArchive": true,
+      "httpsIdentityVerified": true,
+      "independentSessions": 2,
+      "emptyInitialCatalog": true,
+      "sales": 2,
+      "submittedJobs": 2,
+      "separatePrinterDestinations": true,
+      "agentCrossAccessDenied": true,
+      "requestDeduplicated": true,
+      "uncertainJobNotReprinted": true,
+      "offlineQueueNotRerouted": true,
+      "openApiLoaded": true,
+      "persistedAfterApiRecreation": true,
+      "noJournalReprint": true,
+      "credentialRevocationVerified": true,
+      "revokedQueueNotRerouted": true,
+      "upgradeFrom": null,
+      "replicatedBackup": true,
+      "replicaSha256": "6ed353599eff080564bede9466fb24c6a50c41d1a31c513317e2001d0a671375",
+      "bootstrapRemoved": true,
+      "physicalPrinting": "simulated",
+      "windowsGlobalChanges": false,
+      "passed": true
+    },
+    "upgrade": {
+      "version": "1.0.0-store.2",
+      "atUtc": "2026-10-23T13:03:29.841Z",
+      "project": "pos-installer-smoke",
+      "images": {
+        "proxy": "sha256:3067cc4e02c091399edbd5d65f85a3ff4d511574aecadb47f280c3761e68852e",
+        "db": "sha256:81bd698b4594e751a3269e4dcd3e03a4a0ec0daf7b72e7aa1abd43cce9887542",
+        "api": "sha256:90baeea9a0bf62b56e4f2f244f3472b54a2d4289c01a151dc6074cdfa87ff2f9",
+        "redis": "sha256:4df5c34dc41256fc4ed293482cb34281e17d133077e9aa3c6a87fda60a356c65",
+        "frontend": "sha256:2008edc1496e4563ef785e69135adc9641fe9ae685e4fe0937af51363ab65798"
+      },
+      "imagesLoadedFromArchive": false,
+      "httpsIdentityVerified": true,
+      "independentSessions": 2,
+      "emptyInitialCatalog": false,
+      "sales": 2,
+      "submittedJobs": 2,
+      "separatePrinterDestinations": true,
+      "agentCrossAccessDenied": true,
+      "requestDeduplicated": true,
+      "uncertainJobNotReprinted": true,
+      "offlineQueueNotRerouted": true,
+      "openApiLoaded": true,
+      "persistedAfterApiRecreation": true,
+      "noJournalReprint": true,
+      "credentialRevocationVerified": true,
+      "revokedQueueNotRerouted": true,
+      "upgradeFrom": "1.0.0-store.1",
+      "legacySessionPreserved": true,
+      "legacyAgentCredentialPreserved": true,
+      "legacySpoolingAcknowledged": true,
+      "legacyQueuedJobPreserved": true,
+      "legacyRequestIdPreserved": true,
+      "legacySalePreserved": true,
+      "legacyReceiptContentPreserved": true,
+      "replicatedBackup": true,
+      "replicaSha256": "0d291c01be0ab751cd590cfc633ad0112a8546eef6a2b489d773e2c672356f32",
+      "bootstrapRemoved": true,
+      "physicalPrinting": "simulated",
+      "windowsGlobalChanges": false,
+      "passed": true
+    },
+    "zipIntegrity": {
+      "manifestVersion": "1.0.0-store.2",
+      "filesVerified": 27,
+      "zipSha256": "203cac83b2c4493990569036e3ef14a4c86cfd9904ccccfa1efb189efaadca7d",
+      "zipSize": 284358594,
+      "passed": true
+    },
+    "secretGuard": "passed",
+    "whitespace": "passed; Windows CRLF accepted",
+    "remoteCi": "not executed in this session"
+  },
+  "behavior": {
+    "enrollmentCodeBits": 192,
+    "enrollmentMinutes": 15,
+    "agentTokenBits": 256,
+    "agentScope": "single printer; principal environment credential remains backward-compatible",
+    "humanPrintPermission": "sales:read; every enabled destination in the store",
+    "managementPermission": "printers:manage",
+    "defaultDestination": "public shortcut binding per store/browser, captured before login",
+    "offline": "remain queued at selected destination; no automatic reroute",
+    "revocation": "token removed; queued/uncertain history preserved",
+    "terminalStartup": "interactive Windows account login; no Docker or inbound listener"
+  },
+  "operationalLimits": [
+    "Physical printer output simulated in automated tests",
+    "Two real Windows PCs, drivers, paper, login/reboot and LAN still need store acceptance",
+    "Installer remains unsigned; Node runtime checksum/Authenticode verified",
+    "Business and operational-recovery gates remain pending; restore/overwrite disabled"
+  ],
+  "preserved": {
+    "existingEnvFilesUnchanged": true,
+    "existingStoreInstalledOrUpdated": false,
+    "windowsGlobalChanges": false,
+    "priorArtifactPreserved": true
+  },
+  "logs": [
+    "docs/test-evidence/multiprinter-docker-20261023.log.gz",
+    "docs/test-evidence/multiprinter-frontend-20261023.log.gz",
+    "docs/test-evidence/multiprinter-windows-20261023.log.gz",
+    "docs/test-evidence/multiprinter-store-20261023.log.gz",
+    "docs/test-evidence/multiprinter-upgrade-20261023.log.gz"
+  ]
+}

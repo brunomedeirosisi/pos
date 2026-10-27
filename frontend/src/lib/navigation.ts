@@ -15,6 +15,7 @@ const defaultRouteRules: RoutePermissionRule[] = [
   { path: '/admin/roles', required: ['roles:read', 'roles:write'] },
   { path: '/admin/system/backup', required: 'system:backup:read' },
   { path: '/admin/system/import', required: 'system:import:legacy' },
+  { path: '/admin/system/printers', required: 'printers:manage' },
 ];
 
 function normalizePermissions(permission: string | string[]): string[] {

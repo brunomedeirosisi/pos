@@ -47,6 +47,7 @@ type AdminItem = SidebarItem & {
 };
 
 const adminItems: AdminItem[] = [
+  { to: '/admin/system/printers', labelKey: 'nav.printers', permissions: ['printers:manage'], section: 'system', icon: 'pos' },
   {
     to: '/admin/users',
     labelKey: 'nav.users',
@@ -78,6 +79,7 @@ const adminItems: AdminItem[] = [
 ];
 
 const pageTitleRules: Array<{ pattern: RegExp; labelKey: string }> = [
+  { pattern: /^\/admin\/system\/printers/, labelKey: 'nav.printers' },
   { pattern: /^\/catalog\/products/, labelKey: 'nav.products' },
   { pattern: /^\/catalog\/product-groups/, labelKey: 'nav.productGroups' },
   { pattern: /^\/catalog\/customers/, labelKey: 'nav.customers' },

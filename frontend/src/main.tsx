@@ -8,6 +8,10 @@ import { queryClient } from './lib/queryClient';
 import i18n from './lib/i18n';
 import { ToastProvider } from './components/ui/ToastProvider';
 import './styles.css';
+import { capturePrinterBinding } from './lib/printer-binding';
+
+// Capture the public destination before authentication redirects away from the shortcut URL.
+try { capturePrinterBinding(window.location.href, window.localStorage); } catch { capturePrinterBinding(window.location.href); }
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

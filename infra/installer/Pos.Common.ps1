@@ -168,7 +168,10 @@ function New-PosShortcut([string]$Path, [string]$Target, [string]$Arguments = ''
 }
 function Write-PosUrlShortcut([string]$Url) {
   $shortcut=Join-Path ([Environment]::GetFolderPath('Desktop')) 'POS Loja.url'
-  if((Test-Path -LiteralPath $shortcut) -and -not ((Get-Content -LiteralPath $shortcut -Raw) -match ([regex]::Escape('URL='+$Url)))){throw 'Ja existe um atalho POS Loja para outro endereco. Preserve ou renomeie esse atalho antes.'}
+  if(Test-Path -LiteralPath $shortcut){
+    $line=Get-Content -LiteralPath $shortcut|Where-Object {$_ -like 'URL=*'}|Select-Object -First 1
+    if(-not $line -or ([Uri]$line.Substring(4)).GetLeftPart([UriPartial]::Authority) -ne ([Uri]$Url).GetLeftPart([UriPartial]::Authority)){throw 'Ja existe um atalho POS Loja para outro endereco. Preserve ou renomeie esse atalho antes.'}
+  }
   [IO.File]::WriteAllText($shortcut,('[InternetShortcut]'+[Environment]::NewLine+'URL='+$Url+[Environment]::NewLine))
 }
 function Get-PosPowerShell { return (Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe') }

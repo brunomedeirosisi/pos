@@ -1,3 +1,4 @@
+import { PrintersPage } from './pages/admin/PrintersPage';
 import React from 'react';
 import { Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AppLayout } from './components/layout/AppLayout';
@@ -68,6 +69,7 @@ export function App(): JSX.Element {
           <Route path="users" element={<RequirePermission permission="users:read"><UsersPage /></RequirePermission>} />
           <Route path="roles" element={<RequirePermission permission={['roles:read', 'users:read']}><RolesPage /></RequirePermission>} />
           <Route path="system">
+            <Route path="printers" element={<RequirePermission permission="printers:manage"><PrintersPage /></RequirePermission>} />
             <Route path="backup" element={<RequirePermission permission="system:backup:read"><BackupRestorePage /></RequirePermission>} />
             <Route path="import" element={<RequirePermission permission="system:import:legacy"><LegacyImportPage /></RequirePermission>} />
             <Route index element={<Navigate to="backup" replace />} />

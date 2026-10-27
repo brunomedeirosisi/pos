@@ -33,9 +33,13 @@ try {
     for($i=0;$i -lt $values.Count;$i++){Check ($parsed[$i] -eq $values[$i]) ('Argumento nativo '+$i)}
   }
   $bundle=Join-Path $testDirectory 'package';$null=New-Item -ItemType Directory -Path $bundle
-  $names=@('Instalar-POS.exe','Instalar-POS.ps1','Pos.Common.ps1','Pos.Install.ps1','LEIA-ME.txt','images.tar','Firewall-POS.ps1','Start-POS.ps1','empty.env','store.compose.yml')
+  $names=@('Instalar-POS.exe','Instalar-POS.ps1','Pos.Common.ps1','Pos.Install.ps1','Pos.Terminal.ps1','Start-Terminal.ps1','Parar-Terminal.ps1','Diagnosticar-Terminal.ps1','LEIA-ME.txt','images.tar','Firewall-POS.ps1','Start-POS.ps1','Parar-POS.ps1','empty.env','store.compose.yml')
   foreach($name in $names){[IO.File]::WriteAllText((Join-Path $bundle $name),'synthetic installer fixture')}
-  $files=@(Get-ChildItem -LiteralPath $bundle -File | ForEach-Object{@{path=$_.Name;sha256=(Get-PosHash $_.FullName)}})
+  foreach($folder in @('runtime','agent','documentacao')){$null=New-Item -ItemType Directory -Path (Join-Path $bundle $folder)}
+  [IO.File]::WriteAllText((Join-Path $bundle 'runtime\node.exe'),'synthetic runtime')
+  [IO.File]::WriteAllText((Join-Path $bundle 'agent\pull-agent.mjs'),'synthetic worker')
+  [IO.File]::WriteAllText((Join-Path $bundle 'documentacao\USO.md'),'synthetic guide')
+  $files=@(Get-ChildItem -LiteralPath $bundle -Recurse -File | ForEach-Object{@{path=$_.FullName.Substring($bundle.Length+1).Replace('\','/');sha256=(Get-PosHash $_.FullName)}})
   $fakeImage='sha256:'+('a'*64)
   $manifest=@{schemaVersion=1;version='1.0.0-test';mode='Principal';compatibleFrom=@();images=@{api=$fakeImage;frontend=$fakeImage;db=$fakeImage;redis=$fakeImage;proxy=$fakeImage};files=$files}
   $manifestPath=Join-Path $bundle 'manifest.json';Write-PosJson $manifestPath $manifest
@@ -44,16 +48,16 @@ try {
   Reject {Assert-PosBundle $bundle} 'Traversal recusado antes de ler arquivo'
   $manifest.files[0].path=$files[0].path
   # Restore from original file list because the hashtable was modified by reference.
-  $manifest.files=@(Get-ChildItem -LiteralPath $bundle -File | Where-Object Name -ne 'manifest.json' | ForEach-Object{@{path=$_.Name;sha256=(Get-PosHash $_.FullName)}})
+  $manifest.files=@(Get-ChildItem -LiteralPath $bundle -Recurse -File | Where-Object Name -ne 'manifest.json' | ForEach-Object{@{path=$_.FullName.Substring($bundle.Length+1).Replace('\','/');sha256=(Get-PosHash $_.FullName)}})
   Write-PosJson $manifestPath $manifest
   [IO.File]::AppendAllText((Join-Path $bundle 'images.tar'),'tampered')
   Reject {Assert-PosBundle $bundle} 'Imagem adulterada recusada'
-  $manifest.files=@(Get-ChildItem -LiteralPath $bundle -File | Where-Object Name -ne 'manifest.json' | ForEach-Object{@{path=$_.Name;sha256=(Get-PosHash $_.FullName)}});Write-PosJson $manifestPath $manifest
+  $manifest.files=@(Get-ChildItem -LiteralPath $bundle -Recurse -File | Where-Object Name -ne 'manifest.json' | ForEach-Object{@{path=$_.FullName.Substring($bundle.Length+1).Replace('\','/');sha256=(Get-PosHash $_.FullName)}});Write-PosJson $manifestPath $manifest
   # Compile and exercise the real launcher before replacing OS effects with mocks.
-  foreach($name in @('Instalar-POS.ps1','Pos.Common.ps1','Pos.Install.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $bundle $name) -Force}
+  foreach($name in @('Instalar-POS.ps1','Pos.Common.ps1','Pos.Install.ps1','Pos.Terminal.ps1','Start-Terminal.ps1','Parar-Terminal.ps1','Diagnosticar-Terminal.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $bundle $name) -Force}
   $compiler=Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
   $null=Invoke-PosProcess $compiler @('/nologo','/target:winexe','/platform:x64','/reference:System.Windows.Forms.dll','/reference:System.Web.Extensions.dll',('/out:'+(Join-Path $bundle 'Instalar-POS.exe')),(Join-Path $PSScriptRoot 'Launcher.cs'))
-  $manifest.files=@(Get-ChildItem -LiteralPath $bundle -File | Where-Object Name -ne 'manifest.json' | ForEach-Object{@{path=$_.Name;sha256=(Get-PosHash $_.FullName)}});Write-PosJson $manifestPath $manifest
+  $manifest.files=@(Get-ChildItem -LiteralPath $bundle -Recurse -File | Where-Object Name -ne 'manifest.json' | ForEach-Object{@{path=$_.FullName.Substring($bundle.Length+1).Replace('\','/');sha256=(Get-PosHash $_.FullName)}});Write-PosJson $manifestPath $manifest
   $null=Invoke-PosProcess (Join-Path $bundle 'Instalar-POS.exe') @('--validate') 60
   Check $true 'Launcher real valida pacote sem instalar'
   $ui=Invoke-PosProcess (Get-PosPowerShell) @('-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',(Join-Path $bundle 'Instalar-POS.ps1'),'-UiCheck') 60
@@ -71,12 +75,12 @@ try {
   function Assert-PosPrincipalOptions($Options){& $script:originalOptions $Options $false}
   function Prepare-PosDocker([bool]$AllowInstall){$script:effects.Add('prepare-docker')}
   function Get-PosDocker{return 'docker.exe'}
-  function Invoke-PosProcess([string]$File,[string[]]$Arguments,[int]$TimeoutSeconds=900){$script:effects.Add(('process '+($Arguments -join ' ')));if($Arguments[0] -eq 'info'){return 'linux/x86_64'};if($Arguments.Count -gt 2 -and $Arguments[0] -eq 'image' -and $Arguments[1] -eq 'inspect'){return $Arguments[2]};return ''}
+  function Invoke-PosProcess([string]$File,[string[]]$Arguments,[int]$TimeoutSeconds=900){$script:effects.Add(('process '+($Arguments -join ' ')));if($Arguments -contains '-File'){$scriptIndex=[Array]::IndexOf($Arguments,'-File')+1;if(-not (Test-Path -LiteralPath $Arguments[$scriptIndex])){throw 'Script de processo inexistente no teste'}};if($Arguments[0] -eq 'info'){return 'linux/x86_64'};if($Arguments.Count -gt 2 -and $Arguments[0] -eq 'image' -and $Arguments[1] -eq 'inspect'){return $Arguments[2]};return ''}
   function Invoke-PosCompose([string]$Root,[string[]]$Arguments,[string]$VersionPath=''){$script:effects.Add(('compose '+($Arguments -join ' ')));if($Arguments[0] -eq 'cp'){[IO.File]::WriteAllText($Arguments[2],'synthetic certificate')};return ''}
   function Import-PosCertificate([string]$Path,[string]$ExpectedHash){Check ((Get-PosHash $Path) -eq $ExpectedHash) 'Certificado conferido antes de importar (mock)';$script:effects.Add('certificate-trust-mocked');return ('A'*40)}
   function Test-PosStore([string]$Url,[string]$StoreId){Check ($Url -eq 'https://192.168.1.22') 'Identidade HTTPS conferida (mock)'}
   function New-PosShortcut([string]$Path,[string]$Target,[string]$Arguments=''){$script:effects.Add('startup-shortcut-mocked')}
-  function Write-PosUrlShortcut([string]$Url){$script:effects.Add('desktop-shortcut-mocked')}
+  function Write-PosUrlShortcut([string]$Url){$script:lastBrowserUrl=$Url;$script:effects.Add('desktop-shortcut-mocked')}
   function Start-Process {param($FilePath,$ArgumentList,$Verb,$WindowStyle,[switch]$PassThru,[switch]$Wait);$script:effects.Add('windows-process-mocked');if($PassThru){return [pscustomobject]@{ExitCode=0}}}
   $backup=Join-Path $testDirectory 'external-backup';$null=New-Item -ItemType Directory -Path $backup
   $options=@{serverIp='192.168.1.22';printerName='Synthetic Printer';companyName='Synthetic Store';companyAddress='Synthetic Address';companyTaxId='Synthetic ID';backupDestination=$backup;backupIsExternal=$true;prepareDocker=$false;adminName='Synthetic Admin';adminEmail='synthetic@example.test';adminPassword='synthetic_only_password_2026'}
@@ -88,6 +92,7 @@ try {
   $terminalPackage=Join-Path $script:installRoot 'Terminal-POS'
   Check (-not (Test-Path -LiteralPath (Join-Path $terminalPackage 'secrets.bin'))) 'Pacote Terminal sem credenciais'
   Check (-not (Test-Path -LiteralPath (Join-Path $terminalPackage 'images.tar'))) 'Pacote Terminal leve sem imagens'
+  $script:terminalStoreId=$state.storeId
   $before=$saved.database+'|'+$saved.jwt+'|'+$saved.agent
   $null=Install-PosPrincipal $bundle $options
   $saved=Read-PosSecret (Join-Path $script:installRoot 'secrets.bin')
@@ -96,6 +101,33 @@ try {
   $newEffects=@($script:effects|Select-Object -Skip $count)
   Check (-not ($newEffects -contains 'prepare-docker')) 'Terminal nao instala Docker'
   Check (Test-Path -LiteralPath (Join-Path $script:terminalRoot 'terminal.json')) 'Terminal registra pareamento'
+  $script:pairingCalls=0;$script:lostPairingReply=$true;$script:firstTerminalToken=''
+  function Assert-PosTerminalPrinter([string]$Name){if($Name -ne 'Synthetic Terminal Printer'){throw 'Unknown test printer'}}
+  function Invoke-PosTerminalApi([string]$Url,[string]$Route,$Body=$null,$Headers=@{}){
+    $script:pairingCalls++
+    if(-not $script:firstTerminalToken){$script:firstTerminalToken=$Body.token}
+    Check ($Body.token -eq $script:firstTerminalToken) 'Retry de pareamento preserva credencial protegida'
+    if($script:lostPairingReply){$script:lostPairingReply=$false;throw 'synthetic lost pairing reply'}
+    return @{printer_id='91f4c688-c083-486e-a202-eb752f4a3328';store_id=$script:terminalStoreId;display_name='Caixa 2'}
+  }
+  Reject {Install-PosTerminal $terminalPackage -WithPrinter -PrinterName 'Synthetic Terminal Printer' -EnrollmentCode ('c'*48)} 'Resposta perdida preserva pareamento pendente'
+  Check (Test-Path -LiteralPath (Join-Path $script:terminalRoot 'terminal-agent.bin')) 'Credencial salva com DPAPI antes da chamada de pareamento'
+  $configured=Install-PosTerminal $terminalPackage -WithPrinter -PrinterName 'Synthetic Terminal Printer'
+  Check ($configured.printerId -eq '91f4c688-c083-486e-a202-eb752f4a3328') 'Terminal usa seu destino exclusivo'
+  $terminalSecret=Read-PosSecret (Join-Path $script:terminalRoot 'terminal-agent.bin')
+  Check ($terminalSecret.token -ne $saved.agent) 'Terminal nao compartilha a credencial do Principal'
+  Check (-not ($terminalSecret.PSObject.Properties.Name -contains 'code')) 'Codigo temporario removido apos pareamento'
+  Check (-not ([IO.File]::ReadAllText((Join-Path $script:terminalRoot 'terminal.json'))).Contains($terminalSecret.token)) 'Estado publico sem token'
+  $agentConfig=Read-PosJson (Join-Path $script:terminalRoot 'agent.json')
+  Check ($agentConfig.printerId -eq $configured.printerId) 'Agente limitado ao destino do Terminal'
+  Check ($agentConfig.journalDirectory.EndsWith($configured.printerId)) 'Journal isolado por pareamento'
+  Check ($script:lastBrowserUrl.Contains('pos_printer='+$configured.printerId)) 'Atalho configura destino antes do login'
+  $calls=$script:pairingCalls
+  $null=Install-PosTerminal $terminalPackage -WithPrinter -PrinterName 'Synthetic Terminal Printer'
+  Check ($script:pairingCalls -eq $calls) 'Reparar nao cria outra impressora nem troca credencial'
+  Check ((Read-PosSecret (Join-Path $script:terminalRoot 'terminal-agent.bin')).token -eq $terminalSecret.token) 'Reparo preserva token Terminal'
+  Reject {Install-PosTerminal $terminalPackage} 'Reparo de Terminal com agente nao troca silenciosamente para Principal'
+  Reject {Install-PosTerminal $terminalPackage -WithPrinter -PrinterName 'Synthetic Terminal Printer' -EnrollmentCode 'bad-code'} 'Codigo malformado recusado'
   Check (-not (($script:effects -join ' ') -match 'down|truncate|benchmark|seed')) 'Fluxo sem exclusao de volumes ou seed de vendas'
   $lock=New-Object IO.FileStream((Join-Path $script:installRoot 'installer.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
   try{Reject {Install-PosPrincipal $bundle $options} 'Instalador concorrente recusado'}finally{$lock.Dispose()}

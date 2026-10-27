@@ -125,6 +125,7 @@ export const saleReceiptQuerySchema = z.object({
 export type SaleReceiptQueryDto = z.infer<typeof saleReceiptQuerySchema>;
 
 export const printSaleReceiptSchema = z.object({
+  printer_id: z.union([z.literal('principal'), z.string().uuid()]).optional(),
   request_id: z.string().uuid().optional(),
   locale: z.enum(saleReceiptLocaleValues).optional(),
   copies: z.number().int().min(1).max(10).optional(),

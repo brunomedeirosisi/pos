@@ -22,7 +22,7 @@ export type SaleActor = {
 type CompanyInfo = SaleReceiptDto['company'];
 
 type SaleReceiptPrinter = {
-  print: (payload: { receipt: SaleReceiptDto; copies: number; locale: SaleReceiptLocale; requestId?: string }) => Promise<PrintDelivery | void>;
+  print: (payload: { receipt: SaleReceiptDto; copies: number; locale: SaleReceiptLocale; requestId?: string; printerId?: string }) => Promise<PrintDelivery | void>;
   printerModel: string;
 };
 
@@ -162,8 +162,8 @@ export function createPrintSaleReceiptUseCase(
     const receipt = await getSaleReceipt(id, locale);
 
     try {
-      const delivery = await printer.print({ receipt, copies, locale, requestId: input.request_id });
-      if (delivery) return { ...delivery, receipt_code: receipt.sale.code, printer_model: printer.printerModel, copies };
+      const delivery = await printer.print({ receipt, copies, locale, requestId: input.request_id, printerId: input.printer_id });
+      if (delivery) return { ...delivery, receipt_code: receipt.sale.code, printer_model: delivery.printer_name, copies };
     } catch (error) {
       if (error instanceof HttpError) {
         throw error;
