@@ -2,9 +2,9 @@ import React, { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { backupService } from '../../services/backup';
-import type { BackupRecord } from '../../types/backup';
+import type { BackupRecord, RestoreResult } from '../../types/backup';
 import { useToast } from '../../components/ui/ToastProvider';
-import { useHasPermission } from '../../store/auth';
+import { useAuthStore, useHasPermission } from '../../store/auth';
 import { formatDateTimeDdMmYyyy } from '../../utils/date';
 import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
 
@@ -35,6 +35,23 @@ export function BackupRestorePage(): JSX.Element {
   const [backupToRestore, setBackupToRestore] = useState<BackupRecord | null>(null);
   const [existingRestorePassword, setExistingRestorePassword] = useState('');
   const [confirmUploadRestoreOpen, setConfirmUploadRestoreOpen] = useState(false);
+  const [restoreResult, setRestoreResult] = useState<RestoreResult | null>(null);
+  const optionsQuery = useQuery({
+    queryKey: ['admin', 'restore-options'], queryFn: backupService.options,
+    enabled: canRestoreBackup, staleTime: 0,
+  });
+  const restoreEnabled = canRestoreBackup && optionsQuery.isSuccess && optionsQuery.data.restoreEnabled;
+  const handleRestoreResult = (result: RestoreResult) => {
+    setRestoreResult(result);
+    if (result.restored && result.status === 'ok' && !result.rollbackApplied) {
+      toast.show(t('backups.restoreSuccess'), 'success');
+      // Use the existing session/cache cleanup, including other open tabs.
+      void useAuthStore.getState().logout();
+    } else {
+      toast.show(t('backups.restoreRolledBack'), 'error');
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
+    }
+  };
 
   const backupsQuery = useQuery({
     queryKey: ['admin', 'backups'],
@@ -66,27 +83,24 @@ export function BackupRestorePage(): JSX.Element {
 
   const restoreExistingMutation = useMutation({
     mutationFn: ({ filename, password }: { filename: string; password: string }) =>
-      backupService.restore({ file: filename, password, confirm: true }),
-    onSuccess: () => {
-      toast.show(t('backups.restoreSuccess'), 'success');
-      toast.show(t('backups.preRestoreSnapshot'));
+      restoreEnabled ? backupService.restore({ file: filename, password, confirm: true }) : Promise.reject(new Error(t('backups.restoreDisabled'))),
+    onSuccess: (result) => {
+      handleRestoreResult(result);
       setBackupToRestore(null);
       setExistingRestorePassword('');
       // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
   });
 
   const uploadAndRestoreMutation = useMutation({
     mutationFn: async ({ file, password }: { file: File; password: string }) => {
+      if (!restoreEnabled) throw new Error(t('backups.restoreDisabled'));
       const uploaded = await backupService.upload(file);
-      await backupService.restore({ file: uploaded.filename, password, confirm: true });
-      return uploaded;
+      return backupService.restore({ file: uploaded.filename, password, confirm: true });
     },
-    onSuccess: () => {
-      toast.show(t('backups.restoreSuccess'), 'success');
-      toast.show(t('backups.preRestoreSnapshot'));
+    onSuccess: (result) => {
+      handleRestoreResult(result);
       setConfirmUploadRestoreOpen(false);
       setSelectedFile(null);
       setRestorePassword('');
@@ -94,12 +108,12 @@ export function BackupRestorePage(): JSX.Element {
         fileInputRef.current.value = '';
       }
       // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'backups'] });
     },
     onError: (error: Error) => toast.show(error.message, 'error'),
   });
 
   const backups = backupsQuery.data ?? [];
+  const restoring = restoreExistingMutation.isPending || uploadAndRestoreMutation.isPending;
 
   const sortedBackups = useMemo<BackupRecord[]>(
     () =>
@@ -146,6 +160,7 @@ export function BackupRestorePage(): JSX.Element {
   };
 
   const handleRestoreExisting = (backup: BackupRecord) => {
+    if (!restoreEnabled || restoring) return;
     if (!canRestoreBackup) {
       toast.show(t('backups.noRestorePermission'), 'error');
       return;
@@ -162,6 +177,7 @@ export function BackupRestorePage(): JSX.Element {
 
   const handleUploadRestoreSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!restoreEnabled || restoring) return;
     if (!selectedFile) {
       toast.show(t('backups.noFileSelected'), 'error');
       return;
@@ -184,6 +200,17 @@ export function BackupRestorePage(): JSX.Element {
 
   return (
     <>
+      {canRestoreBackup && !restoreEnabled && (
+        <div className="card" role="status">
+          {optionsQuery.isError ? t('backups.optionsFailed') : optionsQuery.isPending ? t('common.loading') : t('backups.restoreDisabled')}
+          {optionsQuery.isError && <button type="button" className="button secondary" onClick={() => { void optionsQuery.refetch(); }}>{t('common.retry')}</button>}
+        </div>
+      )}
+      {restoreResult && <div className="card" role="alert">
+        <p>{t(restoreResult.restored ? 'backups.restoreSuccess' : 'backups.restoreRolledBack')}</p>
+        <p>{t('backups.operationReference', { id: restoreResult.operationId })}</p>
+        <p>{t('backups.snapshotReference', { filename: restoreResult.snapshot })}</p>
+      </div>}
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       <div style={{ display: 'grid', gap: '1.5rem', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
         <section style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -194,7 +221,7 @@ export function BackupRestorePage(): JSX.Element {
                 type="button"
                 className="button primary"
                 onClick={handleCreateBackup}
-                disabled={createMutation.isPending}
+                disabled={createMutation.isPending || restoring}
               >
                 {createMutation.isPending ? t('backups.creating') : t('backups.create')}
               </button>
@@ -216,7 +243,7 @@ export function BackupRestorePage(): JSX.Element {
                   type="file"
                   accept=".zip"
                   onChange={handleFileChange}
-                  disabled={!canRestoreBackup || uploadAndRestoreMutation.isPending}
+                  disabled={!restoreEnabled || restoring}
                 />
                 <small style={{ color: '#64748b' }}>
                   {selectedFile ? selectedFile.name : t('backups.noFileSelected')}
@@ -229,7 +256,7 @@ export function BackupRestorePage(): JSX.Element {
                   type="password"
                   value={restorePassword}
                   onChange={(event) => setRestorePassword(event.target.value)}
-                  disabled={!canRestoreBackup || uploadAndRestoreMutation.isPending}
+                  disabled={!restoreEnabled || restoring}
                   required
                 />
               </div>
@@ -237,7 +264,7 @@ export function BackupRestorePage(): JSX.Element {
                 <button
                   type="submit"
                   className="button primary"
-                  disabled={!canRestoreBackup || uploadAndRestoreMutation.isPending || !selectedFile}
+                  disabled={!restoreEnabled || restoring || !selectedFile || createMutation.isPending || deleteMutation.isPending}
                 >
                   {uploadAndRestoreMutation.isPending ? t('backups.restoring') : t('common.restore')}
                 </button>
@@ -320,7 +347,7 @@ export function BackupRestorePage(): JSX.Element {
                           type="button"
                           className="button primary"
                           onClick={() => handleRestoreExisting(backup)}
-                          disabled={restoreExistingMutation.isPending}
+                          disabled={!restoreEnabled || restoring || createMutation.isPending || deleteMutation.isPending}
                         >
                           {t('common.restore')}
                         </button>
@@ -330,7 +357,7 @@ export function BackupRestorePage(): JSX.Element {
                           type="button"
                           className="button danger"
                           onClick={() => handleDelete(backup)}
-                          disabled={deleteMutation.isPending}
+                          disabled={deleteMutation.isPending || restoring}
                         >
                           {t('common.delete')}
                         </button>
@@ -379,18 +406,18 @@ export function BackupRestorePage(): JSX.Element {
           setBackupToRestore(null);
         }}
         onConfirm={() => {
-          if (!backupToRestore) return;
-          if (!existingRestorePassword.trim()) {
+          if (!backupToRestore || !restoreEnabled) return;
+          if (!existingRestorePassword) {
             toast.show(t('backups.passwordLabel'), 'error');
             return;
           }
           restoreExistingMutation.mutate({
             filename: backupToRestore.filename,
-            password: existingRestorePassword.trim(),
+            password: existingRestorePassword,
           });
         }}
         isPending={restoreExistingMutation.isPending}
-        confirmDisabled={!existingRestorePassword.trim()}
+        confirmDisabled={!restoreEnabled || !existingRestorePassword}
         tone="danger"
       >
         <div className="form-group">
@@ -412,11 +439,11 @@ export function BackupRestorePage(): JSX.Element {
         confirmLabel={t('common.restore')}
         onClose={() => setConfirmUploadRestoreOpen(false)}
         onConfirm={() => {
-          if (!selectedFile) return;
+          if (!selectedFile || !restoreEnabled) return;
           uploadAndRestoreMutation.mutate({ file: selectedFile, password: restorePassword });
         }}
         isPending={uploadAndRestoreMutation.isPending}
-        confirmDisabled={!selectedFile || !restorePassword.trim()}
+        confirmDisabled={!restoreEnabled || !selectedFile || !restorePassword}
         tone="danger"
       />
     </>

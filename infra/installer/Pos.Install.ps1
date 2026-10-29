@@ -121,7 +121,7 @@ function Install-PosPrincipal([string]$Bundle, $Options, [string]$Root=(Get-PosI
 function Export-PosTerminal([string]$Root,[string]$Version) {
   $settings=Get-PosSettings $Root
   $destination=Join-Path $Root 'Terminal-POS';$null=New-Item -ItemType Directory -Path $destination -Force
-  foreach($name in @('Instalar-POS.exe','Instalar-POS.ps1','Pos.Common.ps1','Pos.Install.ps1','Pos.Terminal.ps1','Start-Terminal.ps1','Parar-Terminal.ps1','Diagnosticar-Terminal.ps1','LEIA-ME.txt')){Copy-Item -LiteralPath (Join-Path $Version $name) -Destination (Join-Path $destination $name) -Force}
+  foreach($name in @('Instalar-POS.exe','Instalar-POS.ps1','Pos.Common.ps1','Pos.Install.ps1','Pos.Terminal.ps1','Pos.Cloud.ps1','Start-Terminal.ps1','Parar-Terminal.ps1','Diagnosticar-Terminal.ps1','LEIA-ME.txt')){Copy-Item -LiteralPath (Join-Path $Version $name) -Destination (Join-Path $destination $name) -Force}
   foreach($folder in @('runtime','agent','documentacao')){Copy-Item -LiteralPath (Join-Path $Version $folder) -Destination $destination -Recurse -Force}
   Copy-Item -LiteralPath (Join-Path $Root 'pki\root.crt') -Destination (Join-Path $destination 'root.crt') -Force
   Write-PosJson (Join-Path $destination 'pairing.json') @{schemaVersion=1;storeId=$settings.storeId;serverUrl=$settings.serverUrl;certificateSha256=(Get-PosHash (Join-Path $destination 'root.crt'))}

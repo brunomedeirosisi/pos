@@ -5,10 +5,15 @@ import { runPendingMigrations } from './services/migrations.js';
 import { ensureBootstrapAdmin } from './services/bootstrap-admin.js';
 import { initializeLegacyImportWorker } from './services/legacy-importer.js';
 import { logger } from './observability/logger.js';
+import { recoverInterruptedRestore } from './services/backup-restore-service.js';
+import { initializeRecoveryControl, preserveBackupCatalog } from './services/recovery-control.js';
 
 async function bootstrap(): Promise<void> {
   const env = getEnv();
+  await initializeRecoveryControl();
+  await recoverInterruptedRestore();
   await runPendingMigrations();
+  await preserveBackupCatalog();
   await ensureBootstrapAdmin();
   await initializeLegacyImportWorker();
 

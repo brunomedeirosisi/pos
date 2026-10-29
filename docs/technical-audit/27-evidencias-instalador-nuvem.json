@@ -1,0 +1,202 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-27T03:26:14.391Z",
+  "request": "Implementar instalador Windows com Modo Nuvem",
+  "baseGitHead": "7c5e2e090390a2110e54cdcb5d1e4f33ef0bb413",
+  "baseWasDirty": false,
+  "version": "1.0.0-store.3",
+  "distributions": [
+    {
+      "mode": "Cloud",
+      "nodeVersion": "24.21.0",
+      "version": "1.0.0-store.3",
+      "passed": true,
+      "zipSha256": "285e31f1726aaecda765c19f7b0d8c1227a2d84726043326295d062d95a420c8",
+      "package": "POS-Nuvem",
+      "codeSigned": false,
+      "nodeArchiveSha256": "158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541",
+      "sourceComparisons": 14,
+      "filesVerified": 18,
+      "zipBytes": 35041083
+    },
+    {
+      "mode": "Principal",
+      "nodeVersion": "24.21.0",
+      "version": "1.0.0-store.3",
+      "passed": true,
+      "zipSha256": "7dccba11e16dee78547ce96d1c61114df7cf1b4b1cf88922a77b052ef88383f9",
+      "package": "POS-Loja",
+      "codeSigned": false,
+      "nodeArchiveSha256": "158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541",
+      "sourceComparisons": 23,
+      "filesVerified": 29,
+      "zipBytes": 284376110
+    }
+  ],
+  "tests": {
+    "dockerFull": {
+      "command": "node infra/test-disposable.mjs --docker --images --backups",
+      "exitCode": 0,
+      "backendUnit": 144,
+      "backendIntegration": 81,
+      "backendRegression": 4,
+      "measurementControls": 7,
+      "frontend": 76,
+      "agent": 9,
+      "total": 321,
+      "lint": "passed",
+      "lintControls": "passed",
+      "typechecks": "passed",
+      "builds": "passed",
+      "images": "passed",
+      "backupRestoreAndRecreation": true,
+      "restoredForeignKeys": 21
+    },
+    "windows": {
+      "command": "Test-Installer.ps1 -NodePath <verified bundled runtime>",
+      "exitCode": 0,
+      "passed": 136,
+      "failed": 0,
+      "effects": "Windows global effects mocked; parser, DPAPI, private DACL, native launcher and hidden WinForms construction real"
+    },
+    "https": {
+      "command": "Test-CloudHttps.ps1 -NodePath <verified bundled runtime>",
+      "exitCode": 0,
+      "passed": 15,
+      "failed": 0,
+      "transport": "real TLS 1.2 through loopback CONNECT proxy",
+      "certificateTrust": "default rejection, then exact ephemeral certificate pin plus hostname/validity in test handler only",
+      "noRedirectCredentialLeak": true,
+      "windowsCertificateTrustChanged": false,
+      "globalTlsCallbackChanged": false
+    },
+    "buildCloud": {
+      "exitCode": 0,
+      "dockerInvoked": false,
+      "nativeLauncherValidation": true,
+      "hiddenCloudForm": true
+    },
+    "buildStore": {
+      "exitCode": 0,
+      "nativeLauncherValidation": true
+    },
+    "fresh": {
+      "version": "1.0.0-store.3",
+      "atUtc": "2026-10-27T03:24:04.955Z",
+      "project": "pos-installer-smoke",
+      "images": {
+        "proxy": "sha256:3067cc4e02c091399edbd5d65f85a3ff4d511574aecadb47f280c3761e68852e",
+        "db": "sha256:81bd698b4594e751a3269e4dcd3e03a4a0ec0daf7b72e7aa1abd43cce9887542",
+        "api": "sha256:90baeea9a0bf62b56e4f2f244f3472b54a2d4289c01a151dc6074cdfa87ff2f9",
+        "redis": "sha256:4df5c34dc41256fc4ed293482cb34281e17d133077e9aa3c6a87fda60a356c65",
+        "frontend": "sha256:1f167a42612dff489f0e3eacc885a4fd378c421323cea4a46efd2bdb3bea87cb"
+      },
+      "imagesLoadedFromArchive": true,
+      "httpsIdentityVerified": true,
+      "independentSessions": 2,
+      "emptyInitialCatalog": true,
+      "sales": 2,
+      "submittedJobs": 2,
+      "separatePrinterDestinations": true,
+      "agentCrossAccessDenied": true,
+      "requestDeduplicated": true,
+      "uncertainJobNotReprinted": true,
+      "offlineQueueNotRerouted": true,
+      "openApiLoaded": true,
+      "persistedAfterApiRecreation": true,
+      "noJournalReprint": true,
+      "credentialRevocationVerified": true,
+      "revokedQueueNotRerouted": true,
+      "upgradeFrom": null,
+      "replicatedBackup": true,
+      "replicaSha256": "3e74a9abc6bae8d67aba0d46e91b4725d071d6c1fc13436ade264da7bdcb3d4e",
+      "bootstrapRemoved": true,
+      "physicalPrinting": "simulated",
+      "windowsGlobalChanges": false,
+      "passed": true
+    },
+    "upgrade": {
+      "version": "1.0.0-store.3",
+      "atUtc": "2026-10-27T03:24:50.281Z",
+      "project": "pos-installer-smoke",
+      "images": {
+        "proxy": "sha256:3067cc4e02c091399edbd5d65f85a3ff4d511574aecadb47f280c3761e68852e",
+        "db": "sha256:81bd698b4594e751a3269e4dcd3e03a4a0ec0daf7b72e7aa1abd43cce9887542",
+        "api": "sha256:90baeea9a0bf62b56e4f2f244f3472b54a2d4289c01a151dc6074cdfa87ff2f9",
+        "redis": "sha256:4df5c34dc41256fc4ed293482cb34281e17d133077e9aa3c6a87fda60a356c65",
+        "frontend": "sha256:1f167a42612dff489f0e3eacc885a4fd378c421323cea4a46efd2bdb3bea87cb"
+      },
+      "imagesLoadedFromArchive": false,
+      "httpsIdentityVerified": true,
+      "independentSessions": 2,
+      "emptyInitialCatalog": false,
+      "sales": 2,
+      "submittedJobs": 2,
+      "separatePrinterDestinations": true,
+      "agentCrossAccessDenied": true,
+      "requestDeduplicated": true,
+      "uncertainJobNotReprinted": true,
+      "offlineQueueNotRerouted": true,
+      "openApiLoaded": true,
+      "persistedAfterApiRecreation": true,
+      "noJournalReprint": true,
+      "credentialRevocationVerified": true,
+      "revokedQueueNotRerouted": true,
+      "upgradeFrom": "1.0.0-store.2",
+      "legacySessionPreserved": true,
+      "legacyAgentCredentialPreserved": true,
+      "legacySpoolingAcknowledged": true,
+      "legacyQueuedJobPreserved": true,
+      "legacyRequestIdPreserved": true,
+      "legacySalePreserved": true,
+      "legacyReceiptContentPreserved": true,
+      "replicatedBackup": true,
+      "replicaSha256": "20b8234a2802b634dcf98dc78e480fefadf9d7c8eb292abda37887dbfe56869e",
+      "bootstrapRemoved": true,
+      "physicalPrinting": "simulated",
+      "windowsGlobalChanges": false,
+      "passed": true
+    }
+  },
+  "preservation": {
+    "environmentFilesUnchanged": [
+      {
+        "file": ".env",
+        "unchanged": true
+      },
+      {
+        "file": "backend/.env",
+        "unchanged": true
+      }
+    ],
+    "databaseMigrationAdded": false,
+    "seedChangesNeeded": false,
+    "npmDependenciesAdded": false,
+    "productionDataTouched": false,
+    "liveStoreInstalled": false,
+    "cloudInfrastructureProvisioned": false
+  },
+  "limits": [
+    "Windows installation effects mocked",
+    "Physical printing simulated",
+    "Real public domain and two physical tills not available",
+    "No offline sales or automatic data migration",
+    "Installer EXE/scripts unsigned in this local build"
+  ],
+  "logs": {
+    "docker": "docs/test-evidence/cloud-docker-20261027.log.gz",
+    "windows": "docs/test-evidence/cloud-windows-20261027.log.gz",
+    "https": "docs/test-evidence/cloud-https-20261027.log.gz",
+    "build-cloud": "docs/test-evidence/cloud-build-cloud-20261027.log.gz",
+    "build-store": "docs/test-evidence/cloud-build-store-20261027.log.gz",
+    "store": "docs/test-evidence/cloud-store-20261027.log.gz",
+    "upgrade": "docs/test-evidence/cloud-upgrade-20261027.log.gz",
+    "packages": "docs/test-evidence/cloud-packages-20261027.log.gz"
+  },
+  "finalChecks": {
+    "repositorySecretGuard": "passed",
+    "newFilesSecretScan": "passed",
+    "gitWhitespaceDiffCheck": "passed",
+    "packageManifestAndSourceVerification": "passed"
+  }
+}

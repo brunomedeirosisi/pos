@@ -3,6 +3,12 @@ import { parseApiErrorMessage } from './api';
 import i18n from './lib/i18n';
 
 describe('parseApiErrorMessage', () => {
+  it.each(['pt-BR', 'en'])('explains restore gates and recovery without exposing technical codes in %s', async (locale) => {
+    await i18n.changeLanguage(locale);
+    expect(parseApiErrorMessage('Forbidden', { message: 'database_restore_disabled_pending_recovery_validation' })).toBe(i18n.t('backups.restoreDisabled'));
+    expect(parseApiErrorMessage('Service Unavailable', { message: 'database_restore_in_progress' })).toBe(i18n.t('backups.maintenance'));
+    expect(parseApiErrorMessage('Internal Server Error', { message: 'restore_failed_rollback_failed' })).toBe(i18n.t('backups.recoveryRequired'));
+  });
   afterEach(async () => {
     await i18n.changeLanguage('pt-BR');
   });

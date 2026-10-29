@@ -22,19 +22,52 @@ export type LegacyImportStatusLog = {
   createdAt: string;
 };
 
+export type LegacyImportCheckpoint = {
+  stage: string;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  startedAt: string | null;
+  finishedAt: string | null;
+  summary: unknown;
+  error: string | null;
+};
+
+export type LegacyImportSummary = {
+  master?: Partial<Record<'productGroups' | 'products' | 'customers' | 'sellers' | 'paymentTerms', number>>;
+  sales?: Partial<Record<'sales' | 'saleItems' | 'orders' | 'orderItems', number>> & { mismatches?: string[] };
+  customerPayments?: number;
+  stockMovements?: number;
+  customerBalances?: {
+    customers: number;
+    verified: number;
+    adjusted: number;
+    changed: number;
+    sourceTotal: string;
+    adjustmentTotal: string;
+    sourceSha256: string;
+  };
+};
+
 export type LegacyImportStatus = {
   status: string;
+  stages: readonly string[];
+  currentStage: string | null;
+  retryCount: number;
+  lastErrorStage: string | null;
+  checkpoints: LegacyImportCheckpoint[];
   overwrite: boolean;
   createdAt: string;
   startedAt: string | null;
   finishedAt: string | null;
-  summary?: Record<string, unknown> | null;
+  summary?: LegacyImportSummary | null;
   error?: string | null;
   reportAvailable: boolean;
   logs: LegacyImportStatusLog[];
 };
 
 export const legacyImportService = {
+  options() {
+    return http.get<{ overwriteEnabled: boolean }>('/admin/import/legacy/options');
+  },
   run(payload: LegacyImportPayload) {
     const formData = new FormData();
     payload.files.forEach((file) => formData.append('files', file));

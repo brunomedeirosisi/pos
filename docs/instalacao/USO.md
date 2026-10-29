@@ -1,6 +1,10 @@
 # Instalação e uso na loja — dois caixas Windows e impressoras por caixa
 
-Este guia cobre o instalador Windows do POS 1.0.0-store.2: **Caixa 1 Principal**, com aplicação/banco/impressora, e **Caixa 2 Terminal**, que acessa pelo navegador. O pacote inclui um executável de entrada e arquivos auxiliares; extraia o ZIP inteiro. O executável não funciona isolado.
+Para servidor na internet, siga [NUVEM.md](NUVEM.md): o pacote POS-Nuvem conecta cada caixa por HTTPS, com impressora local opcional e sem Docker. Este guia descreve a hospedagem dentro da loja.
+
+Para um ensaio temporário do checkout local pela internet, consulte [TESTE-INTERNET.md](TESTE-INTERNET.md): comandos em uma linha, duas janelas PowerShell, certificado, CORS, recuperação dos serviços e encerramento. Esse roteiro usa o Compose da raiz do projeto; os comandos do Principal instalado são diferentes.
+
+Este guia cobre o instalador Windows do POS 1.0.0-store.3: **Caixa 1 Principal**, com aplicação/banco/impressora, e **Caixa 2 Terminal**, que acessa pelo navegador. O pacote inclui um executável de entrada e arquivos auxiliares; extraia o ZIP inteiro. O executável não funciona isolado.
 
 A instalação fica pronta para homologação da infraestrutura. Antes de vendas reais, conclua os controles de crédito/cliente inativo, estoque não negativo e recuperação operacional pendentes no roadmap. “Instalação concluída” não certifica essas regras de negócio nem a saída física da impressora.
 
@@ -8,7 +12,7 @@ A instalação fica pronta para homologação da infraestrutura. Antes de vendas
 
 No Caixa 1:
 
-- Windows x64 compatível com Docker Desktop, PowerShell 5.1/.NET Framework 4 e virtualização/WSL funcionando. A preparação do Docker pode exigir internet, permissão administrativa e reinicialização. O instalador não força reinício nem altera BIOS.
+- Windows x64 compatível com Docker Desktop, PowerShell 5.1/.NET Framework 4.8 ou posterior e virtualização/WSL funcionando. A preparação do Docker pode exigir internet, permissão administrativa e reinicialização. O instalador não força reinício nem altera BIOS.
 - Use a mesma conta Windows para instalar, entrar no Windows, executar Docker Desktop e acessar a impressora. Não instale com outra conta de administrador para depois operar em um perfil diferente.
 - Instale o driver da impressora e confirme seu nome exato em “Impressoras e scanners”. Imprima uma página de teste do Windows.
 - Reserve um IP privado para o Caixa 1 no roteador, por exemplo `192.168.1.22`. O instalador verifica o IP existente; não muda o roteador ou o endereço da placa.
@@ -20,7 +24,7 @@ No Caixa 2: navegador, acesso à rede e o pacote Terminal-POS recebido do Caixa 
 Receba o ZIP e seu SHA256 por um canal confiável. Confira o hash antes de extrair:
 
 ```powershell
-Get-FileHash ./POS-Loja-1.0.0-store.2.zip -Algorithm SHA256
+Get-FileHash ./POS-Loja-1.0.0-store.3.zip -Algorithm SHA256
 ```
 
 Compare com o valor fornecido pelo responsável pela versão. O build local padrão não possui assinatura digital do instalador; o runtime Node incluído tem sua assinatura e checksum verificados no build. Não desative antivírus/SmartScreen para contornar um pacote desconhecido. Uma distribuição comercial deve usar certificado de assinatura confiável.
@@ -108,7 +112,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $posTools 'Di
 
 Os ZIPs contêm dados da loja e **não são criptografados pela aplicação**. Proteja o destino com permissões e proteção de disco/rede apropriadas. A retenção local segue a aplicação; as réplicas externas não são apagadas automaticamente. Monitore capacidade e defina retenção externa com o responsável técnico.
 
-Não teste recuperação sobre o banco em uso. Restore da aplicação permanece desabilitado até os gates de recuperação do roadmap. Em incidente, preserve o Principal, seus volumes, backups e configurações e acione o procedimento técnico de recuperação assistida.
+O instalador mantém a restauração desativada por padrão. Sua habilitação exige validar antes um backup nativo em ambiente descartável. Quando habilitada, a tela exige senha e confirmação, interrompe o atendimento durante a recuperação e diferencia sucesso de rollback. Após sucesso, entre novamente. Consulte o [procedimento de backup e restauração](../backup-restore-runbook.md) antes de substituir dados; em incidente, preserve volumes, arquivos e configurações.
 
 ## 7. Problemas comuns
 

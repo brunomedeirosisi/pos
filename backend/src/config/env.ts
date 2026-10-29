@@ -52,6 +52,7 @@ const BaseEnvSchema = z.object({
   IMPORT_PATH: z.string().min(1).default('/var/imports/pos'),
   BACKUP_MAX_UPLOAD_SIZE: z.coerce.number().int().min(5 * 1024 * 1024).max(200 * 1024 * 1024).default(100 * 1024 * 1024),
   LEGACY_IMPORT_MAX_FILES: z.coerce.number().int().min(1).max(200).default(50),
+  LEGACY_ARJ_EXTRACTOR: z.string().min(1).default('7zz'),
   LEGACY_IMPORT_MAX_FILE_SIZE: z
     .coerce.number()
     .int()

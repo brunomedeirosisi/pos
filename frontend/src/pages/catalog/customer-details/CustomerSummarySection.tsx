@@ -43,6 +43,19 @@ export function CustomerSummarySection(props: CustomerSummarySectionProps): JSX.
               {t('customers.lastPayment')}: {formatDate(customer.totals.last_payment_date)}
             </small>
           </div>
+          {customer.totals.legacy_balance && (
+            <>
+              <div className="balance-card">
+                <span>{t('customers.legacySourceBalance')}</span>
+                <strong>{formatCurrency(customer.totals.legacy_balance.source_balance)}</strong>
+              </div>
+              <div className="balance-card">
+                <span>{t('customers.legacyBalanceAdjustment')}</span>
+                <strong>{formatCurrency(customer.totals.legacy_balance.adjustment)}</strong>
+                <small>{t('customers.legacyBalanceHint')}</small>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -50,16 +63,28 @@ export function CustomerSummarySection(props: CustomerSummarySectionProps): JSX.
         <div>
           <h4>{t('customers.heading')}</h4>
           <ul>
-            <li>{t('customers.cpf')}: <strong>{customer.cpf ?? '-'}</strong></li>
-            <li>{t('customers.phone')}: <strong>{customer.phone ?? '-'}</strong></li>
-            <li>{t('customers.address')}: <strong>{customer.address ?? '-'}</strong></li>
-            <li>{t('customers.city')}: <strong>{customer.city ?? '-'}</strong></li>
-            <li>{t('customers.uf')}: <strong>{customer.uf ?? '-'}</strong></li>
+            <li>
+              {t('customers.cpf')}: <strong>{customer.cpf ?? '-'}</strong>
+            </li>
+            <li>
+              {t('customers.phone')}: <strong>{customer.phone ?? '-'}</strong>
+            </li>
+            <li>
+              {t('customers.address')}: <strong>{customer.address ?? '-'}</strong>
+            </li>
+            <li>
+              {t('customers.city')}: <strong>{customer.city ?? '-'}</strong>
+            </li>
+            <li>
+              {t('customers.uf')}: <strong>{customer.uf ?? '-'}</strong>
+            </li>
           </ul>
         </div>
         <div>
           <h4>{t('customers.creditLimit')}</h4>
-          <p><strong>{customer.credit_limit != null ? formatCurrency(customer.credit_limit) : '-'}</strong></p>
+          <p>
+            <strong>{customer.credit_limit != null ? formatCurrency(customer.credit_limit) : '-'}</strong>
+          </p>
           {customer.notes && (
             <>
               <h4>{t('customers.notes')}</h4>

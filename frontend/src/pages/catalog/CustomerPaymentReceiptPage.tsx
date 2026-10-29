@@ -1,10 +1,11 @@
 import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { customersService } from '../../services/catalog';
+import { paymentHistoryService } from '../../services/paymentHistory';
 import type { CustomerPaymentReceipt } from '../../types/catalog';
-import { formatDateTimeDdMmYyyy } from '../../utils/date';
+import { formatDateDdMmYyyy, formatDateTimeDdMmYyyy } from '../../utils/date';
 
 const currencyFormatter = new Intl.NumberFormat(undefined, { style: 'currency', currency: 'BRL' });
 
@@ -17,6 +18,8 @@ export function CustomerPaymentReceiptPage(): JSX.Element {
   const { t } = useTranslation();
   const { customerId, paymentId } = useParams<{ customerId: string; paymentId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const autoPrint = Boolean(customerId) || searchParams.get('autoprint') === '1';
   const paymentMethodLabels = React.useMemo(
     () => ({
       cash: t('customers.paymentMethods.cash'),
@@ -30,17 +33,18 @@ export function CustomerPaymentReceiptPage(): JSX.Element {
 
   const receiptQuery = useQuery<CustomerPaymentReceipt>({
     queryKey: ['payment-receipt', customerId, paymentId],
-    queryFn: () => customersService.getPaymentReceipt(customerId!, paymentId!),
-    enabled: Boolean(customerId && paymentId),
+    queryFn: () =>
+      customerId ? customersService.getPaymentReceipt(customerId, paymentId!) : paymentHistoryService.get(paymentId!),
+    enabled: Boolean(paymentId),
   });
 
   useEffect(() => {
-    if (receiptQuery.status === 'success') {
+    if (autoPrint && receiptQuery.status === 'success') {
       const timer = setTimeout(() => window.print(), 200);
       return () => clearTimeout(timer);
     }
     return undefined;
-  }, [receiptQuery.status]);
+  }, [autoPrint, receiptQuery.status]);
 
   if (receiptQuery.isLoading) {
     return <div className="printable-page">{t('common.loading')}</div>;
@@ -73,6 +77,20 @@ export function CustomerPaymentReceiptPage(): JSX.Element {
         </button>
       </div>
       <div className="printable-card">
+        {payment.cancelled_at && (
+          <div role="alert" className="payment-cancelled-notice">
+            <h3>{t('paymentHistory.cancelledNotice')}</h3>
+            <p>{t('paymentHistory.cancelledExplanation')}</p>
+            <p>
+              {formatDateTimeDdMmYyyy(payment.cancelled_at)} — {payment.cancelled_by_name ?? '—'}
+            </p>
+            {payment.cancellation_reason && (
+              <p>
+                {t('sales.reason')}: {payment.cancellation_reason}
+              </p>
+            )}
+          </div>
+        )}
         <div className="printable-header">
           <div>
             <h2>{company.name}</h2>
@@ -81,14 +99,23 @@ export function CustomerPaymentReceiptPage(): JSX.Element {
           </div>
           <div className="text-right">
             <div className="receipt-code">{payment.code}</div>
-            <div>{t('customers.paymentDateTime')}: {formatDateTimeDdMmYyyy(payment.created_at)}</div>
-            <div>{t('customers.generatedAt')}: {formatDateTimeDdMmYyyy(generated_at)}</div>
+            <div>
+              {t('customers.paymentDate')}: {formatDateDdMmYyyy(payment.payment_date)}
+            </div>
+            <div>
+              {t('customers.paymentDateTime')}: {formatDateTimeDdMmYyyy(payment.created_at)}
+            </div>
+            <div>
+              {t('customers.generatedAt')}: {formatDateTimeDdMmYyyy(generated_at)}
+            </div>
           </div>
         </div>
 
         <div className="printable-section">
           <h4>{t('customers.heading')}</h4>
-          <p><strong>{customer.name}</strong></p>
+          <p>
+            <strong>{customer.name}</strong>
+          </p>
           <p>{customer.legacy_code ? `${t('customers.clientCode')}: ${customer.legacy_code}` : ''}</p>
           <p>{customer.cpf ?? t('common.none')}</p>
           <p>{customer.address ?? '-'}</p>
@@ -115,18 +142,43 @@ export function CustomerPaymentReceiptPage(): JSX.Element {
           </div>
         </div>
 
+        {payment.notes && (
+          <p>
+            {t('customers.paymentNotes')}: {payment.notes}
+          </p>
+        )}
+        {balances.legacy_balance && (
+          <div className="printable-section">
+            <p>
+              {t('customers.legacySourceBalance')}: {formatCurrency(balances.legacy_balance.source_balance)}
+            </p>
+            <p>
+              {t('customers.legacyBalanceAdjustment')}: {formatCurrency(balances.legacy_balance.adjustment)}
+            </p>
+            <p className="text-muted">{t('customers.legacyBalanceHint')}</p>
+          </div>
+        )}
+        {balances.historical_balance_unavailable && (
+          <p role="status">{t('customers.legacyHistoricalBalanceUnavailable')}</p>
+        )}
         <div className="receipt-grid" style={{ marginTop: '12px' }}>
           <div>
             <span>{t('customers.previousBalance')}</span>
-            <div><strong>{formatCurrency(balances.previous_balance)}</strong></div>
+            <div>
+              <strong>{formatCurrency(balances.previous_balance)}</strong>
+            </div>
           </div>
           <div>
             <span>{t('customers.paymentAmount')}</span>
-            <div><strong>{formatCurrency(balances.payment_amount)}</strong></div>
+            <div>
+              <strong>{formatCurrency(balances.payment_amount)}</strong>
+            </div>
           </div>
           <div>
             <span>{t('customers.paymentNewBalanceLabel')}</span>
-            <div><strong>{formatCurrency(balances.new_balance)}</strong></div>
+            <div>
+              <strong>{formatCurrency(balances.new_balance)}</strong>
+            </div>
           </div>
         </div>
 

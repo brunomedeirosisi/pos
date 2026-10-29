@@ -30,7 +30,7 @@ internal static class Launcher {
         if(actual!=Convert.ToString(entry["sha256"]))throw new Exception("Arquivo adulterado: "+relative);
       }
     }
-    foreach(string name in new[]{"Instalar-POS.exe","Instalar-POS.ps1","Pos.Common.ps1","Pos.Install.ps1","Pos.Terminal.ps1"})if(!seen.Contains(name))throw new Exception("Arquivo obrigatorio ausente: "+name);
+    foreach(string name in new[]{"Instalar-POS.exe","Instalar-POS.ps1","Pos.Common.ps1","Pos.Install.ps1","Pos.Terminal.ps1","Pos.Cloud.ps1"})if(!seen.Contains(name))throw new Exception("Arquivo obrigatorio ausente: "+name);
   }
   [STAThread] private static int Main(string[] args) {
     string option="";
@@ -40,6 +40,8 @@ internal static class Launcher {
       case "--principal": option=" -Mode Principal";break;
       case "--terminal": option=" -Mode Terminal";break;
       case "--terminal-printer": option=" -Mode TerminalPrinter";break;
+      case "--cloud": option=" -Mode Cloud";break;
+      case "--cloud-printer": option=" -Mode CloudPrinter";break;
       default:return 2;
     }
     string directory=AppDomain.CurrentDomain.BaseDirectory;

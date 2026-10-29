@@ -31,3 +31,9 @@ describe('checkout printer destination binding',()=>{
     expect(readPrinterBinding(storeB,broken)).toBe(printer);
   });
 });
+
+it('captures a cloud browser-only shortcut without assuming a local Principal printer',()=>{
+  const data=storage();capturePrinterBinding('https://store.example.com/?pos_store='+storeA+'&pos_printer=choose',data);
+  expect(readPrinterBinding(storeA,data)).toBe('choose');
+  expect(availablePrinter('choose',[{id:'principal',enabled:true}])).toBe(false);
+});

@@ -14,12 +14,15 @@ const REQUIRED_IMPORT_TABLES = [
   'system_legacy_import_log',
   'system_legacy_import_checkpoint',
   'system_legacy_import_dead_letter',
+  'customer_legacy_balance',
+  'customer_financial_totals',
 ];
 
 describe('legacy import worker phase 5', () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
+    vi.doMock('../recovery-control.js', () => ({ initializeRecoveryControl: vi.fn().mockResolvedValue(undefined), RECOVERY_LOCK_KEY: 20_261_029 }));
   });
 
   it('re-enqueues pending imports on startup without dropping jobs', async () => {

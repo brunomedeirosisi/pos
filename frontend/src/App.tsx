@@ -14,6 +14,7 @@ import { CustomerDetailsPage } from './pages/catalog/CustomerDetailsPage';
 import { SellersPage } from './pages/catalog/SellersPage';
 import { PaymentTermsPage } from './pages/catalog/PaymentTermsPage';
 import { PaymentsPage } from './pages/PaymentsPage';
+import { PaymentHistoryPage } from './pages/PaymentHistoryPage';
 import { UsersPage } from './pages/admin/UsersPage';
 import { RolesPage } from './pages/admin/RolesPage';
 import { BackupRestorePage } from './pages/admin/BackupRestorePage';
@@ -54,6 +55,8 @@ export function App(): JSX.Element {
         <Route path="sales/:id" element={<RequirePermission permission="sales:read"><SaleDetailsPage /></RequirePermission>} />
         <Route path="sales/:id/receipt" element={<RequirePermission permission="sales:read"><SaleReceiptPage /></RequirePermission>} />
         <Route path="payments" element={<RequirePermission permission="catalog:read"><PaymentsPage /></RequirePermission>} />
+        <Route path="payments/history" element={<RequirePermission permission="catalog:read"><PaymentHistoryPage /></RequirePermission>} />
+        <Route path="payments/:paymentId" element={<RequirePermission permission="catalog:read"><CustomerPaymentReceiptPage /></RequirePermission>} />
         <Route path="catalog" element={<RequirePermission permission="catalog:read"><Outlet /></RequirePermission>}>
           <Route path="products" element={<ProductsPage />} />
           <Route path="product-groups" element={<ProductGroupsPage />} />

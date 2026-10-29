@@ -120,6 +120,8 @@ export function CustomerDetailsPage(): JSX.Element {
         // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
         void queryClient.invalidateQueries({ queryKey: ['customer', id] });
         void queryClient.invalidateQueries({ queryKey: ['customer-payments', id], exact: false });
+        void queryClient.invalidateQueries({ queryKey: ['payments-history'] });
+        void queryClient.invalidateQueries({ queryKey: ['payment-receivers'] });
       }
       setPaymentModalOpen(false);
     },

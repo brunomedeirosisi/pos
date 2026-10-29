@@ -1,8 +1,9 @@
 import express, { type ErrorRequestHandler } from 'express';
-import { stat } from 'node:fs/promises';
+import { stat, rm } from 'node:fs/promises';
+import path from 'node:path';
 import request from 'supertest';
 import bcrypt from 'bcryptjs';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { query, closeDatabase } from '../../src/db.js';
 import { authRouter } from '../../src/modules/auth/http/auth-router.js';
 import { router as usersRouter } from '../../src/routes/users.js';
@@ -12,6 +13,9 @@ import { errorHandler } from '../../src/middleware/error-handler.js';
 import { PgAuthRepository } from '../../src/modules/auth/repository/auth-repository.js';
 import { PgLoginLimitStore } from '../../src/modules/auth/repository/login-limit-repository.js';
 import { prepareDatabase } from '../support/database.js';
+import { syntheticArj } from '../support/arj-fixture.js';
+import * as importUseCases from '../../src/modules/legacy-import/application/legacy-import-use-cases.js';
+import { getEnv, resetEnvForTests } from '../../src/config/env.js';
 const userId = '58f1dc97-11d5-4f6c-b462-a1fd7be458d2';
 let hash: string;
 let uploadedPaths: string[] = [];
@@ -25,6 +29,29 @@ beforeAll(async () => {
 beforeEach(async () => { await query('delete from auth_session'); await query('delete from auth_login_limit'); await query("update app_user set status = 'active', password_hash = $2 where id = $1", [userId, hash]); });
 afterAll(() => closeDatabase());
 describe('real PostgreSQL sessions and shared login limits', () => {
+  it('requires authentication before returning import availability', async () => {
+    expect((await request(app).get('/admin/import/legacy/options')).status).toBe(401);
+  });
+  it.each(['false', 'true'])('reports the same overwrite gate used by the server: %s', async (enabled) => {
+    vi.stubEnv('ENABLE_LEGACY_OVERWRITE', enabled);
+    resetEnvForTests();
+    try {
+      const login = await request(app).post('/auth/login').send({ email: 'operator@example.test', password: 'synthetic-password' });
+      const cookie = (login.headers['set-cookie'] as unknown as string[])[0].split(';')[0];
+      const response = await request(app).get('/admin/import/legacy/options').set('Cookie', cookie);
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual({ overwriteEnabled: enabled === 'true' });
+    } finally { vi.unstubAllEnvs(); resetEnvForTests(); }
+  });
+  it('requires import permission to read availability', async () => {
+    const login = await request(app).post('/auth/login').send({ email: 'operator@example.test', password: 'synthetic-password' });
+    const cookie = (login.headers['set-cookie'] as unknown as string[])[0].split(';')[0];
+    const original = (await query("select permissions from app_role where name='phase0-test'")).rows[0].permissions;
+    try {
+      await query("update app_role set permissions='[]'::jsonb where name='phase0-test'");
+      expect((await request(app).get('/admin/import/legacy/options').set('Cookie', cookie)).status).toBe(403);
+    } finally { await query("update app_role set permissions=$1::jsonb where name='phase0-test'", [JSON.stringify(original)]); }
+  });
   it('revokes a cookie and an equivalent stolen bearer token on logout', async () => {
     const login = await request(app).post('/auth/login').send({ email: 'operator@example.test', password: 'synthetic-password' });
     expect(login.status).toBe(200);
@@ -68,7 +95,7 @@ describe('real PostgreSQL sessions and shared login limits', () => {
     expect((await request(app).get('/auth/me').set('Cookie', cookie)).status).toBe(401);
     expect((await query('select count(*)::int as active from auth_session where user_id = $1 and revoked_at is null', [userId])).rows[0].active).toBe(0);
   });
-  it.each(['invalid-schema', 'wrong-confirmation', 'disabled-overwrite'])('cleans temporary uploads on %s rejection', async (reason) => {
+  it.each(['invalid-schema', 'wrong-confirmation', 'disabled-overwrite', 'invalid-zip'])('cleans temporary uploads on %s rejection', async (reason) => {
     const login = await request(app).post('/auth/login').send({ email: 'operator@example.test', password: 'synthetic-password' });
     const cookie = (login.headers['set-cookie'] as unknown as string[])[0].split(';')[0];
     let upload = request(app).post('/admin/import/legacy').set('Cookie', cookie).field('confirmation', reason === 'wrong-confirmation' ? 'WRONG' : 'IMPORT LEGACY DATA NOW');
@@ -76,6 +103,11 @@ describe('real PostgreSQL sessions and shared login limits', () => {
     if (reason === 'disabled-overwrite') upload = upload.field('overwrite', 'true');
     const response = await upload.attach('files', Buffer.from('synthetic'), { filename: 'legacy.zip', contentType: 'application/zip' });
     expect(response.status).toBe(reason === 'disabled-overwrite' ? 403 : 400);
+    if (reason === 'disabled-overwrite') expect(response.body.message).toBe('legacy_overwrite_disabled_pending_recovery_validation');
+    if (reason === 'invalid-zip') {
+      expect(response.body.message).toBe('invalid_legacy_zip');
+      expect((await query('select count(*)::int n from system_legacy_import where created_by=$1', [userId])).rows[0].n).toBe(0);
+    }
     expect(uploadedPaths).toHaveLength(1);
     for (const filename of uploadedPaths) await expect(stat(filename)).rejects.toMatchObject({ code: 'ENOENT' });
   });
@@ -83,5 +115,25 @@ describe('real PostgreSQL sessions and shared login limits', () => {
     const { withTransaction } = await import('../../src/db.js');
     await expect(withTransaction(async (client) => { await client.query("set local statement_timeout = '100ms'"); await client.query('select pg_sleep(1)'); })).rejects.toMatchObject({ code: '57014' });
     expect((await query('select 1 as ok')).rows[0].ok).toBe(1);
+  });
+  it('accepts a genuine ARJ through the authenticated multipart route before queue handoff', async () => {
+    const queued = vi.spyOn(importUseCases, 'queueLegacyImportUseCase').mockResolvedValue({ importId: 'synthetic-queued-import' });
+    let ownedDirectory: string | undefined;
+    try {
+      const login = await request(app).post('/auth/login').send({ email: 'operator@example.test', password: 'synthetic-password' });
+      const cookie = (login.headers['set-cookie'] as unknown as string[])[0].split(';')[0];
+      const response = await request(app).post('/admin/import/legacy').set('Cookie', cookie)
+        .field('confirmation', 'IMPORT LEGACY DATA NOW').field('password', 'synthetic-password')
+        .attach('files', syntheticArj([{ name: 'PRODUTO.DBF' }]), { filename: 'legacy.ARJ', contentType: 'application/x-arj' });
+      expect(response.status, JSON.stringify(response.body)).toBe(202);
+      expect(queued).toHaveBeenCalledWith(expect.objectContaining({ overwrite: false, files: ['legacy.ARJ'] }));
+      ownedDirectory = path.resolve(getEnv().IMPORT_PATH, response.body.sessionId);
+    } finally {
+      queued.mockRestore();
+      if (ownedDirectory) {
+        if (path.dirname(ownedDirectory) !== path.resolve(getEnv().IMPORT_PATH) || !path.basename(ownedDirectory).startsWith('session-')) throw new Error('Unsafe import fixture cleanup');
+        await rm(ownedDirectory, { recursive: true, force: true });
+      }
+    }
   });
 });

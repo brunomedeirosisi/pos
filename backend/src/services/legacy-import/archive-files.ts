@@ -1,6 +1,7 @@
 import path from 'node:path';
 import { promises as fsp } from 'node:fs';
 import { archivePolicy, extractSafeZip } from '../../utils/safe-archive.js';
+import { extractSafeArj, isArjArchive } from '../../utils/safe-arj.js';
 
 async function readDirectoryRecursive(root: string): Promise<string[]> {
   const entries = await fsp.readdir(root, { withFileTypes: true });
@@ -27,17 +28,21 @@ export async function prepareLegacyFiles(sessionDir: string, policy = archivePol
     if (map.has(name)) throw new Error('Ambiguous duplicate legacy filename');
     map.set(name, file);
   };
-  for (const file of files.filter((file) => path.extname(file).toLowerCase() !== '.zip')) {
+  const isArchive = (file: string) => /\.(zip|arj)$/i.test(file);
+  for (const file of files.filter((file) => !isArchive(file))) {
     const stat = await fsp.lstat(file);
     usedBytes += stat.size; usedEntries++;
     if (!stat.isFile() || stat.isSymbolicLink() || stat.size > policy.maxFileBytes || usedBytes > policy.maxBytes) throw new Error('Legacy content limit exceeded');
     register(file);
   }
-  for (const file of files.filter((file) => path.extname(file).toLowerCase() === '.zip')) {
+  for (const file of files.filter(isArchive)) {
+    const stat = await fsp.lstat(file);
+    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('Invalid legacy archive source');
     const remaining = policy.maxBytes - usedBytes;
     if (remaining < 1 || usedEntries >= policy.maxEntries || Date.now() >= deadline) throw new Error('Legacy archive budget exceeded');
     const extractDir = await fsp.mkdtemp(path.join(sessionDir, '.extracted-'));
-    const extractedSize = await extractSafeZip(file, extractDir, {
+    const extract = await isArjArchive(file) ? extractSafeArj : extractSafeZip;
+    const extractedSize = await extract(file, extractDir, {
       ...policy, maxEntries: policy.maxEntries - usedEntries, maxBytes: remaining,
       maxFileBytes: Math.min(policy.maxFileBytes, remaining), timeoutMs: Math.max(1, deadline - Date.now()),
     });

@@ -1,8 +1,12 @@
-import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from 'pg';
+import { Pool, types, type PoolClient, type QueryResult, type QueryResultRow } from 'pg';
 import { getEnv } from './config/env.js';
 import { logger } from './observability/logger.js';
 
 const env = getEnv();
+// PostgreSQL DATE is a calendar day, not a midnight instant in the API's timezone.
+// Keep YYYY-MM-DD throughout JSON serialization; real timestamps retain pg's parser.
+types.setTypeParser(types.builtins.DATE, (value) => value);
+
 const pool = new Pool({
   host: env.POSTGRES_HOST,
   port: env.POSTGRES_PORT,
@@ -22,6 +26,8 @@ pool.on('error', () => {
 
 export async function closeDatabase(): Promise<void> {
   await pool.end();
+  const { closeRecoveryControl } = await import('./services/recovery-control.js');
+  await closeRecoveryControl();
 }
 
 /** Caller owns this session until release; session advisory locks must never use pool.query. */

@@ -1,0 +1,28 @@
+﻿[
+    {
+        "mode":  "Cloud",
+        "nodeVersion":  "24.21.0",
+        "version":  "1.0.0-store.3",
+        "passed":  true,
+        "zipSha256":  "285e31f1726aaecda765c19f7b0d8c1227a2d84726043326295d062d95a420c8",
+        "package":  "POS-Nuvem",
+        "codeSigned":  false,
+        "nodeArchiveSha256":  "158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541",
+        "sourceComparisons":  14,
+        "filesVerified":  18,
+        "zipBytes":  35041083
+    },
+    {
+        "mode":  "Principal",
+        "nodeVersion":  "24.21.0",
+        "version":  "1.0.0-store.3",
+        "passed":  true,
+        "zipSha256":  "7dccba11e16dee78547ce96d1c61114df7cf1b4b1cf88922a77b052ef88383f9",
+        "package":  "POS-Loja",
+        "codeSigned":  false,
+        "nodeArchiveSha256":  "158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541",
+        "sourceComparisons":  23,
+        "filesVerified":  29,
+        "zipBytes":  284376110
+    }
+]

@@ -2,7 +2,7 @@ const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const memory = new Map<string,string>();
 const key = (storeId: string) => 'pos.print-destination.'+storeId;
 export function savePrinterBinding(storeId: string, printerId: string, storage?: Pick<Storage,'setItem'>): void {
-  if (!uuid.test(storeId) || (printerId !== 'principal' && !uuid.test(printerId))) return;
+  if (!uuid.test(storeId) || (printerId !== 'principal' && printerId !== 'choose' && !uuid.test(printerId))) return;
   memory.set(storeId,printerId);
   try { storage?.setItem(key(storeId),printerId); } catch { /* Session memory still preserves an explicit destination. */ }
 }

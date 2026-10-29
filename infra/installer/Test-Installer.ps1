@@ -10,6 +10,15 @@ try {
   foreach($file in Get-ChildItem -LiteralPath $PSScriptRoot -Filter *.ps1){$tokens=$null;$errors=$null;$null=[Management.Automation.Language.Parser]::ParseFile($file.FullName,[ref]$tokens,[ref]$errors);Check ($errors.Count -eq 0) ('Sintaxe '+$file.Name)}
   foreach($value in @('192.168.1.22','10.10.0.1','172.16.0.1','172.31.255.1')){Assert-PosPrivateIp $value;Check $true ('IP privado '+$value)}
   foreach($value in @('127.0.0.1','8.8.8.8','172.32.0.1','::1','localhost','192.168.001.22')){Reject {Assert-PosPrivateIp $value} ('IP recusado '+$value)}
+  Check ((Assert-PosCloudOrigin 'https://loja.example.com/') -eq 'https://loja.example.com') 'Origem publica HTTPS normalizada'
+  foreach($url in @('http://loja.example.com','https://localhost','https://127.0.0.1','https://192.168.1.2','https://[::1]','https://loja.local','https://loja.internal','https://loja','https://loja.example.com:8443','https://u:p@loja.example.com','https://loja.example.com/api','https://loja.example.com/a/../','https://loja.example.com?token=secret','https://loja.example.com#fragment','https://loja.example.com/%2e','https://bad..example.com','https://loja.example.com.')){Reject {Assert-PosCloudOrigin $url} 'Endereco nao publico/origem ambigua recusado'}
+  $info=New-Object Diagnostics.ProcessStartInfo
+  $info.EnvironmentVariables['NODE_EXTRA_CA_CERTS']='unrelated.crt';$info.EnvironmentVariables['NODE_TLS_REJECT_UNAUTHORIZED']='0'
+  Set-PosTerminalTlsEnvironment $info ([pscustomobject]@{connectionMode='cloud'}) 'C:\fixture'
+  Check (-not $info.EnvironmentVariables.ContainsKey('NODE_EXTRA_CA_CERTS')) 'Nuvem nao herda CA local'
+  Check ($info.EnvironmentVariables['NODE_TLS_REJECT_UNAUTHORIZED'] -eq '1') 'Agente nao herda TLS desabilitado'
+  Set-PosTerminalTlsEnvironment $info ([pscustomobject]@{}) 'C:\fixture'
+  Check ($info.EnvironmentVariables['NODE_EXTRA_CA_CERTS'] -eq 'C:\fixture\pki\root.crt') 'Agente LAN antigo preserva CA configurada'
   $private=Join-Path $testDirectory 'private';Protect-PosFolder $private
   $secret=New-PosSecret;Check ($secret.Length -eq 64) 'Segredo aleatorio de 256 bits'
   $secretFile=Join-Path $private 'secret.bin';Save-PosSecret $secretFile @{value=$secret}
@@ -33,7 +42,7 @@ try {
     for($i=0;$i -lt $values.Count;$i++){Check ($parsed[$i] -eq $values[$i]) ('Argumento nativo '+$i)}
   }
   $bundle=Join-Path $testDirectory 'package';$null=New-Item -ItemType Directory -Path $bundle
-  $names=@('Instalar-POS.exe','Instalar-POS.ps1','Pos.Common.ps1','Pos.Install.ps1','Pos.Terminal.ps1','Start-Terminal.ps1','Parar-Terminal.ps1','Diagnosticar-Terminal.ps1','LEIA-ME.txt','images.tar','Firewall-POS.ps1','Start-POS.ps1','Parar-POS.ps1','empty.env','store.compose.yml')
+  $names=@('Instalar-POS.exe','Instalar-POS.ps1','Pos.Common.ps1','Pos.Install.ps1','Pos.Terminal.ps1','Pos.Cloud.ps1','Start-Terminal.ps1','Parar-Terminal.ps1','Diagnosticar-Terminal.ps1','LEIA-ME.txt','images.tar','Firewall-POS.ps1','Start-POS.ps1','Parar-POS.ps1','empty.env','store.compose.yml')
   foreach($name in $names){[IO.File]::WriteAllText((Join-Path $bundle $name),'synthetic installer fixture')}
   foreach($folder in @('runtime','agent','documentacao')){$null=New-Item -ItemType Directory -Path (Join-Path $bundle $folder)}
   [IO.File]::WriteAllText((Join-Path $bundle 'runtime\node.exe'),'synthetic runtime')
@@ -54,7 +63,7 @@ try {
   Reject {Assert-PosBundle $bundle} 'Imagem adulterada recusada'
   $manifest.files=@(Get-ChildItem -LiteralPath $bundle -Recurse -File | Where-Object Name -ne 'manifest.json' | ForEach-Object{@{path=$_.FullName.Substring($bundle.Length+1).Replace('\','/');sha256=(Get-PosHash $_.FullName)}});Write-PosJson $manifestPath $manifest
   # Compile and exercise the real launcher before replacing OS effects with mocks.
-  foreach($name in @('Instalar-POS.ps1','Pos.Common.ps1','Pos.Install.ps1','Pos.Terminal.ps1','Start-Terminal.ps1','Parar-Terminal.ps1','Diagnosticar-Terminal.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $bundle $name) -Force}
+  foreach($name in @('Instalar-POS.ps1','Pos.Common.ps1','Pos.Install.ps1','Pos.Terminal.ps1','Pos.Cloud.ps1','Start-Terminal.ps1','Parar-Terminal.ps1','Diagnosticar-Terminal.ps1')){Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $bundle $name) -Force}
   $compiler=Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319\csc.exe'
   $null=Invoke-PosProcess $compiler @('/nologo','/target:winexe','/platform:x64','/reference:System.Windows.Forms.dll','/reference:System.Web.Extensions.dll',('/out:'+(Join-Path $bundle 'Instalar-POS.exe')),(Join-Path $PSScriptRoot 'Launcher.cs'))
   $manifest.files=@(Get-ChildItem -LiteralPath $bundle -Recurse -File | Where-Object Name -ne 'manifest.json' | ForEach-Object{@{path=$_.FullName.Substring($bundle.Length+1).Replace('\','/');sha256=(Get-PosHash $_.FullName)}});Write-PosJson $manifestPath $manifest
@@ -62,6 +71,12 @@ try {
   Check $true 'Launcher real valida pacote sem instalar'
   $ui=Invoke-PosProcess (Get-PosPowerShell) @('-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',(Join-Path $bundle 'Instalar-POS.ps1'),'-UiCheck') 60
   Check ((ConvertFrom-Json $ui).uiReady -eq $true) 'Interface real construida sem exibir janela ou instalar'
+  foreach($mode in @('Cloud','CloudPrinter')){
+    $ui=Invoke-PosProcess (Get-PosPowerShell) @('-NoProfile','-STA','-ExecutionPolicy','Bypass','-File',(Join-Path $bundle 'Instalar-POS.ps1'),'-Mode',$mode,'-UiCheck') 60
+    $parsedUi=ConvertFrom-Json $ui
+    Check ($parsedUi.cloudFieldsEnabled -eq $true) 'Formulario Nuvem construido com URL e UUID habilitados'
+    Check ($parsedUi.printerEnabled -eq ($mode -eq 'CloudPrinter')) 'Formulario Nuvem habilita impressora somente no modo escolhido'
+  }
   $guiFile=Join-Path $bundle 'Instalar-POS.ps1';$guiBytes=[IO.File]::ReadAllBytes($guiFile)
   $sentinel=Join-Path $testDirectory 'must-not-execute.txt'
   [IO.File]::WriteAllText($guiFile,('[IO.File]::WriteAllText('''+$sentinel.Replace("'","''")+''',''executed'');exit 0'))
@@ -80,7 +95,7 @@ try {
   function Import-PosCertificate([string]$Path,[string]$ExpectedHash){Check ((Get-PosHash $Path) -eq $ExpectedHash) 'Certificado conferido antes de importar (mock)';$script:effects.Add('certificate-trust-mocked');return ('A'*40)}
   function Test-PosStore([string]$Url,[string]$StoreId){Check ($Url -eq 'https://192.168.1.22') 'Identidade HTTPS conferida (mock)'}
   function New-PosShortcut([string]$Path,[string]$Target,[string]$Arguments=''){$script:effects.Add('startup-shortcut-mocked')}
-  function Write-PosUrlShortcut([string]$Url){$script:lastBrowserUrl=$Url;$script:effects.Add('desktop-shortcut-mocked')}
+  function Write-PosUrlShortcut([string]$Url,[string]$Name='POS Loja.url'){$script:lastShortcutName=$Name;$script:lastBrowserUrl=$Url;$script:effects.Add('desktop-shortcut-mocked')}
   function Start-Process {param($FilePath,$ArgumentList,$Verb,$WindowStyle,[switch]$PassThru,[switch]$Wait);$script:effects.Add('windows-process-mocked');if($PassThru){return [pscustomobject]@{ExitCode=0}}}
   $backup=Join-Path $testDirectory 'external-backup';$null=New-Item -ItemType Directory -Path $backup
   $options=@{serverIp='192.168.1.22';printerName='Synthetic Printer';companyName='Synthetic Store';companyAddress='Synthetic Address';companyTaxId='Synthetic ID';backupDestination=$backup;backupIsExternal=$true;prepareDocker=$false;adminName='Synthetic Admin';adminEmail='synthetic@example.test';adminPassword='synthetic_only_password_2026'}
@@ -134,6 +149,55 @@ try {
   $state=Read-PosJson (Join-Path $script:installRoot 'settings.json');$state.status='update_failed';Write-PosJson (Join-Path $script:installRoot 'settings.json') $state
   Reject {Install-PosPrincipal $bundle $options} 'Reparar nao volta automaticamente de atualizacao falha'
   $options.serverIp='8.8.8.8';Reject {Install-PosPrincipal $bundle $options} 'Principal recusa rede publica'
+  $script:installRoot=Join-Path $testDirectory 'no-local-principal'
+  $script:terminalRoot=Join-Path $testDirectory 'cloud-browser'
+  $script:cloudStore=[Guid]::NewGuid().ToString();$script:cloudPairCalls=0;$script:cloudCase='valid'
+  function Invoke-PosCloudJson([string]$Origin,[string]$ApiPath,$Body=$null,$Headers=@{}){
+    Check ($Origin -eq 'https://loja.example.com') 'Chamadas Nuvem mantem origem configurada'
+    if($ApiPath -eq '/api/v1/store-info'){
+      if($script:cloudCase -eq 'wrong-store'){return [pscustomobject]@{store_id=[Guid]::NewGuid().ToString();print_mode='queue'}}
+      if($script:cloudCase -eq 'direct'){return [pscustomobject]@{store_id=$script:cloudStore;print_mode='direct'}}
+      return [pscustomobject]@{store_id=$script:cloudStore;print_mode='queue'}
+    }
+    $script:cloudPairCalls++;$script:cloudToken=$Body.token
+    return [pscustomobject]@{store_id=$script:cloudStore;printer_id='8069fb74-a927-44e8-8fe9-560e2ab7e539';display_name='Caixa nuvem'}
+  }
+  $script:lanApiMock=(Get-Command Invoke-PosTerminalApi).ScriptBlock
+  function Invoke-PosTerminalApi([string]$Url,[string]$Route,$Body=$null,$Headers=@{},[string]$ConnectionMode='lan'){
+    Check ($ConnectionMode -eq 'cloud') 'Pareamento usa transporte Nuvem'
+    return Invoke-PosCloudJson $Url ('/api/v1/print-agent'+$Route) $Body $Headers
+  }
+  $beforeEffects=$script:effects.Count
+  $browserState=Install-PosTerminal $bundle -ConnectionMode cloud -ServerUrl 'https://loja.example.com/' -StoreId $script:cloudStore
+  Check ($script:lastShortcutName -eq 'POS Nuvem.url') 'Atalho Nuvem nao sobrescreve o atalho da loja local'
+  Check ($browserState.connectionMode -eq 'cloud' -and $browserState.status -eq 'ready') 'Cliente Nuvem sem impressora concluido'
+  Check ($browserState.printerId -eq 'choose' -and $script:lastBrowserUrl.Contains('pos_printer=choose')) 'Nuvem sem agente exige escolher destino no navegador'
+  Check (-not (Test-Path -LiteralPath (Join-Path $script:terminalRoot 'terminal-agent.bin'))) 'Navegador Nuvem nao cria token de agente'
+  $script:cloudCase='wrong-store'
+  Reject {Install-PosTerminal $bundle -ConnectionMode cloud -ServerUrl 'https://loja.example.com' -StoreId $script:cloudStore -WithPrinter -PrinterName 'Synthetic Terminal Printer' -EnrollmentCode ('d'*48)} 'UUID diferente bloqueia envio do codigo'
+  Check ($script:cloudPairCalls -eq 0) 'Identidade validada antes de transmitir credencial'
+  $script:cloudCase='direct'
+  Reject {Install-PosTerminal $bundle -ConnectionMode cloud -ServerUrl 'https://loja.example.com' -StoreId $script:cloudStore -WithPrinter -PrinterName 'Synthetic Terminal Printer' -EnrollmentCode ('d'*48)} 'Pareamento exige fila habilitada no servidor'
+  $script:cloudCase='valid'
+  $cloudState=Install-PosTerminal $bundle -ConnectionMode cloud -ServerUrl 'https://loja.example.com' -StoreId $script:cloudStore -WithPrinter -PrinterName 'Synthetic Terminal Printer' -EnrollmentCode ('d'*48)
+  Check (-not (Test-Path -LiteralPath (Join-Path (Join-Path (Join-Path $script:terminalRoot 'versions') $cloudState.version) 'images.tar'))) 'Modo Nuvem em pacote completo nao copia imagens Docker'
+  Check ($cloudState.printerId -eq '8069fb74-a927-44e8-8fe9-560e2ab7e539') 'Nuvem usa identidade individual da impressora'
+  Check (-not (Test-Path -LiteralPath (Join-Path $script:terminalRoot 'pki\root.crt'))) 'Nuvem nao instala arquivo de CA local'
+  $cloudSecret=Read-PosSecret (Join-Path $script:terminalRoot 'terminal-agent.bin')
+  Check ($cloudSecret.token -eq $script:cloudToken) 'Credencial Nuvem protegida com DPAPI'
+  $calls=$script:cloudPairCalls
+  $null=Install-PosTerminal $bundle -ConnectionMode cloud -ServerUrl 'https://loja.example.com' -StoreId $script:cloudStore -WithPrinter -PrinterName 'Synthetic Terminal Printer'
+  Check ($script:cloudPairCalls -eq $calls) 'Reparo Nuvem preserva credencial sem novo pareamento'
+  Reject {Install-PosTerminal $bundle -ConnectionMode cloud -ServerUrl 'https://other.example.com' -StoreId $script:cloudStore -WithPrinter -PrinterName 'Synthetic Terminal Printer'} 'Reparo nao troca servidor silenciosamente'
+  $cloudEffects=@($script:effects|Select-Object -Skip $beforeEffects)
+  Check (-not (($cloudEffects -join ' ') -match 'prepare-docker|compose|certificate-trust')) 'Nuvem sem Docker, Compose ou importacao de CA'
+  $null=New-Item -ItemType Directory -Path $script:installRoot -Force
+  [IO.File]::WriteAllText((Join-Path $script:installRoot 'settings.json'),'synthetic local installation')
+  Reject {Assert-PosLocalPrincipalStopped} 'Agente Nuvem nao convive silenciosamente com Principal ativo'
+  [IO.File]::WriteAllText((Join-Path $script:installRoot 'stop.request'),'stopped')
+  $localLock=New-Object IO.FileStream((Join-Path $script:installRoot 'supervisor.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)
+  try{Reject {Assert-PosLocalPrincipalStopped} 'Sinal de parada nao basta enquanto supervisor local esta ativo'}finally{$localLock.Dispose()}
+  Assert-PosLocalPrincipalStopped;Check $true 'Principal parado e preservado permite configurar cliente Nuvem'
   @{passed=$script:passed;failed=0;windowsGlobalChanges='mocked';realChecks=@('PowerShell parser','DPAPI CurrentUser','private ACL','manifest hashes/traversal','native argument quoting','idempotent install state');testDirectory=$testDirectory}|ConvertTo-Json -Compress
 } finally {
   $full=[IO.Path]::GetFullPath($testDirectory)

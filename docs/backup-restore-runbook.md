@@ -1,72 +1,61 @@
-# Operação de backup e recuperação
+# Backup e restauração / Backup and restore
 
-Atualizado em 21/10/2026, no primeiro corte da fase 1. Registro e evidências: [fase 1](technical-audit/08-fase-um-primeiro-corte.md).
+Atualizado em 29/10/2026. O fluxo de restauração de backups nativos foi validado em Docker, incluindo rollback e recuperação de uma operação interrompida. Os padrões de instalação continuam conservadores: `ENABLE_DATABASE_RESTORE=false`.
 
-## Estado suportado
+## Disponibilidade e operação
 
-Geração, upload, download, exclusão local e retenção de backups têm coordenação por lock PostgreSQL em uma conexão dedicada. A imagem contém `pg_dump` e `psql` 16.15, executados pelo usuário `pos` (UID/GID 10001). O volume `backups` conserva arquivos após recriar a API.
+A mensagem `database_restore_disabled_pending_recovery_validation` indicava que o servidor estava com a restauração desativada; não era falta de permissão do Admin nem corrupção do ZIP. A interface agora consulta `GET /api/v1/admin/restore/options`, protegido por `system:backup:restore`, e explica o bloqueio em PT-BR/EN antes de permitir envio ou restauração.
 
-**Restore da aplicação continua desabilitado por padrão.** O ensaio deste corte restaura somente arquivos gerados pela própria massa sintética em bancos temporários e os remove ao final. Não habilitar `ENABLE_DATABASE_RESTORE` antes de concluir journal independente, proteção de alvo/snapshot, manutenção/drenagem e validação do resultado na UI (TSK-009/010/003/011).
+Depois de validar a recuperação neste ambiente, o responsável pode configurar `ENABLE_DATABASE_RESTORE=true` e recriar somente a API, preservando os volumes. Isso disponibiliza a ação; não executa uma restauração. Permissão, senha atual e confirmação explícita continuam obrigatórias. O instalador e `.env.example` mantêm o padrão desativado.
 
-## Preparar armazenamento
+1. Pare as operações dos caixas e aguarde importações ou outras solicitações terminarem. Crie e confira uma cópia atual antes de escolher um ponto anterior.
+2. Na tela de backups, selecione **Restaurar** em um backup existente ou envie uma cópia ZIP sem alterações, informe a senha do usuário conectado e confirme a substituição.
+3. Aguarde a conclusão. Operações concorrentes impedem iniciar o cutover (`409`); durante a recuperação as demais solicitações recebem manutenção (`503`, `Retry-After: 5`). Não repita o envio enquanto a operação estiver em andamento.
+4. Em sucesso, as sessões são revogadas. Entre novamente usando uma conta e a senha presentes no backup restaurado. A restauração substitui os dados atuais pelo ponto selecionado.
+5. Em rollback, a tela informa que o banco anterior foi recuperado, mantém a sessão e mostra o identificador da operação e o arquivo de recuperação. HTTP 200 com `status=rolled_back` **não é sucesso da restauração solicitada**.
 
-O Compose principal fixa `BACKUP_PATH=/var/backups/pos` e monta o volume nomeado `backups` nesse local. O diretório pertence ao UID/GID 10001 e é criado com modo 0700; novos arquivos usam 0600. Backups novos mantêm o formato ZIP com `backup.sql` e `backup.json`; o nome incorpora UUID para evitar colisões no mesmo segundo. Arquivos antigos continuam legíveis.
+## Origem dos arquivos
 
-Antes de recriar uma API antiga, verificar se existem arquivos no `BACKUP_PATH` anterior. Copiá-los enquanto o container anterior ainda existe, conferir seus hashes e transferi-los ao volume definitivo com a propriedade correta. Preservar a cópia e o container anterior até confirmar listagem, download/checksum e ensaio de recuperação. Uma montagem nova pode ocultar arquivos existentes no filesystem do container. A implementação não executou essa migração nem recriou a aplicação de desenvolvimento do usuário.
+A restauração pela aplicação aceita somente bytes cujo SHA-256 corresponde a um backup gerado por esta instalação. No primeiro início desta versão, o catálogo existente registra a procedência de backups nativos; registros de upload não estabelecem confiança. Uma cópia enviada novamente é aceita se o conteúdo for idêntico ao backup nativo conhecido, mesmo que o nome mude. Um ZIP estrangeiro, ou alterado, é recusado antes de executar SQL, inclusive na simulação. O checksum declarado dentro do arquivo não autentica sua origem.
 
-A reserva padrão é `BACKUP_MIN_FREE_BYTES=268435456` (256 MiB); retenção local padrão `BACKUP_RETENTION_COUNT=7`. Dimensionar a capacidade para os arquivos retidos, o SQL e ZIP temporários da maior operação e a reserva. A verificação inicial não impede que outro processo consuma espaço depois; falhas de escrita impedem concluir a geração e removem seus temporários. A criação também recusa conteúdo maior que os budgets de extração configurados, para não reconhecer como válido um backup que a própria política recusaria restaurar.
+Backups de outra instalação e arquivos cujo registro de procedência foi perdido exigem recuperação técnica em ambiente isolado e verificação explícita de origem. Não há botão para confiar em SQL arbitrário. O executor continua usando a identidade PostgreSQL configurada; a restrição a backups nativos verificados é obrigatória. A simulação não é uma sandbox para SQL externo.
 
-A publicação de novos arquivos completos usa hardlink exclusivo no mesmo filesystem, após sincronizar o arquivo. O preflight verifica essa capacidade. O volume de teste comprovou falta real de espaço (`ENOSPC`) sem publicação de ZIP parcial. O teste não comprova tolerância a perda física do host ou do armazenamento.
+## Sequência e preservação
 
-## Configurar segunda cópia
+A API adquire um advisory lock exclusivo de recuperação, e todas as solicitações que acessam a aplicação mantêm locks compartilhados até finalizar a resposta. O worker de importação e a reconciliação financeira usam um lock compartilhado na própria sessão de escrita. A restauração não inicia enquanto essas operações estão ativas. Geração, upload, download e exclusão continuam usando os componentes e permissões existentes; operações de arquivos e retenção também usam o lock dedicado de backup.
 
-Durante desenvolvimento, a réplica é opcional. Em qualquer ambiente que dependa de recuperação, provisionar e validar um destino externo antes de considerar o backup operacionalmente aceito. O overlay exige um caminho existente e não cria automaticamente o diretório no host:
+O fluxo verifica o checksum e a procedência, simula o restore em um banco temporário, valida tabelas/contagens/FKs e cria um snapshot íntegro do banco atual. Só então substitui `public`, em uma única chamada `psql --single-transaction` com parada em erro. Aplica as migrações pendentes e reconcilia o catálogo antes de liberar a manutenção. Em falha posterior ao cutover, restaura o snapshot automaticamente.
 
-```powershell
-$env:BACKUP_REPLICA_HOST_PATH = 'CAMINHO_ABSOLUTO_DO_MOUNT_EXTERNO_EXISTENTE'
-docker compose -f docker-compose.yml -f infra/docker-compose.backup-replica.yml config --quiet
-```
+Enquanto há manutenção, jobs aguardam antes de entrar na sessão de escrita, sem consumir tentativas BullMQ. Importações pendentes presentes no ponto restaurado são encerradas como falhas; jobs antigos do Redis não podem reexecutá-las automaticamente. Revise os dados e submeta uma nova importação se necessário. O rollback preserva o estado anterior.
 
-Após provisionamento e preservação dos arquivos anteriores, usar esses mesmos dois arquivos Compose para atualizar a aplicação. O overlay monta o destino em `/var/backups/replica` e configura `BACKUP_REQUIRE_REPLICA=true`. O processo precisa de acesso pelo UID/GID 10001 e suporte a publicação exclusiva. O caminho deve ficar fora da árvore primária. O preflight verifica permissões, espaço e capacidade de publicação; **não identifica se o dispositivo realmente está fora do host**. Infraestrutura deve verificar o mount e o acesso a partir do ambiente de recuperação.
+O schema `pos_recovery`, criado por `backend/sql/recovery.sql`, contém o journal, procedência dos arquivos, catálogo e fence de manutenção. Não tem FKs para usuários de `public` e é excluído de novos dumps por `--exclude-schema=pos_recovery`. Assim, restaurar um backup antigo não apaga a operação atual, sua identidade original nem o registro do snapshot. Alvo e snapshot de operações em andamento ou que exigem recuperação ficam protegidos contra retenção e exclusão. Arquivos excluídos localmente não reaparecem no catálogo ao restaurar um ponto anterior.
 
-A segunda cópia é feita com arquivo temporário, SHA-256 conferido e manifesto. Com réplica configurada, sua falha impede confirmar a operação. Um arquivo local completo pode permanecer mesmo se a cópia ou o registro posterior falhar; o próximo corte implementará reconciliação do catálogo. Conservar esse arquivo para recuperação e diagnóstico.
+Na reinicialização, uma operação interrompida antes do cutover é encerrada sem substituir dados. Se o cutover pode ter começado, a API obtém os locks exclusivos e recupera o snapshot antes de iniciar atendimento e workers. Se não conseguir recuperar, permanece indisponível para diagnóstico; não remova manualmente o fence nem o snapshot para forçar a abertura.
 
-Retenção e exclusão pela API atuam na cópia local e em seu manifesto. Não apagam a réplica. Definir capacidade, retenção e proteção do destino externo independentemente da aplicação. O ensaio usa dois volumes locais descartáveis; não foi configurado um NAS/serviço externo real.
+## Armazenamento e diagnóstico
 
-## Verificação prévia
+O Compose mantém `BACKUP_PATH=/var/backups/pos` em volume nomeado persistente. A imagem contém PostgreSQL client 16.15 e executa como `pos` (UID/GID 10001). Diretórios privados usam 0700 e arquivos novos, 0600. Não use `down --volumes` no projeto da aplicação.
 
-`GET /api/v1/admin/backups/preflight` exige `system:backup:read` e sessão válida. Retorna 200 com versões, compatibilidade PostgreSQL 16, bytes livres, capacidade de escrita/publicação, retenção e estado da réplica. Retorna 503 com `ready=false` se alguma verificação falhar. Não retorna senhas ou caminhos de arquivos.
+`GET /api/v1/admin/backups/preflight` exige `system:backup:read` e verifica versões PostgreSQL, espaço, escrita/publicação exclusiva e réplica. A reserva padrão é 256 MiB e a retenção local padrão é 7 arquivos, além dos arquivos protegidos por operações de recuperação. Backups são ZIPs não criptografados com `backup.sql` e `backup.json`.
 
-A geração e o upload executam essa verificação antes de gravar o backup definitivo. PostgreSQL precisa de pool com ao menos duas conexões: uma para o lock e outra para consultas; o padrão permanece 10. Os limites de duração continuam em `BACKUP_OPERATION_TIMEOUT_MS` e `BACKUP_SIMULATION_TIMEOUT_MS`.
+Para segunda cópia, use [o overlay de réplica](../infra/docker-compose.backup-replica.yml) com um mount externo já provisionado. `BACKUP_REQUIRE_REPLICA=true` impede confirmar gerações sem réplica verificada. A aplicação não prova que um destino está fora do host e não exclui réplicas quando remove arquivos locais. Defina proteção de acesso, capacidade e retenção externa.
 
-## Coordenação e evidência
+O journal atual está em `pos_recovery.operation`, com `id`, `actor_id`, `status`, `stage`, nomes dos arquivos e detalhes. `pos_recovery.state` indica manutenção persistente. Os registros históricos de geração/retenção em `public.system_backup_operation` continuam disponíveis, mas não são a fonte de estado da restauração atual. Em recuperação obrigatória, preserve banco, ambos os schemas, volumes, arquivos, manifestos e configuração e consulte o responsável técnico.
 
-Aquisição e liberação do advisory lock usam a mesma sessão. Conflito retorna 409 (`backup_operation_in_progress`). Sucesso/erro liberam o lock; falha de desbloqueio ou perda da conexão descartam a sessão do pool. A perda também sinaliza cancelamento da geração e dos subprocessos. Isso não substitui manutenção e drenagem de escritas para restore.
+O journal e o banco principal compartilham o servidor PostgreSQL: essa proteção cobre substituição de `public` e interrupção do processo, não perda física do host/volume. Uma instalação perdida exige cópias externas e recuperação técnica. Os testes não definem RPO/RTO de produção.
 
-O ZIP gerado e seu manifesto contêm checksum/metadados. O catálogo `public.system_backup` e o journal `public.system_backup_operation` ainda pertencem ao alvo restaurável. Os manifestos são base para a TSK-009; não representam um journal independente concluído. Falha posterior à publicação pode exigir reconciliação manual neste corte. A retenção anterior ao restore foi suspensa para não excluir seu alvo enquanto a TSK-010 não entrega pinning persistente.
+## Validação Docker
 
-## Reproduzir o ensaio
+Procedimento e comandos: [testing-docker.md](testing-docker.md#restore-validation). O runner [restore-image-check.mjs](../infra/restore-image-check.mjs) recusa qualquer banco/usuário que não seja o fixture descartável. Exercita senha/confirmação, concorrência, origem não verificada, atomicidade SQL, restore HTTP real, revogação de sessões, catálogo/journal, rollback após falha e retomada de operação interrompida. Testes de interface cobrem PT-BR e EN.
 
-Pré-requisitos: Node 24.21.0, npm 12.2.0 e Docker Compose. Com dependências backend instaladas pelo lockfile:
+Em 29/10/2026, uma cópia privada do backup recente desta instalação também foi restaurada em banco descartável: 104.879 vendas, 190.715 itens, 138.782 pagamentos e 3.395 saldos legados, sem divergência financeira. Nenhuma restauração foi executada no banco operacional para esse ensaio. Os arquivos reais e relatórios privados ficam fora do Git; a evidência versionada contém apenas resultados agregados.
 
-```powershell
-$env:NPM_CLI = Join-Path (npm root -g) 'npm/bin/npm-cli.js'
-node infra/test-disposable.mjs --images --backups
-```
+Evidência: [509 testes, checks e ensaios Docker](test-evidence/database-restore-docker-20261029.log.gz), além de oito verificações do runner de restauração. Lint, regras, tipos e builds passaram; não houve alteração de seed.
 
-O harness recria somente o projeto `pos-phase0-tests`, com banco sintético, portas locais dinâmicas, volumes exclusivos e tmpfs de 1 MiB para provocar ENOSPC. Ele cria backups, verifica réplica/checksum, restaura linhas e relações em banco temporário, testa conflitos entre processos, recria a API e verifica catálogo/download/restore novamente. Ao final remove containers, rede e **volumes desse projeto de teste**. Não executar com dados de aplicação sob esse nome de projeto.
+## English operator notes
 
-Para guardar as medições do ensaio, definir `BACKUP_TEST_EVIDENCE_PATH` com o caminho de um JSON de saída. Os dados são contagens, hashes, tamanhos e tempos; não incluem cookies ou senhas.
+Restoration is disabled by default and requires `ENABLE_DATABASE_RESTORE=true`, restore permission, the current password and explicit confirmation. Only unchanged copies of backups generated by this installation are accepted. Wait for active requests/imports to finish; other requests receive maintenance responses during recovery.
 
-Recriar a API principal preserva seu volume nomeado. A opção `down --volumes` remove volumes e não deve integrar o procedimento de atualização da aplicação. Durante adoção ou reversão, conservar arquivos, metadados e as cópias verificadas; não substituir o volume por um diretório vazio.
+A successful restoration replaces current data and revokes sessions: sign in again with an account from the restored backup. A rollback preserves the previous database and is shown as a failed restoration with an operation reference and recovery filename. Pending imports from the restored point are stopped and require a new explicit submission.
 
-## Próximos gates de recuperação
-
-1. TSK-009: journal fora do schema substituído, identidade independente e catálogo reconciliável.
-2. TSK-010: proteção persistente de alvo/snapshot contra retenção e exclusão, inclusive após interrupção.
-3. TSK-003: executor confiável, privilégios separados, manutenção/drenagem e cutover recuperável com reconciliação.
-4. TSK-011: UI distingue restaurado, revertido, falhou e timeout nos dois fluxos.
-
-Somente o ensaio completo permitirá medir RPO/RTO de recuperação da aplicação e submetê-los ao responsável operacional. Tempos de dump/simulação em uma fixture pequena não são metas ou garantia de recuperação.
-
-Referências primárias: [pg_dump 16](https://www.postgresql.org/docs/16/app-pgdump.html), [psql 16](https://www.postgresql.org/docs/16/app-psql.html) e [advisory locks por sessão](https://www.postgresql.org/docs/16/explicit-locking.html#ADVISORY-LOCKS).
+The durable recovery journal and maintenance fence live outside `public`. If a process is interrupted during cutover, startup recovers the snapshot before admitting work. If recovery cannot finish, preserve all volumes/files and request technical recovery; do not clear the fence manually. Foreign backups or disaster recovery after loss of provenance require an isolated, supervised procedure.

@@ -58,3 +58,6 @@ jobs:
       - name: Windows PowerShell 5.1, DPAPI and launcher tests
         shell: powershell
         run: ./infra/installer/Test-Installer.ps1 -NodePath (Get-Command node.exe).Source
+      - name: Cloud HTTPS transport and certificate checks
+        shell: powershell
+        run: ./infra/installer/Test-CloudHttps.ps1 -NodePath (Get-Command node.exe).Source

@@ -78,7 +78,7 @@ export function buildPaymentFilterClauses(customerId: string, filters: PaymentLi
   params: unknown[];
 } {
   const params: unknown[] = [customerId];
-  const conditions = ['p.customer_id = $1'];
+  const conditions = ['p.customer_id = $1', 'p.cancelled_at is null'];
 
   if (filters.start_date) {
     params.push(toDateOnly(filters.start_date));

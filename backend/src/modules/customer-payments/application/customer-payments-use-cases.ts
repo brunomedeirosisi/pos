@@ -12,8 +12,15 @@ import {
   type PaymentListQueryDto,
   type RegisterCustomerPaymentResponseDto,
 } from '../contracts/customer-payments-contracts.js';
-import { OVERPAY_TOLERANCE, normalizeOptionalText, toDateOnly, toIsoString, toNumber } from '../domain/customer-payments-domain.js';
+import {
+  OVERPAY_TOLERANCE,
+  normalizeOptionalText,
+  toDateOnly,
+  toIsoString,
+  toNumber,
+} from '../domain/customer-payments-domain.js';
 import type { CustomerPaymentRecord, CustomerPaymentsRepository } from '../repository/customer-payments-repository.js';
+import { customerBalance, legacyBalanceFields } from '../domain/customer-balance.js';
 
 type PaymentMethodFilterValue = (typeof paymentMethodFilterValues)[number];
 
@@ -28,7 +35,7 @@ type CurrentUser = {
   fullName: string;
 };
 
-function mapPaymentRecord(row: CustomerPaymentRecord): CustomerPaymentDto {
+export function mapPaymentRecord(row: CustomerPaymentRecord): CustomerPaymentDto {
   return {
     id: row.id,
     amount: toNumber(row.amount),
@@ -40,6 +47,10 @@ function mapPaymentRecord(row: CustomerPaymentRecord): CustomerPaymentDto {
     received_by_name: row.received_by_name ?? null,
     source: row.source,
     created_at: toIsoString(row.created_at),
+    cancelled_at: toIsoString(row.cancelled_at),
+    cancelled_by: row.cancelled_by ?? null,
+    cancelled_by_name: row.cancelled_by_name ?? null,
+    cancellation_reason: row.cancellation_reason ?? null,
   };
 }
 
@@ -68,20 +79,28 @@ export function createListCustomerPaymentsUseCase(repository: CustomerPaymentsRe
       }
 
       const totals = await repository.getCustomerFinancialTotals(customerId, client);
-      const currentBalance = Number((totals.totalCharges - totals.totalPaid).toFixed(2));
+      const currentBalance = customerBalance(totals);
 
-      const pageResult = await repository.listPayments(customerId, filters, orderDirection, {
-        limit: pagination.limit,
-        offset: pagination.offset,
-      }, client);
+      const pageResult = await repository.listPayments(
+        customerId,
+        filters,
+        orderDirection,
+        {
+          limit: pagination.limit,
+          offset: pagination.offset,
+        },
+        client
+      );
 
-      const totalPages = pagination.pageSize > 0 ? Math.max(1, Math.ceil(pageResult.filteredCount / pagination.pageSize)) : 1;
+      const totalPages =
+        pagination.pageSize > 0 ? Math.max(1, Math.ceil(pageResult.filteredCount / pagination.pageSize)) : 1;
 
       return {
         payments: pageResult.payments.map(mapPaymentRecord),
         summary: {
           total_debt: totals.totalCharges,
           total_paid: totals.totalPaid,
+          ...legacyBalanceFields(totals),
           current_balance: currentBalance,
           filtered_total_paid: pageResult.filteredTotal,
           filtered_count: pageResult.filteredCount,
@@ -103,7 +122,10 @@ export function createListCustomerPaymentsUseCase(repository: CustomerPaymentsRe
   };
 }
 
-export function createCustomerPaymentHistoryReportUseCase(repository: CustomerPaymentsRepository, company: CompanyInfo) {
+export function createCustomerPaymentHistoryReportUseCase(
+  repository: CustomerPaymentsRepository,
+  company: CompanyInfo
+) {
   return async (customerId: string, filters: PaymentListQueryDto): Promise<CustomerPaymentHistoryReportDto> => {
     const orderDirection = filters.sort ?? 'desc';
 
@@ -117,17 +139,31 @@ export function createCustomerPaymentHistoryReportUseCase(repository: CustomerPa
       }
 
       const totals = await repository.getCustomerFinancialTotals(customerId, client);
-      const currentBalance = Number((totals.totalCharges - totals.totalPaid).toFixed(2));
-      const pageResult = await repository.listPayments(customerId, filters, orderDirection, {
-        limit: PAYMENT_REPORT_ROW_LIMIT,
-        offset: 0,
-      }, client);
+      const currentBalance = customerBalance(totals);
+      const pageResult = await repository.listPayments(
+        customerId,
+        filters,
+        orderDirection,
+        {
+          limit: PAYMENT_REPORT_ROW_LIMIT,
+          offset: 0,
+        },
+        client
+      );
 
       if (pageResult.filteredCount > PAYMENT_REPORT_ROW_LIMIT) {
-        throw new HttpError(413, 'payment_report_limit_exceeded', { limit: PAYMENT_REPORT_ROW_LIMIT, count: pageResult.filteredCount });
+        throw new HttpError(413, 'payment_report_limit_exceeded', {
+          limit: PAYMENT_REPORT_ROW_LIMIT,
+          count: pageResult.filteredCount,
+        });
       }
       const payments = pageResult.payments.map(mapPaymentRecord);
-      if (!isCompletePaymentReport({ payments, summary: { filtered_count: pageResult.filteredCount, filtered_total_paid: pageResult.filteredTotal } })) {
+      if (
+        !isCompletePaymentReport({
+          payments,
+          summary: { filtered_count: pageResult.filteredCount, filtered_total_paid: pageResult.filteredTotal },
+        })
+      ) {
         throw new HttpError(422, 'payment_report_inconsistent');
       }
 
@@ -140,6 +176,7 @@ export function createCustomerPaymentHistoryReportUseCase(repository: CustomerPa
         summary: {
           total_debt: totals.totalCharges,
           total_paid: totals.totalPaid,
+          ...legacyBalanceFields(totals),
           current_balance: currentBalance,
           filtered_total_paid: pageResult.filteredTotal,
           filtered_count: pageResult.filteredCount,
@@ -174,8 +211,13 @@ export function createCustomerPaymentReceiptUseCase(repository: CustomerPayments
       const paidBefore = await repository.getPaidBefore(customerId, paymentRow.id, paymentDate, createdAt, client);
       const salesPaidBefore = await repository.getSalesPaidBefore(customerId, createdAt, client);
       const paymentAmount = toNumber(paymentRow.amount);
-      const previousBalance = Number((totals.totalCharges - salesPaidBefore - paidBefore).toFixed(2));
-      const newBalance = Math.max(0, Number((previousBalance - paymentAmount).toFixed(2)));
+      const previousBalance = Number(
+        (totals.totalCharges + (totals.legacyBalance?.adjustment ?? 0) - salesPaidBefore - paidBefore).toFixed(2)
+      );
+      const newBalance = paymentRow.cancelled_at
+        ? previousBalance
+        : Math.max(0, Number((previousBalance - paymentAmount).toFixed(2)));
+      const historicalBalanceUnknown = paymentRow.source === 'legacy' && Boolean(totals.legacyBalance);
 
       return {
         company,
@@ -187,9 +229,11 @@ export function createCustomerPaymentReceiptUseCase(repository: CustomerPayments
         balances: {
           total_debt: totals.totalCharges,
           total_paid: totals.totalPaid,
-          previous_balance: previousBalance,
+          ...legacyBalanceFields(totals),
+          previous_balance: historicalBalanceUnknown ? null : previousBalance,
           payment_amount: paymentAmount,
-          new_balance: newBalance,
+          new_balance: historicalBalanceUnknown ? null : newBalance,
+          ...(historicalBalanceUnknown ? { historical_balance_unavailable: true } : {}),
         },
         generated_at: new Date().toISOString(),
       };
@@ -198,13 +242,11 @@ export function createCustomerPaymentReceiptUseCase(repository: CustomerPayments
 }
 
 export function createRegisterCustomerPaymentUseCase(repository: CustomerPaymentsRepository) {
-  return async (
-    input: {
-      customerId: string;
-      payload: PaymentInputDto;
-      currentUser: CurrentUser;
-    }
-  ): Promise<RegisterCustomerPaymentResponseDto> => {
+  return async (input: {
+    customerId: string;
+    payload: PaymentInputDto;
+    currentUser: CurrentUser;
+  }): Promise<RegisterCustomerPaymentResponseDto> => {
     return withTransaction(async (client) => {
       const exists = await repository.customerExists(input.customerId, 'update', client);
       if (!exists) {
@@ -212,7 +254,7 @@ export function createRegisterCustomerPaymentUseCase(repository: CustomerPayment
       }
 
       const totals = await repository.getCustomerFinancialTotals(input.customerId, client);
-      const openBalance = Number((totals.totalCharges - totals.totalPaid).toFixed(2));
+      const openBalance = customerBalance(totals);
       if (openBalance <= 0) {
         throw badRequest('customer has no outstanding balance');
       }
@@ -256,6 +298,7 @@ export function createRegisterCustomerPaymentUseCase(repository: CustomerPayment
         summary: {
           total_debt: totals.totalCharges,
           total_paid: totalPaid,
+          ...legacyBalanceFields(totals),
           previous_balance: openBalance,
           new_balance: newBalance,
         },

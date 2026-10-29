@@ -1,6 +1,8 @@
 import { setTimeout } from 'node:timers/promises';
 import type { PoolClient } from 'pg';
 import { acquireDatabaseClient } from '../../db.js';
+import { initializeRecoveryControl, RECOVERY_LOCK_KEY } from '../recovery-control.js';
+import { HttpError } from '../../errors.js';
 
 export const LEGACY_IMPORT_LOCK_KEY = 20_261_022;
 
@@ -8,9 +10,11 @@ export const LEGACY_IMPORT_LOCK_KEY = 20_261_022;
 export async function withLegacyImportLock<T>(
   work: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
+  await initializeRecoveryControl();
   const client = await acquireDatabaseClient();
   const controller = new AbortController();
   let locked = false;
+  let recoveryLocked = false;
   let discard = false;
   let workFailed = false;
   let releaseError: unknown;
@@ -21,6 +25,11 @@ export async function withLegacyImportLock<T>(
   client.on('error', lost);
   client.on('end', lost);
   try {
+    const recovery = await client.query<{ locked: boolean }>('select pg_try_advisory_lock_shared($1) as locked', [RECOVERY_LOCK_KEY]);
+    recoveryLocked = recovery.rows[0]?.locked === true;
+    if (!recoveryLocked) throw new HttpError(503, 'database_restore_in_progress');
+    const state = await client.query('select operation_id from pos_recovery.state where singleton');
+    if (state.rows[0]?.operation_id) throw new HttpError(503, 'database_restore_in_progress');
     // Contention waits here rather than consuming a BullMQ retry or relying on
     // concurrency:1, which only serializes one worker instance.
     while (!locked) {
@@ -49,6 +58,10 @@ export async function withLegacyImportLock<T>(
           discard = true;
           throw new Error('legacy_import_lock_not_released');
         }
+      }
+      if (recoveryLocked && !discard) {
+        const recovery = await client.query<{ unlocked: boolean }>('select pg_advisory_unlock_shared($1) as unlocked', [RECOVERY_LOCK_KEY]);
+        if (!recovery.rows[0]?.unlocked) throw new Error('legacy_recovery_lock_not_released');
       }
     } catch (error) {
       discard = true;

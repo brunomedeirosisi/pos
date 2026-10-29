@@ -31,6 +31,7 @@ const primaryItems: SidebarItem[] = [
   { to: '/payments', labelKey: 'nav.payments', icon: 'payments', permissions: 'catalog:read' },
   { to: '/pos', labelKey: 'nav.pos', icon: 'pos', permissions: 'pos:checkout' },
   { to: '/sales', labelKey: 'nav.sales', icon: 'sales', permissions: 'sales:read' },
+  { to: '/payments/history', labelKey: 'nav.paymentHistory', icon: 'payments', permissions: 'catalog:read' },
 ];
 
 const catalogItems: SidebarItem[] = [
@@ -92,6 +93,8 @@ const pageTitleRules: Array<{ pattern: RegExp; labelKey: string }> = [
   { pattern: /^\/admin\/system\/import/, labelKey: 'nav.dataImport' },
   { pattern: /^\/admin/, labelKey: 'nav.administration' },
   { pattern: /^\/sales/, labelKey: 'nav.sales' },
+  { pattern: /^\/payments\/history/, labelKey: 'nav.paymentHistory' },
+  { pattern: /^\/payments\/[^/]+/, labelKey: 'paymentHistory.viewPayment' },
   { pattern: /^\/payments/, labelKey: 'nav.payments' },
   { pattern: /^\/pos/, labelKey: 'nav.pos' },
   { pattern: /^\/$/, labelKey: 'nav.dashboard' },
@@ -148,7 +151,7 @@ export function AppLayout(): JSX.Element {
     <NavLink
       key={item.to}
       to={item.to}
-      end={item.to === '/'}
+      end={item.to === '/' || item.to === '/payments'}
       className={({ isActive }) => `kt-sidebar__link${isActive ? ' is-active' : ''}`}
     >
       <NavIcon name={item.icon} />

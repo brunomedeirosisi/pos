@@ -1,7 +1,8 @@
 import type { PoolClient } from 'pg';
 import { query } from '../../../db.js';
 import type { PaymentListQueryDto } from '../contracts/customer-payments-contracts.js';
-import { buildPaymentFilterClauses } from '../domain/customer-payments-domain.js';
+import { buildPaymentFilterClauses, toDateOnly } from '../domain/customer-payments-domain.js';
+import type { CustomerFinancialTotals, LegacyBalanceReconciliation } from '../domain/customer-balance.js';
 
 export type CustomerIdentityRecord = {
   id: string;
@@ -26,6 +27,10 @@ export type CustomerPaymentRecord = {
   received_by_name: string | null;
   source: string;
   created_at: string | Date | null;
+  cancelled_at?: string | Date | null;
+  cancelled_by?: string | null;
+  cancelled_by_name?: string | null;
+  cancellation_reason?: string | null;
 };
 
 export type CustomerPaymentInsertRecord = {
@@ -47,8 +52,12 @@ export type PaginatedCustomerPaymentsResult = {
 
 export interface CustomerPaymentsRepository {
   customerExists(id: string, lockMode?: 'share' | 'update', client?: PoolClient): Promise<boolean>;
-  getCustomerById(id: string, lockMode?: 'share' | 'update', client?: PoolClient): Promise<CustomerIdentityRecord | null>;
-  getCustomerFinancialTotals(id: string, client?: PoolClient): Promise<{ totalCharges: number; totalPaid: number }>;
+  getCustomerById(
+    id: string,
+    lockMode?: 'share' | 'update',
+    client?: PoolClient
+  ): Promise<CustomerIdentityRecord | null>;
+  getCustomerFinancialTotals(id: string, client?: PoolClient): Promise<CustomerFinancialTotals>;
   listPayments(
     id: string,
     filters: PaymentListQueryDto,
@@ -69,7 +78,13 @@ export interface CustomerPaymentsRepository {
     client?: PoolClient
   ): Promise<CustomerPaymentInsertRecord>;
   getPaymentById(customerId: string, paymentId: string, client?: PoolClient): Promise<CustomerPaymentRecord | null>;
-  getPaidBefore(customerId: string, paymentId: string, paymentDate: Date, createdAt: Date, client?: PoolClient): Promise<number>;
+  getPaidBefore(
+    customerId: string,
+    paymentId: string,
+    paymentDate: Date,
+    createdAt: Date,
+    client?: PoolClient
+  ): Promise<number>;
   getSalesPaidBefore(customerId: string, createdAt: Date, client?: PoolClient): Promise<number>;
 }
 
@@ -80,7 +95,11 @@ export class PgCustomerPaymentsRepository implements CustomerPaymentsRepository 
     return (rowCount ?? 0) > 0;
   }
 
-  async getCustomerById(id: string, lockMode?: 'share' | 'update', client?: PoolClient): Promise<CustomerIdentityRecord | null> {
+  async getCustomerById(
+    id: string,
+    lockMode?: 'share' | 'update',
+    client?: PoolClient
+  ): Promise<CustomerIdentityRecord | null> {
     const lockClause = lockMode === 'update' ? 'for update' : lockMode === 'share' ? 'for share' : '';
     const { rows } = await query<CustomerIdentityRecord>(
       `select id, legacy_code, name, cpf, address, city, uf, cep, phone
@@ -94,15 +113,14 @@ export class PgCustomerPaymentsRepository implements CustomerPaymentsRepository 
     return rows[0] ?? null;
   }
 
-  async getCustomerFinancialTotals(id: string, client?: PoolClient): Promise<{ totalCharges: number; totalPaid: number }> {
-    const { rows } = await query<{ total_charges: string | null; total_paid: string | null }>(
-      `select
-         (select coalesce(sum(s.total), 0) from sale s where s.customer_id = $1 and s.status = 'completed') as total_charges,
-         (
-           (select coalesce(sum(s.amount_paid), 0) from sale s where s.customer_id = $1 and s.status = 'completed')
-           +
-           (select coalesce(sum(cp.amount), 0) from customer_payment cp where cp.customer_id = $1)
-         ) as total_paid`,
+  async getCustomerFinancialTotals(id: string, client?: PoolClient): Promise<CustomerFinancialTotals> {
+    const { rows } = await query<{
+      total_charges: string;
+      total_paid: string;
+      current_balance: string;
+      legacy_balance: LegacyBalanceReconciliation | null;
+    }>(
+      `select total_charges,total_paid,current_balance,legacy_balance from customer_financial_totals where customer_id=$1`,
       [id],
       client
     );
@@ -110,6 +128,8 @@ export class PgCustomerPaymentsRepository implements CustomerPaymentsRepository 
     return {
       totalCharges: Number(rows[0]?.total_charges ?? 0),
       totalPaid: Number(rows[0]?.total_paid ?? 0),
+      currentBalance: Number(rows[0]?.current_balance ?? 0),
+      ...(rows[0]?.legacy_balance ? { legacyBalance: rows[0].legacy_balance } : {}),
     };
   }
 
@@ -127,23 +147,24 @@ export class PgCustomerPaymentsRepository implements CustomerPaymentsRepository 
     const offsetParam = params.length;
 
     const { rows } = await query<
-      (CustomerPaymentRecord & {
-        filtered_total: string | number | null;
-        filtered_count: string | number | null;
-      }) | {
-        id: null;
-        amount: null;
-        payment_date: null;
-        method: null;
-        reference: null;
-        notes: null;
-        received_by: null;
-        received_by_name: null;
-        source: null;
-        created_at: null;
-        filtered_total: string | number | null;
-        filtered_count: string | number | null;
-      }
+      | (CustomerPaymentRecord & {
+          filtered_total: string | number | null;
+          filtered_count: string | number | null;
+        })
+      | {
+          id: null;
+          amount: null;
+          payment_date: null;
+          method: null;
+          reference: null;
+          notes: null;
+          received_by: null;
+          received_by_name: null;
+          source: null;
+          created_at: null;
+          filtered_total: string | number | null;
+          filtered_count: string | number | null;
+        }
     >(
       `with filtered as (
          select
@@ -235,22 +256,18 @@ export class PgCustomerPaymentsRepository implements CustomerPaymentsRepository 
        )
        values ($1, $2, $3, $4, $5, $6, $7, 'manual')
        returning id, amount, payment_date, method, reference, notes, received_by, created_at`,
-      [
-        input.customerId,
-        input.amount,
-        input.paymentDate,
-        input.method,
-        input.reference,
-        input.notes,
-        input.receivedBy,
-      ],
+      [input.customerId, input.amount, toDateOnly(input.paymentDate), input.method, input.reference, input.notes, input.receivedBy],
       client
     );
 
     return rows[0];
   }
 
-  async getPaymentById(customerId: string, paymentId: string, client?: PoolClient): Promise<CustomerPaymentRecord | null> {
+  async getPaymentById(
+    customerId: string,
+    paymentId: string,
+    client?: PoolClient
+  ): Promise<CustomerPaymentRecord | null> {
     const { rows } = await query<CustomerPaymentRecord>(
       `select
          p.id,
@@ -262,9 +279,14 @@ export class PgCustomerPaymentsRepository implements CustomerPaymentsRepository 
          p.received_by,
          u.full_name as received_by_name,
          p.source,
-         p.created_at
+         p.created_at,
+         p.cancelled_at,
+         p.cancelled_by,
+         actor.full_name as cancelled_by_name,
+         p.cancellation_reason
        from customer_payment p
        left join app_user u on u.id = p.received_by
+       left join app_user actor on actor.id = p.cancelled_by
        where p.id = $1 and p.customer_id = $2`,
       [paymentId, customerId],
       client
@@ -284,12 +306,13 @@ export class PgCustomerPaymentsRepository implements CustomerPaymentsRepository 
       `select coalesce(sum(amount), 0) as total
        from customer_payment cp
        where cp.customer_id = $1
+         and cp.cancelled_at is null
          and (
            cp.payment_date < $2
            or (cp.payment_date = $2 and cp.created_at < $3)
            or (cp.payment_date = $2 and cp.created_at = $3 and cp.id < $4)
          )`,
-      [customerId, paymentDate, createdAt, paymentId],
+      [customerId, toDateOnly(paymentDate), createdAt, paymentId],
       client
     );
 

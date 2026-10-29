@@ -61,7 +61,7 @@ function Assert-PosBundle([string]$Directory) {
   $base = [IO.Path]::GetFullPath($Directory).TrimEnd('\') + '\'
   $manifest = Read-PosJson (Join-Path $Directory 'manifest.json')
   if ($manifest.schemaVersion -ne 1 -or $manifest.version -notmatch '^[0-9A-Za-z][0-9A-Za-z.-]{0,79}$') { throw 'Manifesto de pacote invalido.' }
-  if($manifest.mode -notin @('Principal','Terminal') -or @($manifest.files).Count -lt 1){throw 'Manifesto sem modo/arquivos validos.'}
+  if($manifest.mode -notin @('Principal','Terminal','Cloud') -or @($manifest.files).Count -lt 1){throw 'Manifesto sem modo/arquivos validos.'}
   $seen=New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
   foreach ($entry in $manifest.files) {
     if($entry.sha256 -notmatch '^[a-f0-9]{64}$' -or -not $seen.Add($entry.path)){throw 'Hash ou entrada duplicada no manifesto.'}
@@ -166,8 +166,8 @@ function New-PosShortcut([string]$Path, [string]$Target, [string]$Arguments = ''
   $shell = New-Object -ComObject WScript.Shell; $shortcut = $shell.CreateShortcut($Path)
   $shortcut.TargetPath=$Target; $shortcut.Arguments=$Arguments; $shortcut.WorkingDirectory=[IO.Path]::GetDirectoryName($Target); $shortcut.WindowStyle=7; $shortcut.Save()
 }
-function Write-PosUrlShortcut([string]$Url) {
-  $shortcut=Join-Path ([Environment]::GetFolderPath('Desktop')) 'POS Loja.url'
+function Write-PosUrlShortcut([string]$Url,[ValidateSet('POS Loja.url','POS Nuvem.url')][string]$Name='POS Loja.url') {
+  $shortcut=Join-Path ([Environment]::GetFolderPath('Desktop')) $Name
   if(Test-Path -LiteralPath $shortcut){
     $line=Get-Content -LiteralPath $shortcut|Where-Object {$_ -like 'URL=*'}|Select-Object -First 1
     if(-not $line -or ([Uri]$line.Substring(4)).GetLeftPart([UriPartial]::Authority) -ne ([Uri]$Url).GetLeftPart([UriPartial]::Authority)){throw 'Ja existe um atalho POS Loja para outro endereco. Preserve ou renomeie esse atalho antes.'}

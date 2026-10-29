@@ -7,6 +7,8 @@ import { preflightBackup } from '../services/backup-preflight.js';
 import archiver from 'archiver';
 import { archivePolicy, extractSafeZip } from './safe-archive.js';
 import { getEnv } from '../config/env.js';
+import { HttpError } from '../errors.js';
+import { assertBackupNotPinned, recoveryQuery } from '../services/recovery-control.js';
 
 type DbConfig = {
   host: string;
@@ -293,6 +295,7 @@ export async function createBackupArchive(
         '--format=plain',
         '--no-owner',
         '--no-privileges',
+        '--exclude-schema=pos_recovery',
         '--file',
         sqlPath,
         db.database,
@@ -383,7 +386,7 @@ export async function validateBackupArchive({
 
   const checksum = await computeChecksum(fullPath);
   if (expectedChecksum && checksum !== expectedChecksum) {
-    throw new Error('backup checksum mismatch');
+    throw new HttpError(422, 'backup checksum mismatch');
   }
 
   const extracted = await extractBackupArchive(fullPath);
@@ -400,9 +403,11 @@ export async function validateBackupArchive({
 export async function simulateRestoreArchive({
   filename,
   timeoutMs = env.BACKUP_SIMULATION_TIMEOUT_MS,
+  signal,
 }: {
   filename: string;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }): Promise<{
   users: number;
   customers: number;
@@ -443,7 +448,7 @@ export async function simulateRestoreArchive({
         `CREATE DATABASE "${simulationDb}"`,
       ],
       { PGPASSWORD: db.password },
-      { timeoutMs },
+      { timeoutMs, signal },
     );
 
     await runCommand(
@@ -466,7 +471,7 @@ export async function simulateRestoreArchive({
         extracted.sqlPath,
       ],
       { PGPASSWORD: db.password },
-      { timeoutMs },
+      { timeoutMs, signal },
     );
 
     await runCommand(
@@ -488,7 +493,7 @@ export async function simulateRestoreArchive({
         "DO $$ BEGIN IF to_regclass('public.app_user') IS NULL OR to_regclass('public.app_role') IS NULL THEN RAISE EXCEPTION 'missing required tables'; END IF; END $$;",
       ],
       { PGPASSWORD: db.password },
-      { timeoutMs },
+      { timeoutMs, signal },
     );
     const inspected = await runCommand(
       'psql',
@@ -511,7 +516,7 @@ export async function simulateRestoreArchive({
         "select json_build_object('users', (select count(*) from app_user), 'customers', (select count(*) from customer), 'products', (select count(*) from product), 'sales', (select count(*) from sale), 'saleItems', (select count(*) from sale_item), 'stockMovements', (select count(*) from stock_movement), 'foreignKeys', (select count(*) from pg_constraint where contype = 'f' and convalidated))::text",
       ],
       { PGPASSWORD: db.password },
-      { timeoutMs },
+      { timeoutMs, signal },
     );
     return JSON.parse(inspected.stdout.trim());
   } finally {
@@ -543,11 +548,13 @@ export async function simulateRestoreArchive({
 export type RestoreOptions = {
   filename: string;
   timeoutMs?: number;
+  signal?: AbortSignal;
 };
 
 export async function restoreBackupArchive({
   filename,
   timeoutMs = env.BACKUP_OPERATION_TIMEOUT_MS,
+  signal,
 }: RestoreOptions): Promise<void> {
   const dir = await ensureBackupDirectory();
   const safeName = sanitizeBackupFilename(filename);
@@ -574,55 +581,16 @@ export async function restoreBackupArchive({
         db.database,
         '--set',
         'ON_ERROR_STOP=1',
+        '--single-transaction',
         '--command',
         'DROP SCHEMA public CASCADE;',
-      ],
-      { PGPASSWORD: db.password },
-      { timeoutMs },
-    );
-
-    await runCommand(
-      'psql',
-      [
-        '--no-psqlrc',
-        '--no-password',
-        '--host',
-        db.host,
-        '--port',
-        String(db.port),
-        '--username',
-        db.user,
-        '--dbname',
-        db.database,
-        '--set',
-        'ON_ERROR_STOP=1',
         '--command',
         'CREATE SCHEMA public;',
-      ],
-      { PGPASSWORD: db.password },
-      { timeoutMs },
-    );
-
-    await runCommand(
-      'psql',
-      [
-        '--no-psqlrc',
-        '--no-password',
-        '--host',
-        db.host,
-        '--port',
-        String(db.port),
-        '--username',
-        db.user,
-        '--dbname',
-        db.database,
-        '--set',
-        'ON_ERROR_STOP=1',
         '--file',
         extracted.sqlPath,
       ],
       { PGPASSWORD: db.password },
-      { timeoutMs },
+      { timeoutMs, signal },
     );
   } finally {
     await fsp.rm(extracted.tempDir, { recursive: true, force: true }).catch(() => {});
@@ -630,9 +598,11 @@ export async function restoreBackupArchive({
 }
 
 export async function deleteBackupFile(filename: string): Promise<void> {
+  await assertBackupNotPinned(filename);
   const dir = await ensureBackupDirectory();
   const safeName = sanitizeBackupFilename(filename);
   const fullPath = path.join(dir, safeName);
   await fsp.rm(fullPath, { force: true });
   await fsp.rm(fullPath + '.manifest.json', { force: true });
+  await recoveryQuery('update pos_recovery.archive set deleted=true where filename=$1', [safeName]);
 }

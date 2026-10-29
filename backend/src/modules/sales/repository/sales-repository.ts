@@ -93,12 +93,12 @@ export class PgSalesRepository implements SalesRepository {
     const whereParts: string[] = [];
 
     if (filters.from) {
-      params.push(filters.from);
+      params.push(filters.from.toISOString().slice(0, 10));
       whereParts.push(`s.emission_date >= $${params.length}`);
     }
 
     if (filters.to) {
-      params.push(filters.to);
+      params.push(filters.to.toISOString().slice(0, 10));
       whereParts.push(`s.emission_date <= $${params.length}`);
     }
 
@@ -442,10 +442,10 @@ export class PgSalesRepository implements SalesRepository {
                  0
                ) +
                coalesce(
-                 (select sum(cp.amount) from customer_payment cp where cp.customer_id = $1),
+                 (select sum(cp.amount) from customer_payment cp where cp.customer_id = $1 and cp.cancelled_at is null),
                  0
                )
-             ) as current_balance`,
+             ) + coalesce((select adjustment from customer_legacy_balance where customer_id=$1),0) as current_balance`,
           [validation.customer_id],
           client
         );
@@ -488,7 +488,7 @@ export class PgSalesRepository implements SalesRepository {
       await insertSaleStockMovements(
         client,
         saleRecord.id,
-        (saleRecord.cancelled_at ?? new Date().toISOString()).slice(0, 10),
+        new Date(saleRecord.cancelled_at ?? Date.now()).toISOString().slice(0, 10),
         'entrada',
         saleRecord.order_number ?? saleRecord.id,
         itemRows.map((item) => ({

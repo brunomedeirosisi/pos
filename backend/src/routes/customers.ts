@@ -8,6 +8,7 @@ import { customerPaymentsRouter } from '../modules/customer-payments/http/custom
 import { parseDecimalInput } from '../modules/customer-payments/domain/customer-payments-domain.js';
 import { paginationQuerySchema, resolvePagination } from '../utils/pagination.js';
 import { generateNextNumericCode } from '../utils/generated-code.js';
+import type { LegacyBalanceReconciliation } from '../modules/customer-payments/domain/customer-balance.js';
 
 export const router = Router();
 
@@ -60,6 +61,8 @@ type CustomerDetailsRow = {
   notes: string | null;
   total_charges: string | null;
   total_payments: string | null;
+  current_balance: string;
+  legacy_balance: LegacyBalanceReconciliation | null;
   last_payment_date: string | null;
 };
 
@@ -221,26 +224,13 @@ router.get(
          c.status,
          c.credit_limit,
          c.notes,
-         coalesce(charges.total_charges, 0) as total_charges,
-         coalesce(payments.total_payments, 0) as total_payments,
-         payments.last_payment_date
+         financial.total_charges,
+         financial.total_paid as total_payments,
+         financial.current_balance,
+         financial.legacy_balance,
+         financial.last_payment_date
        from customer c
-       left join lateral (
-         select coalesce(sum(s.total), 0) as total_charges
-         from sale s
-         where s.customer_id = c.id and s.status = 'completed'
-       ) as charges on true
-       left join lateral (
-         select
-           (
-             coalesce((select sum(s.amount_paid) from sale s where s.customer_id = c.id and s.status = 'completed'), 0)
-             +
-             coalesce(sum(p.amount), 0)
-           ) as total_payments,
-           max(p.payment_date) as last_payment_date
-         from customer_payment p
-         where p.customer_id = c.id
-       ) as payments on true
+       join customer_financial_totals financial on financial.customer_id=c.id
        where c.id = $1`,
       [req.params.id]
     );
@@ -250,10 +240,10 @@ router.get(
       throw notFound('customer not found');
     }
 
-    const { total_charges, total_payments, last_payment_date, ...base } = customer;
+    const { total_charges, total_payments, current_balance, legacy_balance, last_payment_date, ...base } = customer;
     const charges = toNumber(total_charges);
     const payments = toNumber(total_payments);
-    const balance = Number((charges - payments).toFixed(2));
+    const balance = Number(current_balance);
 
     res.json({
       ...base,
@@ -261,6 +251,7 @@ router.get(
         total_charges: charges,
         total_payments: payments,
         current_balance: balance,
+        ...(legacy_balance ? { legacy_balance } : {}),
         last_payment_date,
       },
     });
@@ -297,7 +288,8 @@ router.get(
          s.emission_date,
          s.order_number,
          s.total,
-         greatest(coalesce(s.total, 0) - coalesce(s.amount_paid, 0), 0) as pending_amount,
+         case when s.source in ('VENDAS','PEDIDOS') then null
+           else greatest(coalesce(s.total, 0) - coalesce(s.amount_paid, 0), 0) end as pending_amount,
          s.status,
          s.seller_id,
          seller_ref.name as seller_name,
@@ -332,7 +324,7 @@ router.get(
       emission_date: toDateOnly(row.emission_date),
       order_number: row.order_number ?? null,
       total: toNumber(row.total),
-      pending_amount: toNumber(row.pending_amount),
+      pending_amount: row.pending_amount == null ? null : toNumber(row.pending_amount),
       status: row.status as 'draft' | 'completed' | 'cancelled',
       seller_id: row.seller_id ?? null,
       seller_name: row.seller_name ?? null,

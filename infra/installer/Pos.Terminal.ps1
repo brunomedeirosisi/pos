@@ -1,3 +1,4 @@
+. (Join-Path $PSScriptRoot 'Pos.Cloud.ps1')
 function Get-PosBrowserUrl([string]$ServerUrl,[string]$StoreId,[string]$PrinterId='principal') {
   return ($ServerUrl.TrimEnd('/')+'/?pos_store='+[Uri]::EscapeDataString($StoreId)+'&pos_printer='+[Uri]::EscapeDataString($PrinterId))
 }
@@ -9,7 +10,8 @@ function Get-PosTerminalSettings([string]$Root) {
 function Assert-PosTerminalPrinter([string]$Name) {
   if([string]::IsNullOrWhiteSpace($Name) -or $Name.Length -gt 200 -or -not (Get-Printer | Where-Object Name -eq $Name)){throw 'Instale/teste o driver e informe a fila exata da impressora neste Terminal.'}
 }
-function Invoke-PosTerminalApi([string]$Url,[string]$Route,$Body=$null,$Headers=@{}) {
+function Invoke-PosTerminalApi([string]$Url,[string]$Route,$Body=$null,$Headers=@{},[string]$ConnectionMode='lan') {
+  if($ConnectionMode -eq 'cloud'){return Invoke-PosCloudJson $Url ('/api/v1/print-agent'+$Route) $Body $Headers}
   $previousProtocol=[Net.ServicePointManager]::SecurityProtocol
   try {
     [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12
@@ -18,14 +20,23 @@ function Invoke-PosTerminalApi([string]$Url,[string]$Route,$Body=$null,$Headers=
     return Invoke-RestMethod @request
   } finally {[Net.ServicePointManager]::SecurityProtocol=$previousProtocol}
 }
-function Install-PosTerminalCore([string]$Bundle,[bool]$WithPrinter,[string]$PrinterName,[string]$EnrollmentCode,[string]$Root) {
+function Install-PosTerminalCore([string]$Bundle,[bool]$WithPrinter,[string]$PrinterName,[string]$EnrollmentCode,[string]$Root,[string]$ConnectionMode='lan',[string]$ServerUrl='',[string]$StoreId='') {
   $manifest=Assert-PosBundle $Bundle
-  if($manifest.mode -ne 'Terminal'){throw 'Use o pacote Terminal-POS gerado pelo Principal atualizado.'}
-  $pair=Read-PosJson (Join-Path $Bundle 'pairing.json')
-  $guid=[Guid]::Empty
-  if($pair.schemaVersion -ne 1 -or -not [Guid]::TryParse($pair.storeId,[ref]$guid)){throw 'Pareamento invalido.'}
-  $uri=[Uri]$pair.serverUrl;Assert-PosPrivateIp $uri.Host
-  if($uri.Scheme -ne 'https' -or $uri.Port -ne 443 -or $uri.UserInfo -or $uri.AbsolutePath -ne '/' -or $uri.Query -or $uri.Fragment){throw 'Endereco de pareamento invalido.'}
+  $cloud=$ConnectionMode -eq 'cloud'
+  if($cloud){
+    $origin=Assert-PosCloudOrigin $ServerUrl
+    $guid=[Guid]::Empty
+    if(-not [Guid]::TryParse($StoreId,[ref]$guid) -or $guid -eq [Guid]::Empty){throw 'Informe o ID UUID da loja publicado pelo responsavel pelo servidor.'}
+    $pair=[pscustomobject]@{schemaVersion=1;storeId=$guid.ToString();serverUrl=$origin}
+    if($WithPrinter){Assert-PosLocalPrincipalStopped}
+  }else{
+    if($manifest.mode -ne 'Terminal'){throw 'Use o pacote Terminal-POS gerado pelo Principal atualizado.'}
+    $pair=Read-PosJson (Join-Path $Bundle 'pairing.json')
+    $guid=[Guid]::Empty
+    if($pair.schemaVersion -ne 1 -or -not [Guid]::TryParse($pair.storeId,[ref]$guid)){throw 'Pareamento invalido.'}
+    $uri=[Uri]$pair.serverUrl;Assert-PosPrivateIp $uri.Host
+    if($uri.Scheme -ne 'https' -or $uri.Port -ne 443 -or $uri.UserInfo -or $uri.AbsolutePath -ne '/' -or $uri.Query -or $uri.Fragment){throw 'Endereco de pareamento invalido.'}
+  }
   $stateFile=Join-Path $Root 'terminal.json'
   $previous=$null
   if(Test-Path -LiteralPath $stateFile){
@@ -39,9 +50,10 @@ function Install-PosTerminalCore([string]$Bundle,[bool]$WithPrinter,[string]$Pri
     if($EnrollmentCode -and $EnrollmentCode -notmatch '^[a-f0-9]{48}$'){throw 'Informe o codigo de 48 caracteres gerado em Administracao > Impressoras.'}
     if(-not $EnrollmentCode -and -not (Test-Path -LiteralPath (Join-Path $Root 'terminal-agent.bin'))){throw 'Gere um codigo em Administracao > Impressoras antes de parear este Terminal.'}
   }
-  Write-PosStep 'Conferindo certificado e identidade da loja...'
-  $thumbprint=Import-PosCertificate (Join-Path $Bundle 'root.crt') $pair.certificateSha256
-  Test-PosStore $pair.serverUrl $pair.storeId
+  Write-PosStep 'Conferindo HTTPS e identidade da loja...'
+  $thumbprint=''
+  if($cloud){Test-PosCloudStore $pair.serverUrl $pair.storeId $WithPrinter}
+  else{$thumbprint=Import-PosCertificate (Join-Path $Bundle 'root.crt') $pair.certificateSha256;Test-PosStore $pair.serverUrl $pair.storeId}
   if($null -ne $previous -and ($previous.PSObject.Properties.Name -contains 'withPrinter') -and $previous.withPrinter){
     $stopScript=Join-Path (Join-Path (Join-Path $Root 'versions') $previous.version) 'Parar-Terminal.ps1'
     if(Test-Path -LiteralPath $stopScript){
@@ -51,7 +63,8 @@ function Install-PosTerminalCore([string]$Bundle,[bool]$WithPrinter,[string]$Pri
       try{$probe=New-Object IO.FileStream((Join-Path $Root 'supervisor.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None);$probe.Dispose()}catch{throw 'Supervisor ativo sem script de parada. Preserve o estado e execute o diagnostico.'}
     }
   }
-  $state=@{schemaVersion=2;ownerSid=(Get-PosOwner);storeId=$pair.storeId;serverUrl=$pair.serverUrl;certificateThumbprint=$thumbprint;withPrinter=$WithPrinter;version=$manifest.version;status='installing';printerId='principal';printerName=$PrinterName}
+  $state=@{schemaVersion=3;connectionMode=$ConnectionMode;ownerSid=(Get-PosOwner);storeId=$pair.storeId;serverUrl=$pair.serverUrl;certificateThumbprint=$thumbprint;withPrinter=$WithPrinter;version=$manifest.version;status='installing';printerId='principal';printerName=$PrinterName}
+  if($cloud -and -not $WithPrinter){$state.printerId='choose'}
   Write-PosJson $stateFile $state
   if($WithPrinter){
     $credentialPath=Join-Path $Root 'terminal-agent.bin'
@@ -67,7 +80,7 @@ function Install-PosTerminalCore([string]$Bundle,[bool]$WithPrinter,[string]$Pri
     if($null -eq $credential){throw 'Gere um codigo em Administracao > Impressoras no Principal e informe-o neste instalador.'}
     if($credential.PSObject.Properties.Name -contains 'code'){
       Write-PosStep 'Pareando uma credencial exclusiva para a impressora deste Terminal...'
-      $result=Invoke-PosTerminalApi $pair.serverUrl '/enroll' @{code=$credential.code;token=$credential.token}
+      $result=Invoke-PosTerminalApi $pair.serverUrl '/enroll' @{code=$credential.code;token=$credential.token} @{} $ConnectionMode
       $printerGuid=[Guid]::Empty
       if($result.store_id -ne $pair.storeId -or -not [Guid]::TryParse($result.printer_id,[ref]$printerGuid)){throw 'Resposta de pareamento de outra loja ou destino invalido.'}
       Save-PosSecret $credentialPath @{token=$credential.token;printerId=$result.printer_id;displayName=$result.display_name}
@@ -77,11 +90,14 @@ function Install-PosTerminalCore([string]$Bundle,[bool]$WithPrinter,[string]$Pri
     $release=Join-Path (Join-Path $Root 'versions') $manifest.version
     $null=New-Item -ItemType Directory -Path $release -Force
     if([IO.Path]::GetFullPath($Bundle).TrimEnd([char]92) -ne [IO.Path]::GetFullPath($release).TrimEnd([char]92)){
-      Get-ChildItem -LiteralPath $Bundle | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination $release -Recurse -Force}
+      if($cloud -and $manifest.mode -ne 'Cloud'){Copy-PosCloudClientRelease $Bundle $release $manifest}
+      else{Get-ChildItem -LiteralPath $Bundle | ForEach-Object {Copy-Item -LiteralPath $_.FullName -Destination $release -Recurse -Force}}
     }
     $null=Assert-PosBundle $release
-    $pki=Join-Path $Root 'pki';$null=New-Item -ItemType Directory -Path $pki -Force
-    Copy-Item -LiteralPath (Join-Path $Bundle 'root.crt') -Destination (Join-Path $pki 'root.crt') -Force
+    if(-not $cloud){
+      $pki=Join-Path $Root 'pki';$null=New-Item -ItemType Directory -Path $pki -Force
+      Copy-Item -LiteralPath (Join-Path $Bundle 'root.crt') -Destination (Join-Path $pki 'root.crt') -Force
+    }
     $journal=Join-Path (Join-Path $Root 'print-journal') $state.printerId
     Write-PosJson (Join-Path $Root 'agent.json') @{serverUrl=$pair.serverUrl;printerId=$state.printerId;printerName=$PrinterName;journalDirectory=$journal;printTimeoutMs=15000;stopFile=(Join-Path $Root 'stop.request')}
     $state.status='ready';Write-PosJson $stateFile $state
@@ -89,12 +105,14 @@ function Install-PosTerminalCore([string]$Bundle,[bool]$WithPrinter,[string]$Pri
     New-PosShortcut (Join-Path ([Environment]::GetFolderPath('Startup')) 'POS Terminal Impressora.lnk') (Get-PosPowerShell) (($startArgs|ForEach-Object{ConvertTo-PosArgument $_}) -join ' ')
     Start-Process -FilePath (Get-PosPowerShell) -ArgumentList ((($startArgs+@('-Resume'))|ForEach-Object{ConvertTo-PosArgument $_}) -join ' ') -WindowStyle Hidden
   }else{$state.status='ready';Write-PosJson $stateFile $state}
-  Write-PosUrlShortcut (Get-PosBrowserUrl $pair.serverUrl $pair.storeId $state.printerId)
-  Write-PosStep 'Terminal pronto. Abra o atalho POS Loja para usar o destino configurado. Nao e necessario Docker neste caixa.'
+  $browserUrl=Get-PosBrowserUrl $pair.serverUrl $pair.storeId $state.printerId
+  if($cloud){Write-PosUrlShortcut $browserUrl -Name 'POS Nuvem.url';Write-PosStep 'Cliente Nuvem pronto. Abra o atalho POS Nuvem e confira o destino da impressao.'}
+  else{Write-PosUrlShortcut $browserUrl;Write-PosStep 'Terminal pronto. Abra o atalho POS Loja para usar o destino configurado. Nao e necessario Docker neste caixa.'}
   return $state
 }
-function Install-PosTerminal([string]$Bundle,[switch]$WithPrinter,[string]$PrinterName='',[string]$EnrollmentCode='') {
+function Install-PosTerminal([string]$Bundle,[switch]$WithPrinter,[string]$PrinterName='',[string]$EnrollmentCode='',[ValidateSet('lan','cloud')][string]$ConnectionMode='lan',[string]$ServerUrl='',[string]$StoreId='') {
+  if($ConnectionMode -eq 'cloud'){$ServerUrl=Assert-PosCloudOrigin $ServerUrl}
   $root=Get-PosTerminalRoot;Protect-PosFolder $root
   try{$lock=New-Object IO.FileStream((Join-Path $root 'installer.lock'),[IO.FileMode]::OpenOrCreate,[IO.FileAccess]::ReadWrite,[IO.FileShare]::None)}catch{throw 'Outro instalador Terminal esta ativo.'}
-  try{return Install-PosTerminalCore $Bundle ([bool]$WithPrinter) $PrinterName $EnrollmentCode $root}finally{$lock.Dispose()}
+  try{return Install-PosTerminalCore $Bundle ([bool]$WithPrinter) $PrinterName $EnrollmentCode $root $ConnectionMode $ServerUrl $StoreId}finally{$lock.Dispose()}
 }

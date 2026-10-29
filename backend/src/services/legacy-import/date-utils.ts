@@ -2,31 +2,33 @@ function pad2(value: number): string {
   return String(value).padStart(2, '0');
 }
 
-function buildDate(year: number, month: number, day: number): Date | null {
-  if (month < 1 || month > 12 || day < 1 || day > 31) {
+function buildDate(year: number, month: number, day: number): string | null {
+  if (year < 1 || year > 9999 || month < 1 || month > 12 || day < 1 || day > 31) {
     return null;
   }
 
-  const date = new Date(year, month - 1, day);
+  const date = new Date(0);
+  date.setUTCFullYear(year, month - 1, day);
   if (Number.isNaN(date.getTime())) {
     return null;
   }
-  if (date.getFullYear() !== year || date.getMonth() + 1 !== month || date.getDate() !== day) {
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() + 1 !== month || date.getUTCDate() !== day) {
     return null;
   }
-  return date;
+  return formatDateOnly(date);
 }
 
 export function formatDateOnly(value: Date): string {
-  return `${value.getFullYear()}-${pad2(value.getMonth() + 1)}-${pad2(value.getDate())}`;
+  // dbffile represents DBF D fields as UTC Dates, even though DBF stores no timezone.
+  return `${String(value.getUTCFullYear()).padStart(4, '0')}-${pad2(value.getUTCMonth() + 1)}-${pad2(value.getUTCDate())}`;
 }
 
-export function normalizeLegacyDate(value: unknown): Date | null {
+export function normalizeLegacyDate(value: unknown): string | null {
   if (value instanceof Date) {
     if (Number.isNaN(value.getTime())) {
       return null;
     }
-    return buildDate(value.getFullYear(), value.getMonth() + 1, value.getDate());
+    return formatDateOnly(value);
   }
 
   if (typeof value !== 'string') {
@@ -57,5 +59,5 @@ export function normalizeLegacyDate(value: unknown): Date | null {
   if (Number.isNaN(parsed.getTime())) {
     return null;
   }
-  return buildDate(parsed.getFullYear(), parsed.getMonth() + 1, parsed.getDate());
+  return formatDateOnly(parsed);
 }

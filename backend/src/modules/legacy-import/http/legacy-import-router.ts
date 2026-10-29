@@ -7,7 +7,7 @@ import { asyncHandler } from '../../../utils/async-handler.js';
 import { requirePermission } from '../../../middleware/auth.js';
 import { getEnv } from '../../../config/env.js';
 import { cleanupUploadedFiles, createTempDiskUpload } from '../../../middleware/temp-upload.js';
-import { isAllowedLegacyUpload } from '../../../utils/upload-validation.js';
+import { assertLegacyArchiveFormat, isAllowedLegacyUpload } from '../../../utils/upload-validation.js';
 import {
   getLegacyImportReport,
   getLegacyImportReportJson,
@@ -49,6 +49,14 @@ function normalizeConfirmationPhrase(value: string): string {
   return value.normalize('NFKC').replace(/\s+/g, ' ').trim().toUpperCase();
 }
 
+router.get(
+  '/import/legacy/options',
+  requirePermission('system:import:legacy'),
+  asyncHandler(async (_req, res) => {
+    res.json({ overwriteEnabled: getEnv().ENABLE_LEGACY_OVERWRITE });
+  })
+);
+
 router.post(
   '/import/legacy',
   requirePermission('system:import:legacy'),
@@ -87,7 +95,7 @@ router.post(
       await fsp.mkdir(sessionDir, { recursive: true });
 
       const storedFiles: string[] = [];
-      const allowedExtensions = ['.dbf', '.dbt', '.zip'];
+      const allowedExtensions = ['.dbf', '.dbt', '.zip', '.arj'];
 
       try {
         for (const file of files) {
@@ -100,6 +108,8 @@ router.post(
             throw badRequest(`unsupported file type: ${file.originalname}`);
           }
 
+          if (ext === '.zip' || ext === '.arj') await assertLegacyArchiveFormat(file.path);
+
           const safeName = sanitizeLegacyFilename(file.originalname);
           const target = path.join(sessionDir, safeName);
           await fsp.copyFile(file.path, target);
@@ -110,7 +120,7 @@ router.post(
         throw error;
       }
 
-      const hasArchive = storedFiles.some((name) => name.toUpperCase().endsWith('.ZIP'));
+      const hasArchive = storedFiles.some((name) => /\.(zip|arj)$/i.test(name));
       if (!hasArchive) {
         const inventory = new Set(storedFiles.map((name) => name.toUpperCase()));
         const missing = REQUIRED_DBF.filter((required) => !inventory.has(required));

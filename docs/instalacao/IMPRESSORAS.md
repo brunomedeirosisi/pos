@@ -2,9 +2,11 @@
 
 A partir de **1.0.0-store.2**, cada caixa pode possuir sua impressora. O Principal mantém aplicação/banco e seu agente. O Terminal recebe um agente leve Windows, sem Docker. Os dois acessam a mesma API por HTTPS; nenhum agente abre porta de entrada.
 
+Para servidor na internet, siga [NUVEM.md](NUVEM.md) e selecione **Nuvem com impressora** em cada caixa que imprime. A partir de .3, o pacote leve leva o mesmo agente e pareamento sem CA local/Docker; caixas sem impressora escolhem o destino no navegador. As etapas abaixo cobrem o servidor Principal dentro da loja.
+
 ## 1. Instalar ou atualizar o Principal
 
-Em uma instalação nova, use o pacote 1.0.0-store.2 e siga [USO.md](USO.md). Quem já usa 1.0.0-store.1 deve atualizar o Principal com `Atualizar-POS.ps1`, em manutenção e com backup/réplica acessível, antes de instalar o novo Terminal. O pacote precisa declarar compatibilidade com a versão instalada.
+Em uma instalação nova, use o pacote 1.0.0-store.3 e siga [USO.md](USO.md). Quem já usa 1.0.0-store.1 deve atualizar o Principal com `Atualizar-POS.ps1`, em manutenção e com backup/réplica acessível, antes de instalar o novo Terminal. O pacote precisa declarar compatibilidade com a versão instalada.
 
 A migração preserva o destino `principal`, trabalhos, conteúdo e credencial existentes. Novos campos identificam o destino e seu nome no histórico. O agente antigo do Principal continua restrito a `principal`. A atualização não distribui sua credencial para outros computadores.
 

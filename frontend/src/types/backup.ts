@@ -16,3 +16,10 @@ export type RestoreRequest = {
   password: string;
   confirm: true;
 };
+export type RestoreResult = {
+  status: 'ok' | 'rolled_back';
+  restored: boolean;
+  rollbackApplied: boolean;
+  snapshot: string;
+  operationId: string;
+};

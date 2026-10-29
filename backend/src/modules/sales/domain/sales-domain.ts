@@ -204,6 +204,16 @@ export function mapSaleItem(row: SaleItemRecord): SaleItemDto {
   };
 }
 
+export function isLegacySale(row: Pick<SaleRecord, 'source'>): boolean {
+  return row.source === 'VENDAS' || row.source === 'PEDIDOS';
+}
+
+export function getSalePaidAt(row: Pick<SaleRecord, 'source' | 'paid_at'>): string | null {
+  // Legacy DBFs record only a calendar date. The stored default is import time,
+  // which must not be presented as the actual time of the original transaction.
+  return isLegacySale(row) ? null : row.paid_at;
+}
+
 export function mapSale(row: SaleRecord | (SaleRecordWithoutItems & { items?: SaleItemRecord[] | null })): SaleDto {
   const rawItems = ('items' in row && Array.isArray(row.items) ? row.items : []) as SaleItemRecord[];
   const total = toNumeric(row.total);
@@ -213,7 +223,7 @@ export function mapSale(row: SaleRecord | (SaleRecordWithoutItems & { items?: Sa
   return {
     id: row.id,
     emission_date: row.emission_date,
-    paid_at: row.paid_at,
+    paid_at: getSalePaidAt(row),
     order_number: row.order_number,
     seller_id: row.seller_id,
     customer_id: row.customer_id,
@@ -224,7 +234,7 @@ export function mapSale(row: SaleRecord | (SaleRecordWithoutItems & { items?: Sa
     subtotal: toNumeric(row.subtotal),
     discount: toNumeric(row.discount),
     total,
-    pending_amount: pendingAmount,
+    pending_amount: isLegacySale(row) ? null : pendingAmount,
     status: row.status,
     source: row.source,
     source_key: row.source_key,

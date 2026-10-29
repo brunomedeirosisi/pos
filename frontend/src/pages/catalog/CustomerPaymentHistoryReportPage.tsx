@@ -87,13 +87,17 @@ export function CustomerPaymentHistoryReportPage(): JSX.Element {
           </div>
           <div className="text-right">
             <div className="receipt-code">{t('customers.paymentHistoryReportTitle')}</div>
-            <div>{t('customers.generatedAt')}: {formatDateTimeDdMmYyyy(generated_at)}</div>
+            <div>
+              {t('customers.generatedAt')}: {formatDateTimeDdMmYyyy(generated_at)}
+            </div>
           </div>
         </div>
 
         <div className="printable-section">
           <h4>{t('customers.heading')}</h4>
-          <p><strong>{customer.name}</strong></p>
+          <p>
+            <strong>{customer.name}</strong>
+          </p>
           <p>{customer.legacy_code ? `${t('customers.clientCode')}: ${customer.legacy_code}` : ''}</p>
           <p>{customer.cpf ?? t('common.none')}</p>
           <p>{customer.address ?? '-'}</p>
@@ -103,6 +107,19 @@ export function CustomerPaymentHistoryReportPage(): JSX.Element {
 
         <p role="status">{t('customers.completePaymentHistory', { count: payments.length })}</p>
         <div className="receipt-grid">
+          {summary.legacy_balance && (
+            <>
+              <div>
+                <span>{t('customers.legacySourceBalance')}</span>
+                <strong>{formatCurrency(summary.legacy_balance.source_balance)}</strong>
+              </div>
+              <div>
+                <span>{t('customers.legacyBalanceAdjustment')}</span>
+                <strong>{formatCurrency(summary.legacy_balance.adjustment)}</strong>
+                <small>{t('customers.legacyBalanceHint')}</small>
+              </div>
+            </>
+          )}
           <div>
             <span>{t('customers.totalCharges')}</span>
             <strong>{formatCurrency(summary.total_debt)}</strong>

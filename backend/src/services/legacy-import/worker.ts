@@ -3,6 +3,8 @@ import path from 'node:path';
 import os from 'node:os';
 import { promises as fsp } from 'node:fs';
 import { randomUUID } from 'node:crypto';
+import { setTimeout } from 'node:timers/promises';
+import { HttpError } from '../../errors.js';
 import { prepareLegacyFiles } from './archive-files.js';
 import { DBFFile } from 'dbffile';
 import type { Job } from 'bullmq';
@@ -13,6 +15,7 @@ import { query } from '../../db.js';
 import { withLegacyImportLock, withImportTransaction } from './execution-lock.js';
 import { getEnv } from '../../config/env.js';
 import { formatDateOnly, normalizeLegacyDate } from './date-utils.js';
+import { readLegacyCustomerBalances, reconcileLegacyCustomerBalances, type LegacyBalanceSummary } from './customer-balances.js';
 
 type LegacyImportJob = {
   id: string;
@@ -30,6 +33,7 @@ type LegacyImportStatusLog = {
 
 type LegacyImportStatus = {
   status: string;
+  stages: readonly string[];
   overwrite: boolean;
   createdAt: string;
   startedAt: string | null;
@@ -255,6 +259,7 @@ const IMPORT_STAGE_SEQUENCE = [
   'migrate-sales',
   'migrate-customer-payments',
   'migrate-stock',
+  'reconcile-customer-balances',
   'reconciliation-report',
 ] as const;
 
@@ -370,6 +375,8 @@ async function assertLegacyImportSchemaReady(): Promise<void> {
     'system_legacy_import_log',
     'system_legacy_import_checkpoint',
     'system_legacy_import_dead_letter',
+    'customer_legacy_balance',
+    'customer_financial_totals',
   ];
 
   const { rows } = await runDbQuery<{ table_name: string }>(
@@ -430,20 +437,35 @@ async function loadDbfIntoStaging(
 
   const dbf = await DBFFile.open(filePath, { encoding: 'latin1' });
   let total = 0;
+  let removedNulBytes = 0;
+  let normalizedFields = 0;
+  let normalizedRecords = 0;
 
   while (true) {
     const records = await dbf.readRecords(500);
     if (!records.length) break;
-    const rows = records.map((record) =>
-      config.columns.map((column) => {
+    const rows = records.map((record) => {
+      let recordNormalized = false;
+      const row = config.columns.map((column) => {
         const value = record[column.field];
         if (value instanceof Date) {
           return formatDateOnly(value);
         }
         if (value === null || value === undefined) return null;
-        return String(value).trim();
-      })
-    );
+        // Legacy DBFs can contain NUL-filled character fields. PostgreSQL text
+        // rejects U+0000 even after decoding Latin-1; trim() does not remove it.
+        const raw = String(value);
+        const sanitized = raw.replaceAll('\u0000', '');
+        if (sanitized.length !== raw.length) {
+          removedNulBytes += raw.length - sanitized.length;
+          normalizedFields += 1;
+          recordNormalized = true;
+        }
+        return sanitized.trim();
+      });
+      if (recordNormalized) normalizedRecords += 1;
+      return row;
+    });
 
     await batchInsertRows(
       config.table,
@@ -452,6 +474,15 @@ async function loadDbfIntoStaging(
       client
     );
     total += rows.length;
+  }
+
+  if (removedNulBytes > 0) {
+    await appendLog(
+      importId,
+      'warn',
+      `Removed ${removedNulBytes} NUL bytes from ${normalizedFields} field values in ${normalizedRecords} records before staging ${config.file}`,
+      client
+    );
   }
 
   return total;
@@ -1297,6 +1328,7 @@ async function createReconciliationReport(
   saleSummary: SaleSummary,
   payments: number,
   stocks: number,
+  balances: LegacyBalanceSummary,
   client?: PoolClient
 ): Promise<{ csvPath: string; jsonPath: string; version: string }> {
   const csvPath = path.join(sessionDir, 'reconciliation.v1.csv');
@@ -1333,6 +1365,18 @@ async function createReconciliationReport(
   lines.push(`order_items,${saleSummary.orderItems},${targetOrderItems},`);
   lines.push(`customer_payments,${paymentLegacy},${targetPayments},`);
   lines.push(`stock_movements,${stockLegacy},${targetStocks},`);
+  lines.push(`customer_balances_verified,${balances.customers},${balances.verified},CLIENTES.DBF.DEBITO`);
+  lines.push(`legacy_balance_total,${balances.sourceTotal},${balances.sourceTotal},authoritative source balance`);
+  lines.push(`legacy_balance_adjustment,,${balances.adjustmentTotal},reconciliation adjustment; not a payment`);
+  const balanceDetails = (await runDbQuery<{ legacy_code: string; source_balance: string; reconstructed_balance: string; adjustment: string }>(
+    `select c.legacy_code,lb.source_balance::text,lb.reconstructed_balance::text,lb.adjustment::text
+     from customer_legacy_balance lb join customer c on c.id=lb.customer_id where lb.import_id=$1 order by c.legacy_code`,
+    [importId], client
+  )).rows;
+  for (const row of balanceDetails) {
+    const note = `customer legacy code: ${row.legacy_code}; reconstructed: ${row.reconstructed_balance}; adjustment: ${row.adjustment}`;
+    lines.push(`customer_balance,${row.source_balance},${row.source_balance},"${note.replace(/"/g, '""')}"`);
+  }
 
   if (saleSummary.mismatches.length) {
     saleSummary.mismatches.forEach((mismatch) => {
@@ -1359,6 +1403,7 @@ async function createReconciliationReport(
     session_id: sessionId,
     metrics,
     mismatches: saleSummary.mismatches,
+    customerBalances: { ...balances, records: balanceDetails },
   };
 
   await fsp.writeFile(csvPath, lines.join(os.EOL), 'utf8');
@@ -1455,6 +1500,9 @@ async function runImport(job: LegacyImportJob, client: PoolClient): Promise<void
     }
   }
 
+  // Validate the authoritative source before any destructive reset or publication.
+  const balanceSource = await readLegacyCustomerBalances(filesMap.get('CLIENTES.DBF')!);
+
   // Staging is disposable per attempt. Never trust a completed load checkpoint:
   // another import may have replaced the shared tables during retry backoff.
   // Keep publication checkpoints, so committed payments/movements are not replayed.
@@ -1509,6 +1557,10 @@ async function runImport(job: LegacyImportJob, client: PoolClient): Promise<void
     return migrateStockMovements(client);
   });
 
+  const balances = await runImportStage(job, 'reconcile-customer-balances', checkpointCache, client, async (client) => {
+    return reconcileLegacyCustomerBalances(job.id, balanceSource, client, job.userId);
+  });
+
   const reconciliation = await runImportStage(job, 'reconciliation-report', checkpointCache, client, async (client) => {
     return createReconciliationReport(
       job.id,
@@ -1518,6 +1570,7 @@ async function runImport(job: LegacyImportJob, client: PoolClient): Promise<void
       salesSummary as SaleSummary,
       Number(paymentsCount ?? 0),
       Number(stockCount ?? 0),
+      balances,
       client
     );
   });
@@ -1529,6 +1582,7 @@ async function runImport(job: LegacyImportJob, client: PoolClient): Promise<void
     sales: salesSummary,
     customerPayments: Number(paymentsCount ?? 0),
     stockMovements: Number(stockCount ?? 0),
+    customerBalances: balances,
     reconciliation,
   };
 
@@ -1617,9 +1671,18 @@ async function getJobRecord(importId: string, client: PoolClient): Promise<(Lega
 }
 
 export async function processLegacyImportJob(job: Pick<Job<LegacyImportQueuePayload>, 'data' | 'attemptsMade' | 'opts'>): Promise<void> {
-  return withLegacyImportLock(async (client) => {
-    await processLockedImportJob(job, client);
-  });
+  // Maintenance is not an import failure. Wait before entering the write
+  // session so a long restore/rollback cannot exhaust BullMQ attempts.
+  while (true) {
+    try {
+      return await withLegacyImportLock(async (client) => {
+        await processLockedImportJob(job, client);
+      });
+    } catch (error) {
+      if (!(error instanceof HttpError) || error.message !== 'database_restore_in_progress') throw error;
+      await setTimeout(250);
+    }
+  }
 }
 
 async function processLockedImportJob(
@@ -1629,7 +1692,7 @@ async function processLockedImportJob(
   const importId = job.data.importId;
   const attemptNumber = job.attemptsMade + 1;
   const importRecord = await getJobRecord(importId, client);
-  if (!importRecord || importRecord.status === 'completed') {
+  if (!importRecord || !['queued', 'retrying', 'running'].includes(importRecord.status ?? '')) {
     return;
   }
 
@@ -1825,6 +1888,7 @@ export async function getLegacyImportStatus(sessionId: string): Promise<LegacyIm
 
   return {
     status: record.status,
+    stages: IMPORT_STAGE_SEQUENCE,
     overwrite: record.overwrite,
     createdAt: record.created_at,
     startedAt: record.started_at,

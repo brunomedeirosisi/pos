@@ -46,7 +46,8 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
         'Handled internal error'
       );
       return res.status(err.statusCode).json({
-        message: 'internal_error',
+        message: ['database_restore_in_progress', 'database_restore_recovery_required', 'restore_failed_rollback_failed'].includes(err.message) ? err.message : 'internal_error',
+        ...(['database_restore_recovery_required', 'restore_failed_rollback_failed'].includes(err.message) ? { details: err.details } : {}),
         request_id: requestId,
       });
     }

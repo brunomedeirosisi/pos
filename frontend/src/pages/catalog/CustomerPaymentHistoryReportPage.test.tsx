@@ -62,22 +62,31 @@ function render(data: unknown) {
       'synthetic',
       { start_date: undefined, end_date: undefined, method: undefined, sort: 'desc' },
     ],
-    data,
+    data
   );
   return renderToStaticMarkup(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={['/catalog/customers/synthetic/payments/history']}>
         <Routes>
-          <Route
-            path="/catalog/customers/:id/payments/history"
-            element={<CustomerPaymentHistoryReportPage />}
-          />
+          <Route path="/catalog/customers/:id/payments/history" element={<CustomerPaymentHistoryReportPage />} />
         </Routes>
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
 }
 describe('complete printable payment history', () => {
+  it('shows the reconciliation as a separate entry while preserving the original payment totals', () => {
+    const data = report(1);
+    const html = render({
+      ...data,
+      summary: { ...data.summary, legacy_balance: { source_balance: 500, adjustment: -22793 } },
+    });
+    expect(html).toContain('customers.legacySourceBalance');
+    expect(html).toContain('customers.legacyBalanceAdjustment');
+    expect(html).toContain('customers.legacyBalanceHint');
+    expect(html).toContain('synthetic-row-0');
+    expect(html).toContain('common.print');
+  });
   it('renders every one of 1,001 rows and a print action only after reconciliation', () => {
     const html = render(report(1001));
     expect(html.match(/synthetic-row-/g) ?? []).toHaveLength(1001);
@@ -104,7 +113,7 @@ describe('complete printable payment history', () => {
       if (invalid === 'coverage') data.coverage.row_count = 1;
       expect(isCompletePaymentReport(data)).toBe(false);
       expect(render(data)).not.toContain('common.print');
-    },
+    }
   );
   it('accepts an empty selection and a complete older API response without coverage metadata', () => {
     expect(isCompletePaymentReport(report(0))).toBe(true);
@@ -121,11 +130,11 @@ describe('complete printable payment history', () => {
   });
   it.each(['pt-BR', 'en'])('explains the selection limit in %s', async (language) => {
     await i18n.changeLanguage(language);
-    expect(
-      parseApiErrorMessage('Payload Too Large', { message: 'payment_report_limit_exceeded' }),
-    ).toBe(i18n.t('apiErrors.paymentReportLimitExceeded'));
-    expect(
-      parseApiErrorMessage('Unprocessable Content', { message: 'payment_report_inconsistent' }),
-    ).toBe(i18n.t('apiErrors.paymentReportInconsistent'));
+    expect(parseApiErrorMessage('Payload Too Large', { message: 'payment_report_limit_exceeded' })).toBe(
+      i18n.t('apiErrors.paymentReportLimitExceeded')
+    );
+    expect(parseApiErrorMessage('Unprocessable Content', { message: 'payment_report_inconsistent' })).toBe(
+      i18n.t('apiErrors.paymentReportInconsistent')
+    );
   });
 });

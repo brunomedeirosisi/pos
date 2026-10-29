@@ -29,6 +29,7 @@ import {
 } from '../application/backup-use-cases.js';
 import { restoreSchema } from '../contracts/backup-contracts.js';
 import { PgBackupRepository } from '../repository/backup-repository.js';
+import { buildClearedAuthCookie } from '../../auth/http/auth-cookie.js';
 
 const router = Router();
 const env = getEnv();
@@ -222,6 +223,10 @@ router.delete(
   }),
 );
 
+router.get('/restore/options', requirePermission('system:backup:restore'), asyncHandler(async (_req, res) => {
+  res.json({ restoreEnabled: getEnv().ENABLE_DATABASE_RESTORE });
+}));
+
 router.post(
   '/restore',
   requirePermission('system:backup:restore'),
@@ -244,6 +249,7 @@ router.post(
       password: payload.password,
     });
 
+    if (result.restored) res.append('Set-Cookie', buildClearedAuthCookie(getEnv()));
     res.json({
       status: result.status,
       restored: result.restored,

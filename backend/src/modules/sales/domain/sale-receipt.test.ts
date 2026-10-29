@@ -41,6 +41,16 @@ function createReceiptRecord(): SaleReceiptRecord {
 }
 
 describe('mapSaleReceipt', () => {
+  it.each(['pt-BR', 'en'] as const)(
+    'keeps a date-only fallback without a timezone or invented time in %s',
+    (locale) => {
+      const record = { ...createReceiptRecord(), emission_date: '2018-11-04', paid_at: null };
+      const receipt = mapSaleReceipt(record, { name: 'Synthetic company', address: '', tax_id: '' }, locale);
+      expect(receipt.plain_text).toContain('04/11/2018');
+      expect(receipt.plain_text).toMatch(locale === 'en' ? /Time\s+--:--/ : /Hora\s+--:--/);
+    }
+  );
+
   it('builds a matrix-friendly plain text receipt in pt-BR', () => {
     const receipt = mapSaleReceipt(
       createReceiptRecord(),
@@ -53,6 +63,7 @@ describe('mapSaleReceipt', () => {
     );
 
     expect(receipt.sale.code).toBe('REC-12345678');
+    expect(receipt.sale.paid_at).toBe('2026-06-18T14:35:00.000Z');
     expect(receipt.items).toHaveLength(1);
     expect(receipt.plain_text).toContain('RECIBO DE VENDA');
     expect(receipt.plain_text).toContain('Maria Silva');

@@ -149,7 +149,7 @@ export type SaleReceiptDto = {
     subtotal: number;
     discount: number;
     total: number;
-    pending_amount: number;
+    pending_amount: number | null;
     payment_method: SalePaymentMethod | null;
     payment_term_name: string | null;
     amount_paid: number | null;

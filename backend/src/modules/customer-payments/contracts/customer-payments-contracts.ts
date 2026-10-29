@@ -2,6 +2,7 @@ import { isDecimalValue } from '../../../utils/checkout-decimal.js';
 import { z } from 'zod';
 import { paginationQuerySchema } from '../../../utils/pagination.js';
 import { parseDecimalInput } from '../domain/customer-payments-domain.js';
+import type { LegacyBalanceReconciliation } from '../domain/customer-balance.js';
 
 export const paymentMethodValues = ['cash', 'card', 'bank', 'other'] as const;
 export const paymentMethodFilterValues = [...paymentMethodValues, 'legacy'] as const;
@@ -50,6 +51,7 @@ export type PaymentInputDto = z.infer<typeof paymentInputSchema>;
 export type PaymentListQueryDto = z.infer<typeof paymentListQuerySchema>;
 
 export type PaymentSummaryDto = {
+  legacy_balance?: LegacyBalanceReconciliation;
   total_debt: number;
   total_paid: number;
   current_balance: number;
@@ -81,6 +83,10 @@ export type CustomerPaymentDto = {
   received_by_name: string | null;
   source: string;
   created_at: string | null;
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
+  cancelled_by_name?: string | null;
+  cancellation_reason?: string | null;
 };
 
 export type ListCustomerPaymentsResponseDto = {
@@ -92,6 +98,7 @@ export type ListCustomerPaymentsResponseDto = {
 export type RegisterCustomerPaymentResponseDto = {
   payment: CustomerPaymentDto;
   summary: {
+    legacy_balance?: LegacyBalanceReconciliation;
     total_debt: number;
     total_paid: number;
     previous_balance: number;
@@ -140,25 +147,17 @@ export type CustomerPaymentReceiptDto = {
     cep: string | null;
     phone: string | null;
   };
-  payment: {
-    id: string;
+  payment: CustomerPaymentDto & {
     code: string;
-    amount: number;
-    payment_date: string | null;
-    method: (typeof paymentMethodFilterValues)[number];
-    reference: string | null;
-    notes: string | null;
-    received_by: string | null;
-    received_by_name: string | null;
-    source: string;
-    created_at: string | null;
   };
   balances: {
+    legacy_balance?: LegacyBalanceReconciliation;
+    historical_balance_unavailable?: boolean;
     total_debt: number;
     total_paid: number;
-    previous_balance: number;
+    previous_balance: number | null;
     payment_amount: number;
-    new_balance: number;
+    new_balance: number | null;
   };
   generated_at: string;
 };

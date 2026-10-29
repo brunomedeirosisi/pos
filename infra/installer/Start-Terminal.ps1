@@ -23,7 +23,7 @@ try {
       $info.UseShellExecute=$false;$info.CreateNoWindow=$true
       $info.EnvironmentVariables['POS_AGENT_CONFIG']=Join-Path $Root 'agent.json'
       $info.EnvironmentVariables['PRINT_AGENT_TOKEN']=$credential.token
-      $info.EnvironmentVariables['NODE_EXTRA_CA_CERTS']=Join-Path $Root 'pki\root.crt'
+      Set-PosTerminalTlsEnvironment $info $state $Root
       $agent=New-Object Diagnostics.Process;$agent.StartInfo=$info;$null=$agent.Start()
       Write-PosJson (Join-Path $Root 'runtime-status.json') @{state='running';atUtc=[DateTime]::UtcNow.ToString('o');printerId=$state.printerId;supervisorPid=$PID;agentPid=$agent.Id}
     }

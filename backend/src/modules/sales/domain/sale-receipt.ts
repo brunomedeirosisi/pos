@@ -4,7 +4,7 @@ import type {
   SaleReceiptDto,
   SaleReceiptLocale,
 } from '../contracts/sales-contracts.js';
-import { mapSaleItem } from './sales-domain.js';
+import { getSalePaidAt, isLegacySale, mapSaleItem } from './sales-domain.js';
 import type { SaleReceiptRecord } from '../repository/sales-repository.js';
 
 const RECEIPT_WIDTH = 40;
@@ -91,6 +91,11 @@ function pad2(value: number): string {
 function formatDateParts(value: string | null | undefined): { date: string; time: string } {
   if (!value) {
     return { date: '--/--/----', time: '--:--' };
+  }
+
+  const calendarDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (calendarDate) {
+    return { date: `${calendarDate[3]}/${calendarDate[2]}/${calendarDate[1]}`, time: '--:--' };
   }
 
   const parsed = new Date(value);
@@ -230,13 +235,13 @@ export function mapSaleReceipt(record: SaleReceiptRecord, company: CompanyInfo, 
       id: record.id,
       code: `REC-${record.id.slice(0, 8).toUpperCase()}`,
       emission_date: record.emission_date,
-      paid_at: record.paid_at,
+      paid_at: getSalePaidAt(record),
       order_number: record.order_number,
       status: record.status,
       subtotal: Number(record.subtotal ?? 0),
       discount: Number(record.discount ?? 0),
       total: Number(record.total ?? 0),
-      pending_amount: record.pending_amount == null
+      pending_amount: isLegacySale(record) ? null : record.pending_amount == null
         ? Math.max(Number(record.total ?? 0) - Number(record.amount_paid ?? 0), 0)
         : Number(record.pending_amount),
       payment_method: record.payment_method,

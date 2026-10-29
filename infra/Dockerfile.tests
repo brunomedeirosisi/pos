@@ -1,6 +1,8 @@
 FROM node:24.21.0-alpine3.23@sha256:9ec4a2e289874ed0d722e1772ec2de45d2801541db8612f3638b26f128c69ac2
 RUN npm install --global npm@12.2.0 --ignore-scripts --no-audit --no-fund
 ARG WORKSPACE
+COPY backend/scripts/install-sevenzip.mjs /tmp/install-sevenzip.mjs
+RUN if [ "$WORKSPACE" = "backend" ]; then apk add --no-cache xz && node /tmp/install-sevenzip.mjs && apk del xz; fi
 WORKDIR /workspace/${WORKSPACE}
 COPY ${WORKSPACE}/package*.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund

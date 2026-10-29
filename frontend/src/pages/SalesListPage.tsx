@@ -8,10 +8,11 @@ import type { Sale, SaleStatus } from '../types/sales';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { useToast } from '../components/ui/ToastProvider';
 import { useHasPermission } from '../store/auth';
-import { formatDateTimeDdMmYyyy } from '../utils/date';
+import { formatDateDdMmYyyy } from '../utils/date';
 import { ConfirmDialog } from '../components/ui/ConfirmDialog';
 import { useSaleReceiptActions } from '../hooks/useSaleReceiptActions';
 import { formatCurrencyBrl } from '../utils/number';
+import { SearchableSelect, type SelectOption } from '../components/ui/SearchableSelect';
 
 const statusClasses: Record<SaleStatus, string> = {
   completed: 'status-completed',
@@ -46,13 +47,14 @@ export function SalesListPage(): JSX.Element {
   const { isPrinting, printReceipt } = useSaleReceiptActions();
 
   const [filters, setFilters] = useState<FiltersState>(defaultFilters);
+  const [filterReset, setFilterReset] = useState(0);
+  const [knownLabels, setKnownLabels] = useState(() => new Map<string, string>());
   const [saleToCancel, setSaleToCancel] = useState<Sale | null>(null);
   const debouncedFilters = useDebouncedValue(filters, 300);
 
   const salesQuery = useQuery({
     queryKey: ['sales', debouncedFilters],
-    queryFn: () =>
-      salesService.list(cleanFilters(debouncedFilters)),
+    queryFn: () => salesService.list(cleanFilters(debouncedFilters)),
     enabled: canReadSales,
   });
 
@@ -115,7 +117,8 @@ export function SalesListPage(): JSX.Element {
     return result;
   }
 
-  function updateFilter(key: keyof FiltersState, value: string) {
+  function updateFilter(key: keyof FiltersState, value: string, option?: SelectOption) {
+    if (option?.value) setKnownLabels((labels) => new Map(labels).set(option.value, option.label));
     setFilters((prev) => ({
       ...prev,
       [key]: value,
@@ -143,7 +146,7 @@ export function SalesListPage(): JSX.Element {
   return (
     <div className="card">
       <div className="toolbar">
-        <div className="form-grid">
+        <div className="form-grid history-filters">
           <div className="form-group">
             <label htmlFor="sales-filter-from">{t('sales.fromDate')}</label>
             <input
@@ -163,53 +166,87 @@ export function SalesListPage(): JSX.Element {
             />
           </div>
           <div className="form-group">
-            <label htmlFor="sales-filter-seller">{t('sellers.heading')}</label>
-            <select id="sales-filter-seller" value={filters.seller_id} onChange={(event) => updateFilter('seller_id', event.target.value)}>
-              <option value="">{t('common.none')}</option>
-              {sellers.map((seller) => (
-                <option key={seller.id} value={seller.id}>
-                  {seller.name}
-                </option>
-              ))}
-            </select>
+            <label id="sales-filter-seller-label" htmlFor="sales-filter-seller">
+              {t('sellers.heading')}
+            </label>
+            <SearchableSelect
+              key={filterReset}
+              id="sales-filter-seller"
+              value={filters.seller_id}
+              options={sellers.map((seller) => ({ value: seller.id, label: seller.name }))}
+              onChange={(option) => updateFilter('seller_id', option.value, option)}
+              optionsKey="sellers"
+              loadOptions={async (search) =>
+                (await sellersService.list(search)).map((seller) => ({ value: seller.id, label: seller.name }))
+              }
+              loading={sellersQuery.isLoading}
+              error={sellersQuery.isError}
+              onRetry={() => {
+                void sellersQuery.refetch();
+              }}
+            />
           </div>
           <div className="form-group">
-            <label htmlFor="sales-filter-customer">{t('customers.heading')}</label>
-            <select
+            <label id="sales-filter-customer-label" htmlFor="sales-filter-customer">
+              {t('customers.heading')}
+            </label>
+            <SearchableSelect
+              key={filterReset}
               id="sales-filter-customer"
               value={filters.customer_id}
-              onChange={(event) => updateFilter('customer_id', event.target.value)}
-            >
-              <option value="">{t('common.none')}</option>
-              {customers.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name}
-                </option>
-              ))}
-            </select>
+              options={customers.map((customer) => ({ value: customer.id, label: customer.name }))}
+              onChange={(option) => updateFilter('customer_id', option.value, option)}
+              optionsKey="customers"
+              loadOptions={async (search) =>
+                (await customersService.list(search)).map((customer) => ({ value: customer.id, label: customer.name }))
+              }
+              loading={customersQuery.isLoading}
+              error={customersQuery.isError}
+              onRetry={() => {
+                void customersQuery.refetch();
+              }}
+            />
           </div>
           <div className="form-group">
-            <label htmlFor="sales-filter-payment-term">{t('paymentTerms.heading')}</label>
-            <select
+            <label id="sales-filter-payment-term-label" htmlFor="sales-filter-payment-term">
+              {t('paymentTerms.heading')}
+            </label>
+            <SearchableSelect
+              key={filterReset}
               id="sales-filter-payment-term"
               value={filters.payment_term_id}
-              onChange={(event) => updateFilter('payment_term_id', event.target.value)}
-            >
-              <option value="">{t('common.none')}</option>
-              {paymentTerms.map((term) => (
-                <option key={term.id} value={term.id}>
-                  {term.name}
-                </option>
-              ))}
-            </select>
+              options={paymentTerms.map((term) => ({ value: term.id, label: term.name }))}
+              onChange={(option) => updateFilter('payment_term_id', option.value, option)}
+              optionsKey="payment-terms"
+              loadOptions={async (search) =>
+                (await paymentTermsService.list(search)).map((term) => ({ value: term.id, label: term.name }))
+              }
+              loading={paymentTermsQuery.isLoading}
+              error={paymentTermsQuery.isError}
+              onRetry={() => {
+                void paymentTermsQuery.refetch();
+              }}
+            />
           </div>
         </div>
         <div>
-          <button type="button" className="button secondary" onClick={() => setFilters(defaultFilters)}>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => {
+              setFilters(defaultFilters);
+              setFilterReset((reset) => reset + 1);
+            }}
+          >
             {t('common.reset') ?? 'Reset'}
           </button>
           {canCheckout && (
-            <button type="button" className="button primary" onClick={() => navigate('/pos')} style={{ marginLeft: '0.5rem' }}>
+            <button
+              type="button"
+              className="button primary"
+              onClick={() => navigate('/pos')}
+              style={{ marginLeft: '0.5rem' }}
+            >
               {t('sales.registerSale')}
             </button>
           )}
@@ -254,11 +291,13 @@ export function SalesListPage(): JSX.Element {
             )}
             {sales.map((sale) => (
               <tr key={sale.id}>
-                <td>{formatDateTimeDdMmYyyy(sale.emission_date)}</td>
+                <td>{formatDateDdMmYyyy(sale.emission_date)}</td>
                 <td>{getSalePrimaryItemName(sale)}</td>
-                <td>{customerMap.get(sale.customer_id ?? '') ?? '-'}</td>
-                <td>{sellerMap.get(sale.seller_id ?? '') ?? '-'}</td>
-                <td>{paymentTermMap.get(sale.payment_term_id ?? '') ?? '-'}</td>
+                <td>{customerMap.get(sale.customer_id ?? '') ?? knownLabels.get(sale.customer_id ?? '') ?? '-'}</td>
+                <td>{sellerMap.get(sale.seller_id ?? '') ?? knownLabels.get(sale.seller_id ?? '') ?? '-'}</td>
+                <td>
+                  {paymentTermMap.get(sale.payment_term_id ?? '') ?? knownLabels.get(sale.payment_term_id ?? '') ?? '-'}
+                </td>
                 <td>{formatCurrencyBrl(sale.total ?? 0)}</td>
                 <td>
                   <span className={`badge ${statusClasses[sale.status]}`}>{saleStatusLabels[sale.status]}</span>
@@ -267,7 +306,12 @@ export function SalesListPage(): JSX.Element {
                   <Link className="button secondary" to={`/sales/${sale.id}`}>
                     {t('sales.viewSale')}
                   </Link>
-                  <button type="button" className="button secondary" onClick={() => printReceipt(sale.id)} disabled={isPrinting}>
+                  <button
+                    type="button"
+                    className="button secondary"
+                    onClick={() => printReceipt(sale.id)}
+                    disabled={isPrinting}
+                  >
                     {isPrinting ? t('common.loading') : t('sales.printReceipt')}
                   </button>
                   {sale.status !== 'cancelled' && canCancelSales && (
@@ -290,7 +334,11 @@ export function SalesListPage(): JSX.Element {
       <ConfirmDialog
         open={Boolean(saleToCancel)}
         title={t('sales.cancelSale')}
-        description={saleToCancel ? `${getSalePrimaryItemName(saleToCancel)} - ${formatCurrencyBrl(saleToCancel.total ?? 0)}` : undefined}
+        description={
+          saleToCancel
+            ? `${getSalePrimaryItemName(saleToCancel)} - ${formatCurrencyBrl(saleToCancel.total ?? 0)}`
+            : undefined
+        }
         confirmLabel={t('sales.cancelSale')}
         onClose={() => setSaleToCancel(null)}
         onConfirm={() => {
@@ -318,5 +366,3 @@ function getSalePrimaryItemName(sale: Sale) {
 
   return `${base} (+${rest.length})`;
 }
-
-

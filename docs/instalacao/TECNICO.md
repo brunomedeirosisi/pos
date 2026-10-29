@@ -2,6 +2,10 @@
 
 ## Escopo e arquitetura
 
+O Modo Nuvem de 1.0.0-store.3 conecta os caixas a uma origem HTTPS pública e mantém somente navegador/agente no Windows. Build leve, requisitos do servidor, TLS e migração estão em [NUVEM.md](NUVEM.md). Ele não provisiona hospedagem. A arquitetura abaixo descreve a alternativa local.
+
+O ensaio de publicação temporária do checkout local tem roteiro em [TESTE-INTERNET.md](TESTE-INTERNET.md), com topologia do túnel, confiança da CA, configuração CORS, diagnóstico e distinção entre navegador e agentes de impressão. Ele usa `docker-compose.yml` da raiz e não o Compose do instalador Principal.
+
 Implantação prevista: dois caixas Windows x64, uma instância de loja e uma impressora por caixa quando configurada. O Principal hospeda Docker Desktop Linux/amd64, PostgreSQL 16, Redis 7, API, frontend Nginx e proxy Caddy. O Terminal usa navegador e pode executar seu próprio agente de impressão Windows, sem Docker. O agente de impressão é um processo Node Windows sem servidor HTTP e faz conexões de saída HTTPS.
 
 ```mermaid
@@ -28,9 +32,11 @@ O instalador não seleciona o Compose de desenvolvimento. Gera um projeto estáv
 | Arquivo de fonte | Responsabilidade |
 |---|---|
 | `infra/installer/Launcher.cs` | Executável x64/.NET: valida caminhos, hashes e arquivos essenciais antes de iniciar PowerShell. |
-| `Instalar-POS.ps1` | GUI WinForms Principal/Terminal; `-ValidateOnly` valida pacote e `-UiCheck` constrói a UI sem exibir/instalar. |
+| `Instalar-POS.ps1` | GUI WinForms Principal/Terminal/Nuvem, com impressora opcional; `-ValidateOnly` valida pacote e `-UiCheck` constrói a UI sem exibir/instalar. |
 | `Pos.Common.ps1` | Hashes, validação de pacote/IP, ACL privada, DPAPI, argumentos nativos, execução Docker, TLS/identidade e atalhos. |
 | `Pos.Install.ps1` | Primeiro provisionamento, reparo da mesma versão, credenciais, backup inicial e exportação do Terminal. |
+| `Pos.Cloud.ps1` | Origem pública, transporte HTTPS sem redirects, verificação de loja e seleção da confiança TLS. |
+| `Pos.Build.ps1` / `Build-CloudInstaller.ps1` | Runtime oficial compartilhado e pacote Windows leve para servidor existente, sem Docker. |
 | `Pos.Terminal.ps1` | Pareamento individual, DPAPI, instalação/reparo do Terminal e URL de destino público. |
 | `Start-Terminal.ps1` / `Parar-Terminal.ps1` / `Diagnosticar-Terminal.ps1` | Ciclo de vida do agente Terminal após login, sem Docker ou portas de entrada. |
 | `Firewall-POS.ps1` | Único auxiliar elevado: regra TCP443 para IP atribuído, rede Privada e LocalSubnet; permite retirar somente essa regra. |
@@ -47,11 +53,13 @@ O instalador não seleciona o Compose de desenvolvimento. Gera um projeto estáv
 
 ## Build e distribuição
 
-No computador de desenvolvimento Windows x64, use Git, Docker Desktop Linux/amd64, PowerShell 5.1 e .NET Framework/csc. O build obtém Node 24.21.0 Windows pelo domínio oficial, verifica o ZIP pelo SHA256 oficial e a assinatura Authenticode de node.exe. As imagens de infraestrutura são fixadas por digest. API/frontend são construídos pelos Dockerfiles/lockfiles; não há compilação na loja.
+No computador de desenvolvimento Windows x64, use Git, Docker Desktop Linux/amd64, PowerShell 5.1 e .NET Framework 4.8 ou posterior/csc. O build obtém Node 24.21.0 Windows pelo domínio oficial, verifica o ZIP pelo SHA256 oficial e a assinatura Authenticode de node.exe. As imagens de infraestrutura são fixadas por digest. API/frontend são construídos pelos Dockerfiles/lockfiles; não há compilação na loja.
 
 ```powershell
 ./infra/installer/Test-Installer.ps1 -NodePath (Get-Command node.exe).Source
-./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.2' -CompatibleFrom '1.0.0-store.1'
+./infra/installer/Test-CloudHttps.ps1 -NodePath (Get-Command node.exe).Source
+./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.3' -CompatibleFrom '1.0.0-store.2'
+./infra/installer/Build-CloudInstaller.ps1 -Version '1.0.0-store.3'
 ```
 
 O runtime Windows obtido pelo builder também é usado nos testes; Node instalado localmente não é exigido pelo build. O parâmetro `-NodePath` do teste é opcional para uma execução manual sem Node. O build exige acesso à rede para dependências/imagens/runtime. Seus temporários ficam em uma pasta `pos-store-build-*` sob o Temp do usuário, informada no log.
@@ -67,7 +75,7 @@ artifacts/POS-Loja-<versão>/
   agent/pull-agent.mjs
   images.tar
   manifest.json
-  documentacao/USO.md / TECNICO.md / HOMOLOGACAO.md / IMPRESSORAS.md
+  documentacao/USO.md / TECNICO.md / HOMOLOGACAO.md / IMPRESSORAS.md / NUVEM.md / TESTE-INTERNET.md
   LEIA-ME.txt
 artifacts/POS-Loja-<versão>.zip
 artifacts/POS-Loja-<versão>.zip.sha256
@@ -103,7 +111,7 @@ Um lock de arquivo do Windows serializa instalador/atualizador. Reparar preserva
 
 Caddy gera CA própria da instalação e certificado para o IP configurado. A opção default_sni seleciona esse certificado para clientes que acessam por IP sem enviar SNI, inclusive através do NAT do Docker. O verificador HTTPS aguarda a emissão inicial mantendo validação de CA/identidade e TLS 1.2. A chave privada permanece no volume caddy_data. O Principal exporta apenas root.crt público e confia nele em CurrentUser/Root. O pacote Terminal contém certificado público, SHA256, UUID/origem da loja, launcher, scripts, runtime Node e agente. Não contém segredos de loja, imagens Docker, banco ou chave privada de CA. O token de cada Terminal é gerado localmente e pareado por código autorizado pelo administrador.
 
-O operador confirma origem/endereço/fingerprint do pareamento. O Terminal verifica hashes locais, importa a CA recebida de fonte confiável, faz HTTPS com validação normal e exige o UUID esperado em `GET /api/v1/store-info`. Não baixa e confia automaticamente em uma CA fornecida pela rede. O agente usa NODE_EXTRA_CA_CERTS; nenhuma validação TLS é desativada.
+O operador confirma origem/endereço/fingerprint do pareamento. O Terminal verifica hashes locais, importa a CA recebida de fonte confiável, faz HTTPS com validação normal e exige o UUID esperado em `GET /api/v1/store-info`. Não baixa e confia automaticamente em uma CA fornecida pela rede. No modo LAN o agente usa NODE_EXTRA_CA_CERTS; nenhuma validação TLS é desativada.
 
 O auxiliar elevado de firewall valida IP privado atribuído e perfil Privado. A única regra é `POS-HTTPS-<projeto>`, TCP443, LocalAddress escolhido e RemoteAddress LocalSubnet. Não altera classificação de rede, roteador, endereço IP, grupos de administradores, login automático ou regras globais do firewall.
 
@@ -177,7 +185,7 @@ POST /print-printers/{id}/revoke exige printers:manage, desabilita o Terminal e 
 
 Cada pedido guarda printer_id e printer_name imutáveis. O servidor valida destino habilitado antes de um novo enqueue e inclui o destino na comparação idempotente. Offline não muda o destino. O worker valida a identidade do trabalho antes de iniciar o spool. O journal Terminal fica em print-journal/<printerId>, preservando registros de pareamentos antigos.
 
-O atalho usa somente pos_store/pos_printer públicos. main.tsx captura a preferência antes do redirect de autenticação, em chave de navegador por UUID da loja. Seleção explícita aparece no PDV/detalhes; cadastro removido/revogado bloqueia o botão, sem cair automaticamente no Principal. Preferências não substituem autorização: cada sessão com sales:read pode imprimir nos destinos habilitados da loja, enquanto cada agente só consulta seu próprio destino.
+O atalho usa somente pos_store/pos_printer públicos. No modo Nuvem sem impressora local, pos_printer=choose exige seleção de um destino habilitado; não cria impressora ou credencial e não presume Principal. main.tsx captura a preferência antes do redirect de autenticação, em chave de navegador por UUID da loja. Seleção explícita aparece no PDV/detalhes; cadastro removido/revogado bloqueia o botão, sem cair automaticamente no Principal. Preferências não substituem autorização: cada sessão com sales:read pode imprimir nos destinos habilitados da loja, enquanto cada agente só consulta seu próprio destino.
 
 Fluxos do operador, reparo sem novo código, troca de dispositivo e comandos de diagnóstico/parada: [IMPRESSORAS.md](IMPRESSORAS.md). A credencial DPAPI/journal do Terminal não está no backup SQL. Recuperação deve rever revogações, estado físico e journals antes de retomar filas antigas.
 
@@ -185,7 +193,7 @@ Fluxos do operador, reparo sem novo código, troca de dispositivo e comandos de 
 
 Não existe procedimento seguro de “desinstalar tudo” que apague volumes. Não use down --volumes no projeto da loja. Preserve settings, secrets.bin, perfil Windows/DPAPI, volumes e cópias externas; secrets.bin não é um kit portátil para outro Windows/usuário.
 
-Em falha: interrompa novas operações, preserve original e cópias, confira hashes e selecione alvo isolado para ensaio. O dump SQL é restaurável com ferramentas PostgreSQL 16 em um ambiente novo, com credenciais novas, após validação técnica. Restauração em uso exige manutenção, journal independente/pinning/cutover e reconciliação — gates ainda pendentes; o instalador não habilita ENABLE_DATABASE_RESTORE. Não rode SQL de recuperação sobre um alvo operacional por tentativa.
+Em falha: interrompa novas operações, preserve original e cópias, confira hashes e selecione alvo isolado para ensaio. O dump SQL é restaurável com ferramentas PostgreSQL 16 em ambiente novo após validação técnica. O instalador não habilita `ENABLE_DATABASE_RESTORE`; consulte o [runbook atualizado](../backup-restore-runbook.md) para o fluxo de backups nativos, manutenção, journal em `pos_recovery`, proteção de alvo/snapshot e rollback. Backups estrangeiros ou perda do registro de procedência exigem recuperação técnica isolada. Preserve também o schema de recuperação; não rode SQL em um alvo operacional por tentativa.
 
 Troca de máquina/conta/IP/CA requer plano assistido: backup externo validado, ambiente novo, ensaio de dados, reconfiguração da impressora e novo pareamento dos terminais. Não copie somente o DPAPI ou habilite trust TLS indiscriminadamente.
 
@@ -199,7 +207,7 @@ Troca de máquina/conta/IP/CA requer plano assistido: backup externo validado, a
 Reprodução do ensaio de release, após construir o pacote (requer Node no host e Docker Compose com suporte a `!override`):
 
 ```powershell
-node infra/installer/test-store.mjs --bundle artifacts/POS-Loja-1.0.0-store.2 --evidence docs/test-evidence/installer-multiprinter-20261023.json
+node infra/installer/test-store.mjs --bundle artifacts/POS-Loja-1.0.0-store.3 --evidence docs/test-evidence/installer-cloud-store-20261027.json
 ```
 
 Esse ensaio usa o projeto fixo `pos-installer-smoke`, volumes próprios sintéticos, porta efêmera somente em loopback e sub-rede de teste `172.29.74.0/24`. Limpa apenas esse projeto no início/fim. Não execute dois ensaios simultâneos. A saída do spooler é injetada/simulada; HTTPS, duas sessões, fila, API, banco, backup e bind externo são reais. O teste não comprova que o diretório temporário de réplica está fisicamente em outro dispositivo.

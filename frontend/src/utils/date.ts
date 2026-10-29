@@ -71,6 +71,9 @@ export function formatDateTimeDdMmYyyy(value: string | null | undefined, fallbac
   if (!parsed) {
     return value;
   }
+  if (ISO_DATE_ONLY_PATTERN.test(value.trim()) || BR_DATE_ONLY_PATTERN.test(value.trim())) {
+    return formatDdMmYyyy(parsed);
+  }
   return `${formatDdMmYyyy(parsed)} ${pad2(parsed.getHours())}:${pad2(parsed.getMinutes())}`;
 }
 

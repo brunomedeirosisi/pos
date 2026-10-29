@@ -3,9 +3,8 @@ info:
   title: POS Platform API
   version: 0.1.0
   description: >
-    REST API for the POS platform providing checkout, backoffice, and
-    synchronization capabilities. The API is designed to be idempotent, secure,
-    and ready for hybrid deployments.
+    REST API for the POS platform providing checkout, backoffice, and synchronization capabilities. The API is designed
+    to be idempotent, secure, and ready for hybrid deployments.
 servers:
   - url: http://localhost:8080
     description: Local development
@@ -31,7 +30,8 @@ paths:
     post:
       security: []
       summary: Redeem an administrator-issued print enrollment capability
-      description: Code expires in 15 minutes and binds one printer to one unique agent credential. A lost response may be retried with the same code and credential after consumption. Revoked credentials cannot be revived.
+      description: Code expires in 15 minutes and binds one printer to one unique agent credential. A lost response may be
+        retried with the same code and credential after consumption. Revoked credentials cannot be revived.
       requestBody:
         required: true
         content:
@@ -42,7 +42,7 @@ paths:
               properties:
                 code: { type: string, pattern: '^[a-f0-9]{48}$' }
                 token: { type: string, pattern: '^[a-f0-9]{64}$', writeOnly: true }
-              required: [code, token]
+              required: [ code, token ]
       responses:
         '200': { description: 'printer_id, display_name and store_id; never echoes the credential.' }
         '403': { description: Invalid/expired enrollment or consumed by another credential or revoked. }
@@ -50,7 +50,11 @@ paths:
     get:
       summary: List printer identities and heartbeats (sales:read or printers:manage)
       responses:
-        '200': { description: 'mode, store_id and printers with id/display_name/enabled/online/last_seen_at; never returns tokens or hashes or enrollment codes.' }
+        '200':
+          {
+            description: 'mode, store_id and printers with id/display_name/enabled/online/last_seen_at; never returns tokens or
+              hashes or enrollment codes.'
+          }
   /api/v1/print-printers/enrollments:
     post:
       summary: Generate a 15-minute pairing code (printers:manage)
@@ -61,7 +65,7 @@ paths:
             schema:
               type: object
               properties: { display_name: { type: string, minLength: 1, maxLength: 100 } }
-              required: [display_name]
+              required: [ display_name ]
       responses:
         '201': { description: 'code, printer_id, expires_at and store_id. No-store response; the server stores only a hash.' }
         '403': { description: Missing management permission. }
@@ -69,25 +73,27 @@ paths:
   /api/v1/print-printers/{id}/revoke:
     post:
       summary: Revoke a Terminal credential without moving jobs (printers:manage)
-      parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+      parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ]
       responses:
         '204': { description: 'Access revoked. Jobs stay at the original destination; an output already started may complete.' }
         '400': { description: Unknown printer or attempt to revoke the principal printer. }
         '403': { description: Missing management permission. }
   /api/v1/print-agent/claim:
     post:
-      security: [{ printAgentToken: [] }]
+      security: [ { printAgentToken: [] } ]
       summary: Claim the next job exclusively for the authenticated printer
-      description: Queue mode only. One live reservation per printer. x-print-printer-id selects the credential scope (principal if omitted for legacy compatibility). Response contains job metadata plus content, locale and claim_token, or job=null. Content is bounded to 1 MiB.
+      description: Queue mode only. One live reservation per printer. x-print-printer-id selects the credential scope
+        (principal if omitted for legacy compatibility). Response contains job metadata plus content, locale and
+        claim_token, or job=null. Content is bounded to 1 MiB.
       responses:
         '200': { description: Claimed job or null; poll every two seconds while idle. }
         '403': { description: Invalid agent token. }
         '503': { description: Queue disabled. }
   /api/v1/print-agent/jobs/{id}/start:
     post:
-      security: [{ printAgentToken: [] }]
+      security: [ { printAgentToken: [] } ]
       summary: Acknowledge start BEFORE invoking the spooler
-      parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+      parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ]
       requestBody:
         required: true
         content:
@@ -95,15 +101,15 @@ paths:
             schema:
               type: object
               properties: { claim_token: { type: string, format: uuid } }
-              required: [claim_token]
+              required: [ claim_token ]
       responses:
         '204': { description: Current claim is now spooling. }
         '409': { description: Claim expired or invalid; do not print. }
   /api/v1/print-agent/jobs/{id}/finish:
     post:
-      security: [{ printAgentToken: [] }]
+      security: [ { printAgentToken: [] } ]
       summary: Acknowledge submitted/uncertain output or rejection before output
-      parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+      parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ]
       requestBody:
         required: true
         content:
@@ -112,29 +118,29 @@ paths:
               type: object
               properties:
                 claim_token: { type: string, format: uuid }
-                outcome: { type: string, enum: [submitted, uncertain, failed] }
-              required: [claim_token, outcome]
+                outcome: { type: string, enum: [ submitted, uncertain, failed ] }
+              required: [ claim_token, outcome ]
       responses:
         '204': { description: Idempotent acknowledgement; submitted means spooler accepted, not paper output. }
         '409': { description: Completion incompatible with claim/state. }
   /api/v1/print-agent/jobs/{id}:
     get:
-      security: [{ printAgentToken: [] }]
+      security: [ { printAgentToken: [] } ]
       summary: Inspect metadata during agent crash recovery
-      parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+      parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ]
       responses:
         '200': { description: Job metadata. }
         '404': { description: Job not found. }
   /api/v1/print-agent/status:
     get:
-      security: [{ printAgentToken: [] }]
+      security: [ { printAgentToken: [] } ]
       summary: Agent heartbeat and queue counts for local diagnostics
       responses:
         '200': { description: Last poll time, online flag (30 seconds) and counts by state. }
   /api/v1/print-jobs/{id}:
     get:
       summary: Job metadata for authenticated sales readers
-      parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+      parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ]
       responses:
         '200':
           description: Job status; no receipt content or claim secret.
@@ -145,7 +151,7 @@ paths:
   /api/v1/print-jobs/sale/{id}:
     get:
       summary: Last twenty jobs for this sale (sales:read)
-      parameters: [{ in: path, name: id, required: true, schema: { type: string, format: uuid } }]
+      parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ]
       responses:
         '200': { description: List of PrintJob metadata. }
   /api/v1/print-jobs/agent-status:
@@ -206,10 +212,9 @@ paths:
         - Auth
       summary: Authenticate user
       description: >
-        Authenticates the user, sets an HttpOnly session cookie for browser clients,
-        and returns the authenticated user profile. The backend still accepts Bearer
-        tokens for non-browser clients, but the web application does not persist the
-        JWT in browser storage anymore.
+        Authenticates the user, sets an HttpOnly session cookie for browser clients, and returns the authenticated user
+        profile. The backend still accepts Bearer tokens for non-browser clients, but the web application does not
+        persist the JWT in browser storage anymore.
       security: []
       requestBody:
         required: true
@@ -641,10 +646,10 @@ paths:
         - Customers
       summary: Payment history report
       description: >
-        Returns every selected payment in one repeatable-read snapshot, up to 5000 rows.
-        Legacy page/page_size query parameters are accepted but never truncate this report.
-        Use the payments list endpoint for pagination. Narrow filters if the selection exceeds
-        the report limit. Counts, unique identities and decimal sums are checked before returning.
+        Returns every selected payment in one repeatable-read snapshot, up to 5000 rows. Legacy page/page_size query
+        parameters are accepted but never truncate this report. Use the payments list endpoint for pagination. Narrow
+        filters if the selection exceeds the report limit. Counts, unique identities and decimal sums are checked before
+        returning.
       parameters:
         - $ref: '#/components/parameters/ResourceId'
         - in: query
@@ -694,13 +699,15 @@ paths:
         '404':
           $ref: '#/components/responses/NotFoundError'
         '413':
-          description: Selection exceeds 5000 payments; message payment_report_limit_exceeded, details.limit and details.count. No partial report is returned.
+          description: Selection exceeds 5000 payments; message payment_report_limit_exceeded, details.limit and details.count. No
+            partial report is returned.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '422':
-          description: Counts, identities or exact decimal sums cannot be reconciled; message payment_report_inconsistent. No partial report is returned.
+          description: Counts, identities or exact decimal sums cannot be reconciled; message payment_report_inconsistent. No
+            partial report is returned.
           content:
             application/json:
               schema:
@@ -940,6 +947,148 @@ paths:
           $ref: '#/components/responses/UnauthorizedError'
         '403':
           $ref: '#/components/responses/ForbiddenError'
+  /api/v1/payments:
+    get:
+      tags: [ Payments ]
+      summary: List customer payment history, including cancelled and legacy receipts
+      description: Requires catalog:read. Checkout amounts recorded directly on sales are not separate customer receipts.
+      parameters:
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+          description: Inclusive payment date lower bound.
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+          description: Inclusive payment date upper bound.
+        - in: query
+          name: received_by
+          schema: { type: string, format: uuid }
+          description: User who received the payment, not the seller assigned to a sale.
+        - in: query
+          name: customer_id
+          schema: { type: string, format: uuid }
+        - in: query
+          name: page
+          schema: { type: integer, minimum: 1, default: 1 }
+        - in: query
+          name: page_size
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200':
+          description: Ordered by payment date, creation time and ID descending.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ payments, pagination ]
+                properties:
+                  payments:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PaymentHistoryEntry'
+                  pagination:
+                    type: object
+                    required: [ page, page_size, total_items, total_pages ]
+                    properties:
+                      page: { type: integer }
+                      page_size: { type: integer }
+                      total_items: { type: integer }
+                      total_pages: { type: integer }
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+  /api/v1/payments/receivers:
+    get:
+      tags: [ Payments ]
+      summary: List IDs and names of receiving users represented in payment history
+      responses:
+        '200':
+          description: Requires catalog:read.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [ id, full_name ]
+                  properties:
+                    id: { type: string, format: uuid }
+                    full_name: { type: string }
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+  /api/v1/payments/{id}:
+    get:
+      tags: [ Payments ]
+      summary: View a payment using the existing customer receipt contract
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Requires catalog:read. Cancelled receipts retain their amount and cancellation metadata; their new balance
+            equals their previous balance.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerPaymentReceipt'
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+  /api/v1/payments/{id}/cancel:
+    post:
+      tags: [ Payments ]
+      summary: Cancel a customer payment and restore its outstanding amount
+      description: Requires catalog:read and the admin or manager role. Wildcard permissions do not bypass this role
+        restriction. The original receipt is preserved; cancellation metadata and audit are committed atomically. No
+        bank refund is initiated.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, maxLength: 500 }
+      responses:
+        '200':
+          description: Payment cancelled exactly once.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ payment, current_balance ]
+                properties:
+                  payment:
+                    $ref: '#/components/schemas/PaymentHistoryEntry'
+                  current_balance: { type: number }
+        '400':
+          $ref: '#/components/responses/BadRequestError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          $ref: '#/components/responses/NotFoundError'
+        '409':
+          description: Payment already cancelled; no second balance change or audit is recorded.
   /api/v1/sales:
     get:
       tags:
@@ -997,11 +1146,10 @@ paths:
         - Sales
       summary: Register sale
       description: >
-        The API recalculates official item prices, subtotal, discount validation,
-        total, pending amount, and change on the server. Client-submitted monetary
-        fields are treated as hints only and normalized from the product catalog
-        before persistence. Once the sale is completed, aggregated stock movements
-        are also written per product with type `venda`.
+        The API recalculates official item prices, subtotal, discount validation, total, pending amount, and change on
+        the server. Client-submitted monetary fields are treated as hints only and normalized from the product catalog
+        before persistence. Once the sale is completed, aggregated stock movements are also written per product with
+        type `venda`.
       requestBody:
         required: true
         content:
@@ -1109,11 +1257,10 @@ paths:
         - Sales
       summary: Cancel sale
       description: >
-        Cancels a sale when permitted by RBAC policy. Previously cancelled sales
-        return 404 to prevent idempotency violations. Successful cancellation also
-        writes the inverse stock movements with type `entrada`. If the cancellation
-        would create a customer credit balance because prior customer payments are
-        already registered, the API blocks the operation.
+        Cancels a sale when permitted by RBAC policy. Previously cancelled sales return 404 to prevent idempotency
+        violations. Successful cancellation also writes the inverse stock movements with type `entrada`. If the
+        cancellation would create a customer credit balance because prior customer payments are already registered, the
+        API blocks the operation.
       parameters:
         - $ref: '#/components/parameters/ResourceId'
       requestBody:
@@ -1329,9 +1476,11 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
   /api/v1/admin/backups/preflight:
     get:
-      tags: [Administration]
+      tags: [ Administration ]
       summary: Check backup tooling and storage readiness
-      description: Checks PostgreSQL 16 clients, writable storage, atomic publication support, free-space reserve and configured replica. Requires system:backup:read. A configured replica does not prove that its physical storage is off-host.
+      description: Checks PostgreSQL 16 clients, writable storage, atomic publication support, free-space reserve and
+        configured replica. Requires system:backup:read. A configured replica does not prove that its physical storage
+        is off-host.
       responses:
         '200':
           description: Backup tooling and configured storage are ready.
@@ -1339,10 +1488,10 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [ready, serverMajor, pgDumpVersion, psqlVersion, primary, replica, retentionCount]
+                required: [ ready, serverMajor, pgDumpVersion, psqlVersion, primary, replica, retentionCount ]
                 properties:
-                  ready: { type: boolean, enum: [true] }
-                  serverMajor: { type: integer, enum: [16] }
+                  ready: { type: boolean, enum: [ true ] }
+                  serverMajor: { type: integer, enum: [ 16 ] }
                   pgDumpVersion: { type: string }
                   psqlVersion: { type: string }
                   primary:
@@ -1364,7 +1513,7 @@ paths:
               schema:
                 type: object
                 properties:
-                  ready: { type: boolean, enum: [false] }
+                  ready: { type: boolean, enum: [ false ] }
                   message: { type: string }
         '401':
           $ref: '#/components/responses/UnauthorizedError'
@@ -1461,11 +1610,35 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
         '404':
           $ref: '#/components/responses/NotFoundError'
+  /api/v1/admin/restore/options:
+    get:
+      tags: [ Administration ]
+      summary: Read database restoration availability
+      description: Requires system:backup:restore. Uses the same server flag checked by POST restore.
+      responses:
+        '200':
+          description: Availability for the running API configuration.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ restoreEnabled ]
+                properties:
+                  restoreEnabled: { type: boolean }
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
   /api/v1/admin/restore:
     post:
       tags:
         - Administration
       summary: Restore backup
+      description: Requires system:backup:restore, current password, explicit confirmation and ENABLE_DATABASE_RESTORE.
+        Only unchanged copies of backups generated by this installation are accepted. Active requests/imports
+        prevent cutover (409); new requests are refused during recovery (503). Validates in a temporary database,
+        preserves a pinned snapshot and atomically restores public, applies migrations and revokes sessions.
+        The durable journal and catalog in pos_recovery survive restoration and support interrupted recovery.
       requestBody:
         required: true
         content:
@@ -1474,7 +1647,8 @@ paths:
               $ref: '#/components/schemas/RestoreRequest'
       responses:
         '200':
-          description: Restore accepted.
+          description: Completed restoration or automatic rollback. Check restored, rollbackApplied and status;
+            HTTP 200 alone does not mean that the requested backup was restored.
           content:
             application/json:
               schema:
@@ -1487,16 +1661,45 @@ paths:
           $ref: '#/components/responses/ForbiddenError'
         '404':
           $ref: '#/components/responses/NotFoundError'
+        '409':
+          description: Active database operations or another backup operation; wait and retry.
+        '422':
+          description: Unverified backup source or checksum mismatch; no SQL is executed.
+        '503':
+          description: Restoration in progress or recovery required; application remains in maintenance.
         '500':
           $ref: '#/components/responses/InternalError'
+  /api/v1/admin/import/legacy/options:
+    get:
+      tags: [ Administration ]
+      summary: Read import mode availability
+      description: Requires system:import:legacy. The overwrite checkbox requests a mode; it does not enable the server gate.
+        The returned flag is the same configuration checked when accepting and executing overwrite jobs.
+      responses:
+        '200':
+          description: Availability for the running API configuration.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ overwriteEnabled ]
+                properties:
+                  overwriteEnabled: { type: boolean }
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
   /api/v1/admin/import/legacy:
     post:
       tags:
         - Administration
       summary: Import legacy DBF data
       description: >
-        Uploads legacy DBF/DBT files (or a ZIP archive) and queues the ETL pipeline
-        to rebuild the normalized database from legacy staging tables.
+        Uploads legacy DBF/DBT files (or a ZIP/ARJ archive) and queues the ETL pipeline. Archive format is detected from
+        content, including ARJ content with a .zip filename. ARJ archives must be complete single volumes without
+        encryption; only DBF/DBT members are materialized. ARJ metadata, path and size limits are checked before
+        queueing. Full decoding and CRC verification run in the worker. The pipeline rebuilds the normalized database
+        from legacy staging tables.
       requestBody:
         required: true
         content:
@@ -1847,6 +2050,37 @@ components:
     CustomerPatch:
       allOf:
         - $ref: '#/components/schemas/CustomerWrite'
+    LegacyBalanceReconciliation:
+      type: object
+      description: Auditable reconciliation of historical transactions to CLIENTES.DBF.DEBITO. The adjustment is not a
+        customer payment and preserves subsequent operational transactions.
+      properties:
+        source_field:
+          type: string
+          enum: [ CLIENTES.DBF.DEBITO ]
+        source_balance:
+          type: number
+        reconstructed_balance:
+          type: number
+        adjustment:
+          type: number
+        source_sha256:
+          type: string
+        import_session_id:
+          type: string
+        reconciled_at:
+          type: string
+          format: date-time
+      required:
+        [
+          source_field,
+          source_balance,
+          reconstructed_balance,
+          adjustment,
+          source_sha256,
+          import_session_id,
+          reconciled_at
+        ]
     CustomerDetails:
       allOf:
         - $ref: '#/components/schemas/Customer'
@@ -1855,6 +2089,8 @@ components:
             totals:
               type: object
               properties:
+                legacy_balance:
+                  $ref: '#/components/schemas/LegacyBalanceReconciliation'
                 total_charges:
                   type: number
                   format: float
@@ -1917,11 +2153,33 @@ components:
           type: string
           format: date-time
           nullable: true
+        cancelled_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancelled_by:
+          type: string
+          format: uuid
+          nullable: true
+        cancelled_by_name:
+          type: string
+          nullable: true
+        cancellation_reason:
+          type: string
+          nullable: true
       required:
         - id
         - amount
         - method
         - source
+    PaymentHistoryEntry:
+      allOf:
+        - $ref: '#/components/schemas/CustomerPayment'
+        - type: object
+          required: [ customer_id, customer_name ]
+          properties:
+            customer_id: { type: string, format: uuid }
+            customer_name: { type: string }
     CustomerPaymentWrite:
       type: object
       properties:
@@ -1953,6 +2211,8 @@ components:
     CustomerPaymentsSummary:
       type: object
       properties:
+        legacy_balance:
+          $ref: '#/components/schemas/LegacyBalanceReconciliation'
         total_debt:
           type: number
           format: float
@@ -2021,6 +2281,8 @@ components:
         summary:
           type: object
           properties:
+            legacy_balance:
+              $ref: '#/components/schemas/LegacyBalanceReconciliation'
             total_debt:
               type: number
               format: float
@@ -2106,6 +2368,11 @@ components:
         balances:
           type: object
           properties:
+            legacy_balance:
+              $ref: '#/components/schemas/LegacyBalanceReconciliation'
+            historical_balance_unavailable:
+              type: boolean
+              description: True for reconciled legacy receipts whose historical before/after balances cannot be reconstructed safely.
             total_debt:
               type: number
               format: float
@@ -2115,12 +2382,14 @@ components:
             previous_balance:
               type: number
               format: float
+              nullable: true
             payment_amount:
               type: number
               format: float
             new_balance:
               type: number
               format: float
+              nullable: true
           required:
             - total_debt
             - total_paid
@@ -2156,15 +2425,15 @@ components:
           properties:
             complete:
               type: boolean
-              enum: [true]
+              enum: [ true ]
             row_count:
               type: integer
               minimum: 0
               maximum: 5000
             row_limit:
               type: integer
-              enum: [5000]
-          required: [complete, row_count, row_limit]
+              enum: [ 5000 ]
+          required: [ complete, row_count, row_limit ]
         summary:
           $ref: '#/components/schemas/CustomerPaymentsSummary'
       required:
@@ -2330,10 +2599,12 @@ components:
         emission_date:
           type: string
           format: date
+          description: Calendar date (YYYY-MM-DD), without a time or timezone conversion.
         paid_at:
           type: string
           format: date-time
           nullable: true
+          description: Actual transaction timestamp when known. Null for DBF imports, which contain only a calendar date.
         order_number:
           type: string
           nullable: true
@@ -2379,6 +2650,7 @@ components:
         pending_amount:
           type: number
           format: float
+          nullable: true
         status:
           type: string
           enum:
@@ -2443,14 +2715,12 @@ components:
     SaleCreate:
       type: object
       description: >
-        The checkout request only needs product ids, quantities, discount, and
-        payment information. The API recalculates official catalog prices and
-        final totals before saving the sale. Calculation policy line-half-up-money-2-quantity-3/v1:
-        round each line half up to cents, then sum lines and subtract the discount.
-        Money uses at most 2 decimal places; quantity uses at most 3. Excess precision,
-        positive lines rounded to zero and numeric(14,scale) overflow receive HTTP 400.
-        payment_method and amount_paid are required and cannot be null. Cash/card/bank/other
-        require full settlement. Credit requires customer_id and zero payment; credit_with_entry
+        The checkout request only needs product ids, quantities, discount, and payment information. The API recalculates
+        official catalog prices and final totals before saving the sale. Calculation policy
+        line-half-up-money-2-quantity-3/v1: round each line half up to cents, then sum lines and subtract the discount.
+        Money uses at most 2 decimal places; quantity uses at most 3. Excess precision, positive lines rounded to zero
+        and numeric(14,scale) overflow receive HTTP 400. payment_method and amount_paid are required and cannot be null.
+        Cash/card/bank/other require full settlement. Credit requires customer_id and zero payment; credit_with_entry
         requires customer_id and a positive payment no greater than the total.
       properties:
         emission_date:
@@ -2582,10 +2852,12 @@ components:
         emission_date:
           type: string
           format: date
+          description: Calendar date (YYYY-MM-DD), without a time or timezone conversion.
         paid_at:
           type: string
           format: date-time
           nullable: true
+          description: Actual transaction timestamp when known. Null for DBF imports; receipt time is shown as --:--.
         order_number:
           type: string
           nullable: true
@@ -2607,6 +2879,7 @@ components:
         pending_amount:
           type: number
           format: float
+          nullable: true
         payment_method:
           type: string
           enum:
@@ -2668,23 +2941,26 @@ components:
         - plain_text
     SaleReceiptPrintRequest:
       type: object
-      description: Queue mode requires request_id. printer_id defaults to principal for existing clients; changing destination on the same request UUID is rejected. Retry the same UUID for the same logical request; use a new UUID only for an explicit additional copy.
+      description: Queue mode requires request_id. printer_id defaults to principal for existing clients; changing destination
+        on the same request UUID is rejected. Retry the same UUID for the same logical request; use a new UUID only for
+        an explicit additional copy.
       properties:
         request_id: { type: string, format: uuid }
-        locale: { type: string, enum: [pt-BR, en] }
+        locale: { type: string, enum: [ pt-BR, en ] }
         copies: { type: integer, minimum: 1, maximum: 10 }
     SaleReceiptPrintResult:
       type: object
-      description: Queue mode returns job_id/status/requested_at and never asserts physical printing. Legacy direct mode returns printed_at as its acknowledgement time.
+      description: Queue mode returns job_id/status/requested_at and never asserts physical printing. Legacy direct mode
+        returns printed_at as its acknowledgement time.
       properties:
         receipt_code: { type: string }
         printer_model: { type: string }
         printed_at: { type: string, format: date-time }
         job_id: { type: string, format: uuid }
-        status: { type: string, enum: [queued, claimed, spooling, submitted, failed, uncertain] }
+        status: { type: string, enum: [ queued, claimed, spooling, submitted, failed, uncertain ] }
         requested_at: { type: string, format: date-time }
         copies: { type: integer }
-      required: [receipt_code, printer_model, copies]
+      required: [ receipt_code, printer_model, copies ]
     PrintJob:
       type: object
       description: Operator metadata only; content and claim_token are never included.
@@ -2693,7 +2969,7 @@ components:
         printer_name: { type: string }
         job_id: { type: string, format: uuid }
         sale_id: { type: string, format: uuid }
-        status: { type: string, enum: [queued, claimed, spooling, submitted, failed, uncertain] }
+        status: { type: string, enum: [ queued, claimed, spooling, submitted, failed, uncertain ] }
         copies: { type: integer }
         receipt_code: { type: string }
         requested_at: { type: string, format: date-time }
@@ -3013,6 +3289,25 @@ components:
       properties:
         status:
           type: string
+          enum: [ queued, running, retrying, completed, failed ]
+        stages:
+          type: array
+          description: Ordered worker stages. Progress counts completed checkpoints from this list, not rows or time remaining.
+          items:
+            type: string
+        currentStage:
+          type: string
+          nullable: true
+        retryCount:
+          type: integer
+          minimum: 0
+          description: Retries already started, excluding the first attempt.
+        lastErrorStage:
+          type: string
+          nullable: true
+        reconciliationVersion:
+          type: string
+          nullable: true
         overwrite:
           type: boolean
         createdAt:
@@ -3029,21 +3324,63 @@ components:
         summary:
           type: object
           nullable: true
+          description: Processed counts grouped by master, sales, customerPayments and stockMovements, plus customerBalances
+            certification against CLIENTES.DBF.DEBITO (customers, verified, adjusted, changed, sourceTotal,
+            adjustmentTotal and sourceSha256). Sales may include missing-product warnings; these do not change document
+            totals. Master counts can include updates.
         error:
           type: string
           nullable: true
         reportAvailable:
           type: boolean
+        reportJsonAvailable:
+          type: boolean
+        checkpoints:
+          type: array
+          items:
+            $ref: '#/components/schemas/LegacyImportCheckpoint'
         logs:
           type: array
           items:
             $ref: '#/components/schemas/LegacyImportLogEntry'
       required:
         - status
+        - stages
+        - currentStage
+        - retryCount
+        - checkpoints
         - overwrite
         - createdAt
         - reportAvailable
         - logs
+    LegacyImportCheckpoint:
+      type: object
+      properties:
+        stage:
+          type: string
+        status:
+          type: string
+          enum: [ pending, running, completed, failed ]
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        finishedAt:
+          type: string
+          format: date-time
+          nullable: true
+        summary:
+          description: Stage result (record count, object or null).
+        error:
+          type: string
+          nullable: true
+      required:
+        - stage
+        - status
+        - startedAt
+        - finishedAt
+        - summary
+        - error
     AuthenticatedUser:
       type: object
       properties:

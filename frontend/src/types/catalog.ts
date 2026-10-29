@@ -61,7 +61,18 @@ export type CustomerInput = {
   notes?: string | null;
 };
 
+export type LegacyBalanceReconciliation = {
+  source_field: 'CLIENTES.DBF.DEBITO';
+  source_balance: number;
+  reconstructed_balance: number;
+  adjustment: number;
+  source_sha256: string;
+  import_session_id: string;
+  reconciled_at: string;
+};
+
 export type CustomerTotals = {
+  legacy_balance?: LegacyBalanceReconciliation;
   total_charges: number;
   total_payments: number;
   current_balance: number;
@@ -85,6 +96,10 @@ export type CustomerPayment = {
   received_by_name: string | null;
   source: 'manual' | 'legacy';
   created_at: string | null;
+  cancelled_at?: string | null;
+  cancelled_by?: string | null;
+  cancelled_by_name?: string | null;
+  cancellation_reason?: string | null;
 };
 
 export type CustomerPaymentInput = {
@@ -106,6 +121,7 @@ export type CustomerPaymentsFilters = {
 };
 
 export type CustomerPaymentsSummary = {
+  legacy_balance?: LegacyBalanceReconciliation;
   total_debt: number;
   total_paid: number;
   current_balance: number;
@@ -133,6 +149,7 @@ export type CustomerPaymentsResponse = {
 export type CustomerPaymentRegisterResponse = {
   payment: CustomerPayment;
   summary: {
+    legacy_balance?: LegacyBalanceReconciliation;
     total_debt: number;
     total_paid: number;
     previous_balance: number;
@@ -157,11 +174,13 @@ export type CustomerPaymentReceipt = {
   customer: CustomerSummary;
   payment: CustomerPayment & { code: string };
   balances: {
+    legacy_balance?: LegacyBalanceReconciliation;
+    historical_balance_unavailable?: boolean;
     total_debt: number;
     total_paid: number;
-    previous_balance: number;
+    previous_balance: number | null;
     payment_amount: number;
-    new_balance: number;
+    new_balance: number | null;
   };
   generated_at: string;
 };

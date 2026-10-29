@@ -4,6 +4,7 @@ import path from 'node:path';
 import archiver from 'archiver';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { prepareLegacyFiles } from './archive-files.js';
+import { assertLegacyZipFormat } from '../../utils/upload-validation.js';
 const policy = { maxEntries: 20, maxBytes: 100, maxFileBytes: 80, maxDepth: 4, timeoutMs: 1000 };
 let root: string;
 async function archive(name: string, entries: Array<{ name: string; value: string }>) {
@@ -18,6 +19,20 @@ afterEach(async () => {
   await fs.rm(root, { recursive: true, force: true });
 });
 describe('legacy archive set budgets', () => {
+  it('recognizes a real ZIP directory without extracting, changing or deleting the upload', async () => {
+    await archive('legacy.zip', [{ name: 'PRODUTO.DBF', value: 'fixture' }]);
+    const source = path.join(root, 'legacy.zip');
+    const before = await fs.readFile(source);
+    await assertLegacyZipFormat(source);
+    expect(await fs.readFile(source)).toEqual(before);
+    expect(await fs.readdir(root)).toEqual(['legacy.zip']);
+  });
+  it.each([Buffer.from([0x60, 0xea, 0x2a, 0x00]), Buffer.from('PK\x03\x04truncated')])('rejects a renamed non-ZIP or truncated ZIP before queueing: %j', async (bytes) => {
+    const source = path.join(root, 'legacy.zip');
+    await fs.writeFile(source, bytes);
+    await expect(assertLegacyZipFormat(source)).rejects.toMatchObject({ statusCode: 400, message: 'invalid_legacy_zip' });
+    expect(await fs.readFile(source)).toEqual(bytes);
+  });
   it('accepts a synthetic DBF/DBT set and can re-read it on retry', async () => {
     await archive('legacy.zip', [{ name: 'PRODUTO.DBF', value: 'fixture' }, { name: 'CLIENTES.DBT', value: 'memo' }]);
     expect([...(await prepareLegacyFiles(root, policy)).keys()].sort()).toEqual(['CLIENTES.DBT', 'PRODUTO.DBF']);

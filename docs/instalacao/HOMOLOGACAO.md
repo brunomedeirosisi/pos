@@ -4,11 +4,13 @@ Use este roteiro com o responsável da loja antes de liberar vendas reais. Regis
 
 ## Evidências automatizadas e seus limites
 
-O repositório oferece três camadas de validação reproduzíveis:
+O repositório oferece quatro camadas de validação reproduzíveis:
 
 1. `Test-Installer.ps1`: parser PowerShell, DPAPI real, ACL real em pasta temporária, argumentos de processo, manifesto/hashes/traversal, compilação e execução do launcher e construção oculta da interface. Instalação, reparo e Terminal usam simulações para Docker, certificados, firewall, atalhos e impressão.
 2. `infra/test-disposable.mjs --docker --images --backups --seeds`: lint, controles de lint, tipos, testes, builds, PostgreSQL/Redis descartáveis, imagens finais, autenticação, seed e backup/restore/recriação reais em ambiente isolado.
 3. `infra/installer/test-store.mjs`: imagens empacotadas e Compose de loja em projeto Docker isolado; HTTPS com CA fornecida apenas ao processo de teste, duas sessões, fila persistente e agente com saída física simulada. Não instala CA no Windows nem imprime papel.
+
+4. `Test-CloudHttps.ps1`: transporte HTTPS real em loopback, rejeição de certificado não confiável/nome divergente, recusa de redirects, limites de resposta e erros sanitizados. Não importa CA no Windows; o certificado aceito existe somente no handler do teste.
 
 Os resultados de uma execução são registrados em `docs/test-evidence` e no registro técnico da implementação. Nenhum teste automatizado substitui a aceitação física abaixo. Atualizações futuras precisam de um ensaio de migração específico antes de declarar `CompatibleFrom`.
 
@@ -96,3 +98,23 @@ Guias: [uso](USO.md) e [técnico](TECNICO.md).
 - [ ] Rever permissões/revogações/journals em ensaio de restauração isolado. Backup SQL não transporta segredos DPAPI entre máquinas.
 
 Roteiro detalhado: [IMPRESSORAS.md](IMPRESSORAS.md).
+
+## Caixas em Modo Nuvem
+
+- [ ] Registrar URL HTTPS final e UUID recebidos por canal confiável; testar certificado público/cadeia nos dois Windows e no worker Node.
+- [ ] Conferir frontend .3, migrações e PRINT_MODE=queue no servidor publicado. Banco/Redis privados e backups/restauração homologados pelo responsável técnico.
+- [ ] Instalar POS-Nuvem inteiro em ambos os caixas, na conta operacional. Confirmar que não instala Docker, CA local, firewall ou listener.
+- [ ] Parear cada impressora com código próprio; testar destino correto, saída física e isolamento entre as filas.
+- [ ] No caixa sem impressora, confirmar escolha obrigatória de destino antes de imprimir; depois selecionar a impressora do outro caixa.
+- [ ] Reiniciar Windows, entrar na conta e testar retomada; Parar-Terminal deve manter parado até -Resume.
+- [ ] Testar queda de internet e energia durante impressão; reconciliar papel/journal/histórico antes de nova cópia. Não há venda offline.
+- [ ] Em migração, validar dados e filas antes de desativar o Principal; preservar POSStore/POSTerminal e impedir dois agentes na mesma impressora física.
+- [ ] Registrar limites de conectividade, responsáveis pela hospedagem, restauração e suporte. Seguir [NUVEM.md](NUVEM.md).
+
+## Publicação temporária do localhost para teste
+
+- [ ] Seguir [TESTE-INTERNET.md](TESTE-INTERNET.md) usando o Compose da raiz, dados sintéticos e as duas janelas PowerShell.
+- [ ] Validar healthcheck local com a CA e healthcheck público com HTTPS normal; testar login em uma rede externa.
+- [ ] Conferir a origem efetiva na API após recriação; manter banco, Redis, frontend, proxy e conector em execução.
+- [ ] Encerrar o túnel e restaurar/conferir CORS sem remover volumes; confirmar que o acesso local continua funcionando.
+- [ ] Registrar separadamente qualquer ensaio de instalador/impressora: navegador acessível não comprova UUID, fila, pareamento ou saída física.

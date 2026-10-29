@@ -29,24 +29,29 @@ function invalidArchive(): Error {
   return badRequest('invalid_or_unsafe_archive');
 }
 
-function validateName(entry: Entry, policy: ArchivePolicy): string {
-  const name = entry.fileName;
-  const parts = name.replace(/\/$/, '').split('/');
-  const mode = entry.externalFileAttributes >>> 16;
-  const type = mode & 0xf000;
-  const directory = name.endsWith('/');
+export function validateArchiveName(name: string, directory: boolean, policy: ArchivePolicy): string {
+  const parts = (directory ? name.replace(/\/$/, '') : name).split('/');
   if (
     !name || name.length > 512 || /[\\\x00-\x1f:]/.test(name) || path.posix.isAbsolute(name) ||
     parts.length > policy.maxDepth ||
     parts.some((part) => !part || part === '.' || part === '..' || /[. ]$/.test(part) ||
-      /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part)) ||
+      /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part))
+  ) throw invalidArchive();
+  return parts.join('/').normalize('NFC');
+}
+
+function validateName(entry: Entry, policy: ArchivePolicy): string {
+  const directory = entry.fileName.endsWith('/');
+  const name = validateArchiveName(entry.fileName, directory, policy);
+  const type = (entry.externalFileAttributes >>> 16) & 0xf000;
+  if (
     (type !== 0 && type !== (directory ? 0x4000 : 0x8000)) ||
     (entry.generalPurposeBitFlag & 1) !== 0 ||
     ![0, 8].includes(entry.compressionMethod) ||
     !Number.isSafeInteger(entry.uncompressedSize) || entry.uncompressedSize < 0 ||
     entry.uncompressedSize > policy.maxFileBytes || (directory && entry.uncompressedSize !== 0)
   ) throw invalidArchive();
-  return parts.join('/').normalize('NFC');
+  return name;
 }
 
 async function inspect(zip: ZipFile, policy: ArchivePolicy, signal: AbortSignal): Promise<Array<{ entry: Entry; name: string }>> {
@@ -91,7 +96,7 @@ async function inspect(zip: ZipFile, policy: ArchivePolicy, signal: AbortSignal)
   });
 }
 
-async function ensureDirectory(root: string, name: string): Promise<void> {
+export async function ensureDirectory(root: string, name: string): Promise<void> {
   let current = root;
   for (const part of name.split('/').filter(Boolean)) {
     current = path.join(current, part);

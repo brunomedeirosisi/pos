@@ -10,6 +10,15 @@ describe('date utils', () => {
     expect(formatDateTimeDdMmYyyy('2026-04-26T10:35:00')).toBe('26/04/2026 10:35');
   });
 
+  it.each([
+    ['2026-01-01', '01/01/2026'],
+    ['2018-11-04', '04/11/2018'],
+    ['2024-02-29', '29/02/2024'],
+    ['04/11/2018', '04/11/2018'],
+  ])('does not invent a time for calendar date %s', (date, expected) => {
+    expect(formatDateTimeDdMmYyyy(date)).toBe(expected);
+  });
+
   it('keeps invalid values untouched', () => {
     expect(formatDateDdMmYyyy('not-a-date')).toBe('not-a-date');
   });

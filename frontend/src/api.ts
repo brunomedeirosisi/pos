@@ -44,6 +44,17 @@ const apiValidationFieldKeys: Record<string, string> = {
 };
 
 const apiMessageTranslationKeys: Record<string, string> = {
+  database_restore_disabled_pending_recovery_validation: 'backups.restoreDisabled',
+  database_restore_in_progress: 'backups.maintenance',
+  restore_database_busy: 'backups.databaseBusy',
+  backup_source_not_verified: 'backups.sourceNotVerified',
+  backup_required_for_recovery: 'backups.pinnedBackup',
+  database_restore_recovery_required: 'backups.recoveryRequired',
+  restore_failed_rollback_failed: 'backups.recoveryRequired',
+  'backup checksum mismatch': 'backups.checksumMismatch',
+  payment_not_found: 'paymentHistory.notFound',
+  payment_already_cancelled: 'paymentHistory.alreadyCancelled',
+  payment_cancellation_forbidden: 'paymentHistory.cancellationForbidden',
   payment_report_limit_exceeded: 'apiErrors.paymentReportLimitExceeded',
   payment_report_inconsistent: 'apiErrors.paymentReportInconsistent',
   'sale cannot be cancelled because it would create a customer credit. Reverse customer payments or refund amounts first':

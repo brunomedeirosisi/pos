@@ -8,7 +8,7 @@ export function PrinterDestinationSelector({ selection }: { selection: PrinterSe
   return <div className="form-grid vertical">
     <label>{t('printers.destination')}
       <select value={selection.value} onChange={event => selection.onChange(event.target.value)}>
-        {!selection.valid && <option value={selection.value} disabled>{t('printers.unavailable')}</option>}
+        {!selection.valid && <option value={selection.value} disabled>{t(selection.value === 'choose' ? 'printers.selectDestination' : 'printers.unavailable')}</option>}
         {selection.printers.filter(p=>p.enabled).map(p=><option key={p.id} value={p.id}>{p.display_name} — {t(p.online ? 'printers.online' : 'printers.offline')}</option>)}
       </select>
     </label>
