@@ -3,9 +3,10 @@ import {
   decimalNumber,
   lineTotalCents,
   isDecimalValue,
-} from '../utils/checkout-decimal';
-import { create } from 'zustand';
-import type { Product } from '../types/catalog';
+  isCheckoutQuantity,
+} from "../utils/checkout-decimal";
+import { create } from "zustand";
+import type { Product } from "../types/catalog";
 
 type CartItem = {
   productId: string;
@@ -23,7 +24,10 @@ type PosState = {
   sellerId: string | null;
   paymentTermId: string | null;
   discount: number;
-  addProduct: (product: Product, priceField?: 'price_cash' | 'price_base') => void;
+  addProduct: (
+    product: Product,
+    priceField?: "price_cash" | "price_base",
+  ) => void;
   updateQuantity: (productId: string, quantity: number) => void;
   removeItem: (productId: string) => void;
   reset: () => void;
@@ -36,6 +40,8 @@ type PosState = {
 };
 
 function checkedCart(items: CartItem[]): CartItem[] {
+  if (items.some((item) => !isCheckoutQuantity(item.quantity)))
+    throw new RangeError("Invalid quantity");
   decimalNumber(
     items.reduce((sum, item) => sum + decimalUnits(item.total, 2), 0n),
     2,
@@ -50,18 +56,24 @@ export const usePosStore = create<PosState>((set, get) => ({
   paymentTermId: null,
   discount: 0,
 
-  addProduct: (product, priceField = 'price_cash') =>
+  addProduct: (product, priceField = "price_cash") =>
     set((state) => {
-      const fallbackPrice = priceField === 'price_cash' ? product.price_base : product.price_cash;
+      const fallbackPrice =
+        priceField === "price_cash" ? product.price_base : product.price_cash;
       const unitPrice = Number(product[priceField] ?? fallbackPrice ?? 0) || 0;
       decimalUnits(unitPrice, 2);
-      const existing = state.items.find((item) => item.productId === product.id);
+      const existing = state.items.find(
+        (item) => item.productId === product.id,
+      );
       if (existing) {
         const updatedItems = state.items.map((item) =>
           item.productId === product.id
             ? {
                 ...item,
-                quantity: decimalNumber(decimalUnits(item.quantity, 3) + 1000n, 3),
+                quantity: decimalNumber(
+                  decimalUnits(item.quantity, 3) + 1000n,
+                  3,
+                ),
                 unitPrice,
                 priceCash: product.price_cash ?? null,
                 priceBase: product.price_base ?? null,
@@ -96,10 +108,8 @@ export const usePosStore = create<PosState>((set, get) => ({
 
   updateQuantity: (productId, quantity) =>
     set((state) => {
-      if (!isDecimalValue(quantity, 3)) throw new RangeError('Invalid quantity');
-      if (quantity <= 0) {
-        return { items: state.items.filter((item) => item.productId !== productId) };
-      }
+      if (!isCheckoutQuantity(quantity))
+        throw new RangeError("Invalid quantity");
 
       return {
         items: checkedCart(
@@ -108,7 +118,10 @@ export const usePosStore = create<PosState>((set, get) => ({
               ? {
                   ...item,
                   quantity,
-                  total: decimalNumber(lineTotalCents(quantity, item.unitPrice), 2),
+                  total: decimalNumber(
+                    lineTotalCents(quantity, item.unitPrice),
+                    2,
+                  ),
                 }
               : item,
           ),
@@ -133,7 +146,8 @@ export const usePosStore = create<PosState>((set, get) => ({
   setCustomer: (id) => set({ customerId: id }),
   setSeller: (id) => set({ sellerId: id }),
   setPaymentTerm: (id) => set({ paymentTermId: id }),
-  setDiscount: (value) => set((state) => (isDecimalValue(value, 2) ? { discount: value } : state)),
+  setDiscount: (value) =>
+    set((state) => (isDecimalValue(value, 2) ? { discount: value } : state)),
 
   getSubtotal: () =>
     decimalNumber(

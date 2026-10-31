@@ -1,5 +1,10 @@
-import { decimalUnits, decimalNumber, lineTotalCents } from '../../utils/checkout-decimal';
-import type { SalePaymentMethod } from '../../types/sales';
+import {
+  decimalUnits,
+  decimalNumber,
+  lineTotalCents,
+  isCheckoutQuantity,
+} from "../../utils/checkout-decimal";
+import type { SalePaymentMethod } from "../../types/sales";
 
 type CheckoutPricedItem = {
   productId: string;
@@ -19,25 +24,28 @@ type CheckoutSourceItem = {
   quantity: number;
 };
 
-function prefersBasePrice(paymentMethod: SalePaymentMethod): boolean {
-  return paymentMethod !== 'cash';
+/** Account credits offset new debt; immediate payments leave existing debt intact. */
+export function projectCustomerDebtAfterSale(
+  currentBalance: number,
+  pendingAmount: number,
+  paymentMethod: SalePaymentMethod,
+): number {
+  const addedDebt =
+    paymentMethod === "credit" || paymentMethod === "credit_with_entry"
+      ? pendingAmount
+      : 0;
+  return Math.max(0, Number((currentBalance + addedDebt).toFixed(2)));
 }
 
 function normalizePrice(value: number | null | undefined): number | null {
-  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 export function resolveCheckoutUnitPrice(
-  item: Pick<CheckoutSourceItem, 'priceCash' | 'priceBase'>,
-  paymentMethod: SalePaymentMethod,
+  item: Pick<CheckoutSourceItem, "priceCash" | "priceBase">,
+  _paymentMethod: SalePaymentMethod,
 ): number {
-  const primary = prefersBasePrice(paymentMethod)
-    ? normalizePrice(item.priceBase)
-    : normalizePrice(item.priceCash);
-  const fallback = prefersBasePrice(paymentMethod)
-    ? normalizePrice(item.priceCash)
-    : normalizePrice(item.priceBase);
-  return primary ?? fallback ?? 0;
+  return normalizePrice(item.priceCash) ?? normalizePrice(item.priceBase) ?? 0;
 }
 
 export function buildCheckoutPricingPreview(
@@ -59,11 +67,15 @@ export function buildCheckoutPricingPreview(
     };
   });
 
-  const subtotalCents = pricedItems.reduce((sum, item) => sum + decimalUnits(item.total, 2), 0n);
+  const subtotalCents = pricedItems.reduce(
+    (sum, item) => sum + decimalUnits(item.total, 2),
+    0n,
+  );
   const discountCents = decimalUnits(discount, 2);
   const subtotal = decimalNumber(subtotalCents, 2);
   const normalizedDiscount = decimalNumber(discountCents, 2);
-  if (discountCents > subtotalCents) throw new RangeError('Discount exceeds subtotal');
+  if (discountCents > subtotalCents)
+    throw new RangeError("Discount exceeds subtotal");
   const total = decimalNumber(subtotalCents - discountCents, 2);
 
   return {
@@ -75,7 +87,10 @@ export function buildCheckoutPricingPreview(
 }
 
 /** Invalid catalog/quantity ranges block checkout without crashing the page. */
-export function tryCheckoutPricingPreview(...args: Parameters<typeof buildCheckoutPricingPreview>) {
+export function tryCheckoutPricingPreview(
+  ...args: Parameters<typeof buildCheckoutPricingPreview>
+) {
+  if (args[0].some((item) => !isCheckoutQuantity(item.quantity))) return null;
   try {
     return buildCheckoutPricingPreview(...args);
   } catch (error) {

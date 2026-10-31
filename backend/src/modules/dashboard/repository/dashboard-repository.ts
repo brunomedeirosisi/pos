@@ -1,4 +1,5 @@
-import { query } from '../../../db.js';
+import { queryPage, type PageQuery } from "../../../utils/query-page.js";
+import { query } from "../../../db.js";
 import type {
   CategoriesMetric,
   DashboardFilterDto,
@@ -6,16 +7,25 @@ import type {
   ProductAbcMetric,
   SellerRankingSort,
   TopProductMetric,
-} from '../contracts/dashboard-contracts.js';
+} from "../contracts/dashboard-contracts.js";
 import {
   DEFAULT_TIMEZONE,
   groupSmallCategories,
   resolveProductMetricExpression,
   resolveSellerOrderBy,
   weekdayNameFromIso,
-} from '../domain/dashboard-domain.js';
+} from "../domain/dashboard-domain.js";
 
-type FilterParams = [Date | null, Date | null, string, string | null, string | null, string | null, string | null, string | null];
+type FilterParams = [
+  string | null,
+  string | null,
+  string,
+  string | null,
+  string | null,
+  string | null,
+  string | null,
+  string | null,
+];
 
 type Decimalish = string | number | null;
 
@@ -75,13 +85,15 @@ const ITEM_COST_SQL = `coalesce(fsi.cost_price, fsi.average_cost, fsi.price_base
 
 function toNumber(value: Decimalish): number {
   if (value == null) return 0;
-  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function toDateOrNull(value?: Date): Date | null {
-  return value ?? null;
+function toDateOrNull(value?: Date): string | null {
+  // HTTP calendar days are parsed at UTC midnight; pg must receive the day,
+  // rather than serializing that Date in the API process's local timezone.
+  return value?.toISOString().slice(0, 10) ?? null;
 }
 
 function buildFilterParams(filters: DashboardFilterDto): FilterParams {
@@ -127,7 +139,7 @@ export type DashboardCriticalStockItemDto = {
   sku: string | null;
   currentStock: number;
   minimumStock: number;
-  status: 'OK' | 'LOW' | 'OUT_OF_STOCK';
+  status: "OK" | "LOW" | "OUT_OF_STOCK";
 };
 
 export type DashboardTopProductDto = {
@@ -191,7 +203,7 @@ export type DashboardProductAbcItemDto = {
   margin: number;
   participationPercentage: number;
   accumulatedPercentage: number;
-  abcClass: 'A' | 'B' | 'C';
+  abcClass: "A" | "B" | "C";
 };
 
 export type DashboardProductAbcResponseDto = {
@@ -200,18 +212,264 @@ export type DashboardProductAbcResponseDto = {
   items: DashboardProductAbcItemDto[];
 };
 
+function sellerRankingSql(sortBy: SellerRankingSort): string {
+  const orderBySql =
+    resolveSellerOrderBy(sortBy) +
+    ", coalesce(seller_id::text,'__null__') desc";
+  return `${FILTERED_SALES_CTE},
+       seller_revenue as (
+         select
+           coalesce(fs.seller_id::text, '__null__') as seller_key,
+           fs.seller_id,
+           coalesce(seller_ref.name, 'Sem vendedor') as seller_name,
+           sum(${SALE_REVENUE_SQL}) as revenue,
+           count(*) as orders
+         from filtered_sales fs
+         left join seller seller_ref on seller_ref.id = fs.seller_id
+         group by coalesce(fs.seller_id::text, '__null__'), fs.seller_id, seller_ref.name
+       ),
+       seller_margin as (
+         select
+           coalesce(fs.seller_id::text, '__null__') as seller_key,
+           sum(fsi.item_total) as items_revenue,
+           sum(fsi.quantity * coalesce(${ITEM_COST_SQL}, 0)) as cmv
+         from filtered_sales fs
+         left join filtered_sale_items fsi on fsi.sale_id = fs.id
+         group by coalesce(fs.seller_id::text, '__null__')
+       ),
+       joined as (
+         select
+           sr.seller_id,
+           sr.seller_name,
+           sr.revenue,
+           sr.orders,
+           case when sr.orders = 0 then 0 else sr.revenue / sr.orders end as average_ticket,
+           case
+             when coalesce(sm.items_revenue, 0) <= 0 then 0
+             else ((coalesce(sm.items_revenue, 0) - coalesce(sm.cmv, 0)) / sm.items_revenue) * 100
+           end as gross_margin_percentage
+         from seller_revenue sr
+         left join seller_margin sm on sm.seller_key = sr.seller_key
+       ),
+       ranked as (
+         select
+           j.*,
+           case
+             when coalesce(sum(j.revenue) over(), 0) <= 0 then 0
+             else (j.revenue / sum(j.revenue) over()) * 100
+           end as participation_percentage,
+           row_number() over (order by ${orderBySql}) as rank
+         from joined j
+       )
+       select
+         seller_id,
+         seller_name,
+         revenue,
+         orders,
+         average_ticket,
+         gross_margin_percentage,
+         participation_percentage,
+         rank
+       from ranked`;
+}
+
+function productAbcSql(metric: ProductAbcMetric): string {
+  const metricExpression = resolveProductMetricExpression(metric);
+  return `${FILTERED_SALES_CTE},
+       product_metrics as (
+         select
+           fsi.product_id,
+           fsi.product_name,
+           nullif(trim(fsi.sku), '') as sku,
+           fsi.category_name,
+           sum(fsi.quantity) as quantity_sold,
+           sum(fsi.item_total) as revenue,
+           sum(fsi.item_total - (fsi.quantity * coalesce(${ITEM_COST_SQL}, 0))) as margin
+         from filtered_sale_items fsi
+         group by fsi.product_id, fsi.product_name, fsi.sku, fsi.category_name
+       ),
+       ranked as (
+         select
+           pm.*,
+           (${metricExpression}) as metric_value,
+           sum(${metricExpression}) over () as metric_total,
+           sum(${metricExpression}) over (order by ${metricExpression} desc, pm.product_id asc) as metric_accumulated
+         from product_metrics pm
+       ),
+       classified as (
+         select
+           ranked.*,
+           case when metric_total <= 0 then 0 else (metric_value / metric_total) * 100 end as participation_percentage,
+           case when metric_total <= 0 then 0 else (metric_accumulated / metric_total) * 100 end as accumulated_percentage
+         from ranked
+       )
+       select
+         product_id,
+         product_name,
+         sku,
+         category_name,
+         quantity_sold,
+         revenue,
+         margin,
+         participation_percentage,
+         accumulated_percentage,
+         case
+           when accumulated_percentage <= 80 then 'A'
+           when accumulated_percentage <= 95 then 'B'
+           else 'C'
+         end as abc_class,
+         count(*) over() as total_count
+       from classified`;
+}
+
+function criticalStockSql(): string {
+  return `with stock_position as (
+         select
+           p.id as product_id,
+           p.name as product_name,
+           nullif(trim(p.reference), '') as sku,
+           coalesce(p.min_stock, 0) as minimum_stock,
+           coalesce(
+             sum(
+               case
+                 when sm.type is null then 0
+                 when lower(trim(sm.type)) in ('e', 'entrada', 'in', 'credit', 'compra') then abs(coalesce(sm.quantity, 0))
+                 when lower(trim(sm.type)) in ('s', 'saida', 'out', 'debit', 'venda') then -abs(coalesce(sm.quantity, 0))
+                 else coalesce(sm.quantity, 0)
+               end
+             ),
+             0
+           ) as current_stock
+         from product p
+         left join stock_movement sm on sm.product_id = p.id
+         where ($1::uuid is null or p.group_id = $1::uuid)
+         group by p.id, p.name, p.reference, p.min_stock
+       )
+       select product_id, product_name, sku, current_stock, minimum_stock
+       from stock_position
+       where minimum_stock > 0
+         and current_stock <= minimum_stock`;
+}
+
 export class PgDashboardRepository {
+  async getListPage(
+    kind: "seller-ranking" | "product-abc" | "critical-stock",
+    filters: DashboardFilterDto,
+    input: PageQuery,
+    metric: ProductAbcMetric = "revenue",
+  ) {
+    const sql =
+      kind === "seller-ranking"
+        ? sellerRankingSql((input.sortBy ?? "revenue") as SellerRankingSort)
+        : kind === "product-abc"
+          ? productAbcSql(metric)
+          : criticalStockSql();
+    const sorts: Record<string, string> =
+      kind === "seller-ranking"
+        ? {
+            revenue: "rank",
+            orders: "rank",
+            averageTicket: "rank",
+            margin: "rank",
+          }
+        : kind === "product-abc"
+          ? { revenue: "revenue", quantity: "quantity_sold", margin: "margin" }
+          : {
+              shortage: "minimum_stock-current_stock",
+              name: "lower(product_name)",
+            };
+    const page = await queryPage<Record<string, any>>({
+      sql: `select metrics.*,${kind === "seller-ranking" ? "coalesce(seller_id::text,'__null__')" : "product_id::text"} as id from (${sql}) metrics`,
+      materialized: true,
+      tieBreakerOrder: kind === "product-abc" ? "asc" : undefined,
+      params:
+        kind === "critical-stock"
+          ? [filters.categoryId ?? null]
+          : buildFilterParams(filters),
+      input:
+        kind === "seller-ranking"
+          ? { ...input, sortOrder: input.sortOrder === "asc" ? "desc" : "asc" }
+          : input,
+      sorts,
+      defaultSort:
+        kind === "critical-stock"
+          ? "shortage"
+          : kind === "product-abc"
+            ? metric
+            : "revenue",
+      defaultOrder: "desc",
+    });
+    return {
+      ...page,
+      items: page.items.map((row) =>
+        kind === "seller-ranking"
+          ? {
+              sellerId: row.seller_id,
+              sellerName: row.seller_name,
+              revenue: Number(Number(row.revenue).toFixed(2)),
+              orders: Number(row.orders),
+              averageTicket: Number(Number(row.average_ticket).toFixed(2)),
+              grossMarginPercentage: Number(
+                Number(row.gross_margin_percentage).toFixed(2),
+              ),
+              participationPercentage: Number(
+                Number(row.participation_percentage).toFixed(2),
+              ),
+              rank: Number(row.rank),
+            }
+          : kind === "product-abc"
+            ? {
+                productId: row.product_id,
+                productName: row.product_name,
+                sku: row.sku,
+                categoryName: row.category_name,
+                quantitySold: Number(Number(row.quantity_sold).toFixed(3)),
+                revenue: Number(Number(row.revenue).toFixed(2)),
+                margin: Number(Number(row.margin).toFixed(2)),
+                participationPercentage: Number(
+                  Number(row.participation_percentage).toFixed(2),
+                ),
+                accumulatedPercentage: Number(
+                  Number(row.accumulated_percentage).toFixed(2),
+                ),
+                abcClass: row.abc_class,
+              }
+            : {
+                productId: row.product_id,
+                productName: row.product_name,
+                sku: row.sku,
+                currentStock: Number(Number(row.current_stock).toFixed(3)),
+                minimumStock: Number(Number(row.minimum_stock).toFixed(3)),
+                status: Number(row.current_stock) <= 0 ? "OUT_OF_STOCK" : "LOW",
+              },
+      ),
+    };
+  }
   async listFilterOptions(): Promise<DashboardFilterOptionsDto> {
-    const [storesResult, sellersResult, categoriesResult, paymentTermsResult, channelsResult] = await Promise.all([
+    const [
+      storesResult,
+      sellersResult,
+      categoriesResult,
+      paymentTermsResult,
+      channelsResult,
+    ] = await Promise.all([
       query<{ id: string | null }>(
         `select distinct nullif(trim(store_id), '') as id
          from sale
-         order by id nulls last`
+         order by id nulls last`,
       ),
-      query<{ id: string; name: string }>(`select id, name from seller order by name asc`),
-      query<{ id: string; name: string }>(`select id, name from product_group order by name asc`),
-      query<{ id: string; name: string }>(`select id, name from payment_term order by name asc`),
-      query<{ id: string | null }>(`select distinct nullif(trim(channel), '') as id from sale order by id nulls last`),
+      query<{ id: string; name: string }>(
+        `select id, name from seller order by name asc`,
+      ),
+      query<{ id: string; name: string }>(
+        `select id, name from product_group order by name asc`,
+      ),
+      query<{ id: string; name: string }>(
+        `select id, name from payment_term order by name asc`,
+      ),
+      query<{ id: string | null }>(
+        `select distinct nullif(trim(channel), '') as id from sale order by id nulls last`,
+      ),
     ]);
 
     const stores = storesResult.rows
@@ -219,19 +477,19 @@ export class PgDashboardRepository {
       .filter((id): id is string => Boolean(id))
       .map((id) => ({ id, name: id }));
     if (!stores.length) {
-      stores.push({ id: 'main', name: 'Main' });
+      stores.push({ id: "main", name: "Main" });
     }
 
     const knownChannels = [
-      { id: 'pos', name: 'POS' },
-      { id: 'ecommerce', name: 'E-commerce' },
-      { id: 'whatsapp', name: 'WhatsApp' },
-      { id: 'marketplace', name: 'Marketplace' },
+      { id: "pos", name: "POS" },
+      { id: "ecommerce", name: "E-commerce" },
+      { id: "whatsapp", name: "WhatsApp" },
+      { id: "marketplace", name: "Marketplace" },
     ];
     const existingChannels = new Set(
       channelsResult.rows
         .map((row) => row.id?.trim().toLowerCase())
-        .filter((id): id is string => Boolean(id))
+        .filter((id): id is string => Boolean(id)),
     );
     const channels = [...knownChannels];
     existingChannels.forEach((id) => {
@@ -242,10 +500,19 @@ export class PgDashboardRepository {
 
     return {
       stores,
-      sellers: sellersResult.rows.map((row) => ({ id: row.id, name: row.name })),
-      categories: categoriesResult.rows.map((row) => ({ id: row.id, name: row.name })),
+      sellers: sellersResult.rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+      })),
+      categories: categoriesResult.rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+      })),
       channels,
-      paymentTerms: paymentTermsResult.rows.map((row) => ({ id: row.id, name: row.name })),
+      paymentTerms: paymentTermsResult.rows.map((row) => ({
+        id: row.id,
+        name: row.name,
+      })),
     };
   }
 
@@ -291,7 +558,7 @@ export class PgDashboardRepository {
         from filtered_sales fs
         cross join today_scope ts
         cross join margin_scope ms`,
-      params
+      params,
     );
 
     const row = rows[0];
@@ -300,12 +567,18 @@ export class PgDashboardRepository {
       averageTicket: Number(toNumber(row?.average_ticket).toFixed(2)),
       ordersToday: Math.round(toNumber(row?.orders_today)),
       ordersPeriod: Math.round(toNumber(row?.orders_period)),
-      grossMarginPercentage: Number(toNumber(row?.gross_margin_percentage).toFixed(2)),
-      missingCostItemsPercentage: Number(toNumber(row?.missing_cost_items_percentage).toFixed(2)),
+      grossMarginPercentage: Number(
+        toNumber(row?.gross_margin_percentage).toFixed(2),
+      ),
+      missingCostItemsPercentage: Number(
+        toNumber(row?.missing_cost_items_percentage).toFixed(2),
+      ),
     };
   }
 
-  async getCustomerKpis(filters: DashboardFilterDto): Promise<DashboardCustomerKpiDto> {
+  async getCustomerKpis(
+    filters: DashboardFilterDto,
+  ): Promise<DashboardCustomerKpiDto> {
     const params = buildFilterParams(filters);
     const { rows } = await query<{
       new_customers: Decimalish;
@@ -360,19 +633,24 @@ export class PgDashboardRepository {
        from customers_in_period cip
        join customer_history ch on ch.customer_id = cip.customer_id
        cross join params p`,
-      params
+      params,
     );
 
     const row = rows[0];
     return {
       newCustomers: Math.round(toNumber(row?.new_customers)),
       returningCustomers: Math.round(toNumber(row?.returning_customers)),
-      returningCustomerPercentage: Number(toNumber(row?.returning_customer_percentage).toFixed(2)),
+      returningCustomerPercentage: Number(
+        toNumber(row?.returning_customer_percentage).toFixed(2),
+      ),
       purchaseFrequency: Number(toNumber(row?.purchase_frequency).toFixed(2)),
     };
   }
 
-  async getTopProduct(filters: DashboardFilterDto, metric: TopProductMetric): Promise<DashboardTopProductDto> {
+  async getTopProduct(
+    filters: DashboardFilterDto,
+    metric: TopProductMetric,
+  ): Promise<DashboardTopProductDto> {
     const params = [...buildFilterParams(filters), metric];
     const { rows } = await query<{
       product_id: string;
@@ -396,7 +674,7 @@ export class PgDashboardRepository {
          sum(fsi.item_total) desc,
          fsi.product_name asc
        limit 1`,
-      params
+      params,
     );
 
     const row = rows[0];
@@ -410,7 +688,9 @@ export class PgDashboardRepository {
     };
   }
 
-  async getCriticalStock(filters: DashboardFilterDto): Promise<DashboardCriticalStockItemDto[]> {
+  async getCriticalStock(
+    filters: DashboardFilterDto,
+  ): Promise<DashboardCriticalStockItemDto[]> {
     const params = [filters.categoryId ?? null, 20];
     const { rows } = await query<{
       product_id: string;
@@ -419,41 +699,21 @@ export class PgDashboardRepository {
       current_stock: Decimalish;
       minimum_stock: Decimalish;
     }>(
-      `with stock_position as (
-         select
-           p.id as product_id,
-           p.name as product_name,
-           nullif(trim(p.reference), '') as sku,
-           coalesce(p.min_stock, 0) as minimum_stock,
-           coalesce(
-             sum(
-               case
-                 when sm.type is null then 0
-                 when lower(trim(sm.type)) in ('e', 'entrada', 'in', 'credit', 'compra') then abs(coalesce(sm.quantity, 0))
-                 when lower(trim(sm.type)) in ('s', 'saida', 'out', 'debit', 'venda') then -abs(coalesce(sm.quantity, 0))
-                 else coalesce(sm.quantity, 0)
-               end
-             ),
-             0
-           ) as current_stock
-         from product p
-         left join stock_movement sm on sm.product_id = p.id
-         where ($1::uuid is null or p.group_id = $1::uuid)
-         group by p.id, p.name, p.reference, p.min_stock
-       )
-       select product_id, product_name, sku, current_stock, minimum_stock
-       from stock_position
-       where minimum_stock > 0
-         and current_stock <= minimum_stock
+      `${criticalStockSql()}
        order by (minimum_stock - current_stock) desc, product_name asc
        limit $2::int`,
-      params
+      params,
     );
 
     return rows.map((row) => {
       const currentStock = Number(toNumber(row.current_stock).toFixed(3));
       const minimumStock = Number(toNumber(row.minimum_stock).toFixed(3));
-      const status: 'OK' | 'LOW' | 'OUT_OF_STOCK' = currentStock <= 0 ? 'OUT_OF_STOCK' : currentStock <= minimumStock ? 'LOW' : 'OK';
+      const status: "OK" | "LOW" | "OUT_OF_STOCK" =
+        currentStock <= 0
+          ? "OUT_OF_STOCK"
+          : currentStock <= minimumStock
+            ? "LOW"
+            : "OK";
       return {
         productId: row.product_id,
         productName: row.product_name,
@@ -467,8 +727,11 @@ export class PgDashboardRepository {
 
   async getSalesByDay(
     filters: DashboardFilterDto,
-    comparePrevious = false
-  ): Promise<{ items: DashboardSalesByDayItemDto[]; previousItems: DashboardSalesByDayItemDto[] }> {
+    comparePrevious = false,
+  ): Promise<{
+    items: DashboardSalesByDayItemDto[];
+    previousItems: DashboardSalesByDayItemDto[];
+  }> {
     const params = buildFilterParams(filters);
     const { rows } = await query<{
       date: string;
@@ -515,7 +778,7 @@ export class PgDashboardRepository {
        left join sales_daily sd on sd.day = days.day
        left join margin_daily md on md.day = days.day
        order by days.day asc`,
-      params
+      params,
     );
 
     const items = rows.map((row) => ({
@@ -523,7 +786,9 @@ export class PgDashboardRepository {
       revenue: Number(toNumber(row.revenue).toFixed(2)),
       orders: Math.round(toNumber(row.orders)),
       averageTicket: Number(toNumber(row.average_ticket).toFixed(2)),
-      grossMarginPercentage: Number(toNumber(row.gross_margin_percentage).toFixed(2)),
+      grossMarginPercentage: Number(
+        toNumber(row.gross_margin_percentage).toFixed(2),
+      ),
     }));
 
     if (!comparePrevious) {
@@ -610,7 +875,7 @@ export class PgDashboardRepository {
        left join previous_sales ps on ps.day = days.day
        left join previous_margin pm on pm.day = days.day
        order by days.day asc`,
-      params
+      params,
     );
 
     return {
@@ -620,12 +885,17 @@ export class PgDashboardRepository {
         revenue: Number(toNumber(row.revenue).toFixed(2)),
         orders: Math.round(toNumber(row.orders)),
         averageTicket: Number(toNumber(row.average_ticket).toFixed(2)),
-        grossMarginPercentage: Number(toNumber(row.gross_margin_percentage).toFixed(2)),
+        grossMarginPercentage: Number(
+          toNumber(row.gross_margin_percentage).toFixed(2),
+        ),
       })),
     };
   }
 
-  async getCategories(filters: DashboardFilterDto, metric: CategoriesMetric): Promise<DashboardCategoriesResponseDto> {
+  async getCategories(
+    filters: DashboardFilterDto,
+    metric: CategoriesMetric,
+  ): Promise<DashboardCategoriesResponseDto> {
     const params = buildFilterParams(filters);
     const { rows } = await query<{
       category_id: string | null;
@@ -644,7 +914,7 @@ export class PgDashboardRepository {
        from filtered_sale_items fsi
        group by fsi.category_id, fsi.category_name
        order by revenue desc`,
-      params
+      params,
     );
 
     const groupedItems = groupSmallCategories(
@@ -655,7 +925,7 @@ export class PgDashboardRepository {
         quantity: toNumber(row.quantity),
         margin: toNumber(row.margin),
       })),
-      metric
+      metric,
     );
 
     return {
@@ -672,7 +942,10 @@ export class PgDashboardRepository {
     };
   }
 
-  async getPeakHours(filters: DashboardFilterDto, metric: PeakHoursMetric): Promise<DashboardPeakHoursResponseDto> {
+  async getPeakHours(
+    filters: DashboardFilterDto,
+    metric: PeakHoursMetric,
+  ): Promise<DashboardPeakHoursResponseDto> {
     const params = buildFilterParams(filters);
     const { rows } = await query<{
       weekday: Decimalish;
@@ -689,7 +962,7 @@ export class PgDashboardRepository {
        from filtered_sales fs
        group by 1, 2
        order by 1 asc, 2 asc`,
-      params
+      params,
     );
 
     return {
@@ -711,7 +984,7 @@ export class PgDashboardRepository {
   async getSellerRanking(
     filters: DashboardFilterDto,
     sortBy: SellerRankingSort,
-    limit: number
+    limit: number,
   ): Promise<DashboardSellerRankingItemDto[]> {
     const params = [...buildFilterParams(filters), limit];
     const orderBySql = resolveSellerOrderBy(sortBy);
@@ -726,64 +999,10 @@ export class PgDashboardRepository {
       participation_percentage: Decimalish;
       rank: Decimalish;
     }>(
-      `${FILTERED_SALES_CTE},
-       seller_revenue as (
-         select
-           coalesce(fs.seller_id::text, '__null__') as seller_key,
-           fs.seller_id,
-           coalesce(seller_ref.name, 'Sem vendedor') as seller_name,
-           sum(${SALE_REVENUE_SQL}) as revenue,
-           count(*) as orders
-         from filtered_sales fs
-         left join seller seller_ref on seller_ref.id = fs.seller_id
-         group by coalesce(fs.seller_id::text, '__null__'), fs.seller_id, seller_ref.name
-       ),
-       seller_margin as (
-         select
-           coalesce(fs.seller_id::text, '__null__') as seller_key,
-           sum(fsi.item_total) as items_revenue,
-           sum(fsi.quantity * coalesce(${ITEM_COST_SQL}, 0)) as cmv
-         from filtered_sales fs
-         left join filtered_sale_items fsi on fsi.sale_id = fs.id
-         group by coalesce(fs.seller_id::text, '__null__')
-       ),
-       joined as (
-         select
-           sr.seller_id,
-           sr.seller_name,
-           sr.revenue,
-           sr.orders,
-           case when sr.orders = 0 then 0 else sr.revenue / sr.orders end as average_ticket,
-           case
-             when coalesce(sm.items_revenue, 0) <= 0 then 0
-             else ((coalesce(sm.items_revenue, 0) - coalesce(sm.cmv, 0)) / sm.items_revenue) * 100
-           end as gross_margin_percentage
-         from seller_revenue sr
-         left join seller_margin sm on sm.seller_key = sr.seller_key
-       ),
-       ranked as (
-         select
-           j.*,
-           case
-             when coalesce(sum(j.revenue) over(), 0) <= 0 then 0
-             else (j.revenue / sum(j.revenue) over()) * 100
-           end as participation_percentage,
-           row_number() over (order by ${orderBySql}) as rank
-         from joined j
-       )
-       select
-         seller_id,
-         seller_name,
-         revenue,
-         orders,
-         average_ticket,
-         gross_margin_percentage,
-         participation_percentage,
-         rank
-       from ranked
+      `${sellerRankingSql(sortBy)}
        order by ${orderBySql}
        limit $9::int`,
-      params
+      params,
     );
 
     return rows.map((row) => ({
@@ -792,8 +1011,12 @@ export class PgDashboardRepository {
       revenue: Number(toNumber(row.revenue).toFixed(2)),
       orders: Math.round(toNumber(row.orders)),
       averageTicket: Number(toNumber(row.average_ticket).toFixed(2)),
-      grossMarginPercentage: Number(toNumber(row.gross_margin_percentage).toFixed(2)),
-      participationPercentage: Number(toNumber(row.participation_percentage).toFixed(2)),
+      grossMarginPercentage: Number(
+        toNumber(row.gross_margin_percentage).toFixed(2),
+      ),
+      participationPercentage: Number(
+        toNumber(row.participation_percentage).toFixed(2),
+      ),
       rank: Math.round(toNumber(row.rank)),
     }));
   }
@@ -802,10 +1025,9 @@ export class PgDashboardRepository {
     filters: DashboardFilterDto,
     metric: ProductAbcMetric,
     limit: number,
-    offset: number
+    offset: number,
   ): Promise<DashboardProductAbcResponseDto> {
     const params = [...buildFilterParams(filters), limit, offset];
-    const metricExpression = resolveProductMetricExpression(metric);
     const { rows } = await query<{
       product_id: string;
       product_name: string;
@@ -816,58 +1038,14 @@ export class PgDashboardRepository {
       margin: Decimalish;
       participation_percentage: Decimalish;
       accumulated_percentage: Decimalish;
-      abc_class: 'A' | 'B' | 'C';
+      abc_class: "A" | "B" | "C";
       total_count: Decimalish;
     }>(
-      `${FILTERED_SALES_CTE},
-       product_metrics as (
-         select
-           fsi.product_id,
-           fsi.product_name,
-           nullif(trim(fsi.sku), '') as sku,
-           fsi.category_name,
-           sum(fsi.quantity) as quantity_sold,
-           sum(fsi.item_total) as revenue,
-           sum(fsi.item_total - (fsi.quantity * coalesce(${ITEM_COST_SQL}, 0))) as margin
-         from filtered_sale_items fsi
-         group by fsi.product_id, fsi.product_name, fsi.sku, fsi.category_name
-       ),
-       ranked as (
-         select
-           pm.*,
-           (${metricExpression}) as metric_value,
-           sum(${metricExpression}) over () as metric_total,
-           sum(${metricExpression}) over (order by ${metricExpression} desc, pm.product_id asc) as metric_accumulated
-         from product_metrics pm
-       ),
-       classified as (
-         select
-           ranked.*,
-           case when metric_total <= 0 then 0 else (metric_value / metric_total) * 100 end as participation_percentage,
-           case when metric_total <= 0 then 0 else (metric_accumulated / metric_total) * 100 end as accumulated_percentage
-         from ranked
-       )
-       select
-         product_id,
-         product_name,
-         sku,
-         category_name,
-         quantity_sold,
-         revenue,
-         margin,
-         participation_percentage,
-         accumulated_percentage,
-         case
-           when accumulated_percentage <= 80 then 'A'
-           when accumulated_percentage <= 95 then 'B'
-           else 'C'
-         end as abc_class,
-         count(*) over() as total_count
-       from classified
+      `${productAbcSql(metric)}
        order by metric_value desc, product_id asc
        limit $9::int
        offset $10::int`,
-      params
+      params,
     );
 
     return {
@@ -877,12 +1055,16 @@ export class PgDashboardRepository {
         productId: row.product_id,
         productName: row.product_name,
         sku: row.sku ?? null,
-        categoryName: row.category_name || 'Sem categoria',
+        categoryName: row.category_name || "Sem categoria",
         quantitySold: Number(toNumber(row.quantity_sold).toFixed(3)),
         revenue: Number(toNumber(row.revenue).toFixed(2)),
         margin: Number(toNumber(row.margin).toFixed(2)),
-        participationPercentage: Number(toNumber(row.participation_percentage).toFixed(2)),
-        accumulatedPercentage: Number(toNumber(row.accumulated_percentage).toFixed(2)),
+        participationPercentage: Number(
+          toNumber(row.participation_percentage).toFixed(2),
+        ),
+        accumulatedPercentage: Number(
+          toNumber(row.accumulated_percentage).toFixed(2),
+        ),
         abcClass: row.abc_class,
       })),
     };

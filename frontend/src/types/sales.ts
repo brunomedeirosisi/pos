@@ -1,6 +1,7 @@
-export type SaleStatus = 'draft' | 'completed' | 'cancelled';
-export type SalePaymentMethod = 'cash' | 'card' | 'bank' | 'other' | 'credit' | 'credit_with_entry';
-export type SaleReceiptLocale = 'pt-BR' | 'en';
+export type SaleStatus = "draft" | "completed" | "cancelled";
+export type SalePaymentMethod =
+  "cash" | "card" | "bank" | "other" | "credit" | "credit_with_entry";
+export type SaleReceiptLocale = "pt-BR" | "en";
 
 export type SaleItem = {
   id: string;
@@ -12,6 +13,9 @@ export type SaleItem = {
 };
 
 export type Sale = {
+  customer_name?: string | null;
+  seller_name?: string | null;
+  payment_term_name?: string | null;
   id: string;
   emission_date: string;
   paid_at: string | null;
@@ -26,6 +30,7 @@ export type Sale = {
   discount: number | null;
   total: number | null;
   pending_amount: number | null;
+  customer_balance_after_sale: number | null;
   status: SaleStatus;
   source: string | null;
   source_key: string | null;
@@ -87,6 +92,7 @@ export type SaleReceipt = {
     discount: number;
     total: number;
     pending_amount: number | null;
+    customer_balance_after_sale: number | null;
     payment_method: SalePaymentMethod | null;
     payment_term_name: string | null;
     amount_paid: number | null;
@@ -119,7 +125,7 @@ export type PrintSaleReceiptResult = {
   printer_model: string;
   printed_at?: string;
   job_id?: string;
-  status?: PrintJob['status'];
+  status?: PrintJob["status"];
   requested_at?: string;
   copies: number;
 };
@@ -129,7 +135,8 @@ export type PrintJob = {
   printer_name: string;
   job_id: string;
   sale_id: string;
-  status: 'queued' | 'claimed' | 'spooling' | 'submitted' | 'failed' | 'uncertain';
+  status:
+    "queued" | "claimed" | "spooling" | "submitted" | "failed" | "uncertain";
   copies: number;
   receipt_code: string;
   requested_at: string;

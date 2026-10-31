@@ -83,6 +83,10 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $posTools 'St
 
 Esses comandos usam política de execução apenas nesse processo; não alteram a política global do Windows. Execute somente scripts do pacote verificado.
 
+Na tela de vendas, **Data da venda** sugere hoje e permite escolher um dia anterior pelo calendário ou digitação. Confira a data no resumo antes de confirmar. O preenchimento é obrigatório; datas inexistentes e futuras são recusadas. A data escolhida é conservada em caso de falha no envio e volta a sugerir hoje após a venda ser concluída. Consulte [as regras de data da venda](../sale-date.md).
+
+O campo **Vendedor** é opcional. Sem seleção, a venda usa o vendedor vinculado ao usuário conectado; sem vínculo, cria seu vendedor automaticamente ao concluir a primeira venda. Em **Perfis e permissões → Vendedores dos usuários**, quem possui `users:write` pode configurar o vínculo individual, inclusive com um vendedor legado existente. A seleção manual na venda tem prioridade. [Detalhes do vínculo e validações](../user-sellers.md).
+
 ## 5. Como funciona a impressão compartilhada
 
 Os dois caixas solicitam impressão à mesma aplicação. Os trabalhos ficam no PostgreSQL, vinculados ao destino escolhido. Cada agente consulta somente a fila de sua impressora por HTTPS e entrega os textos ao Windows local. O atalho configura o destino padrão de cada caixa; o PDV permite seleção explícita. Não é necessário compartilhar a porta 9222 ou abrir uma porta de impressão na rede.
@@ -152,3 +156,25 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $posTools 'De
 `-RemoveTrust` também retira o certificado dessa conta do Principal. Dados/volumes/backups permanecem preservados. No Terminal, a retirada do atalho e da CA identificada em `%LOCALAPPDATA%\POSTerminal\terminal.json` é uma operação local assistida; não remova certificados sem conferir a identificação.
 
 Impressoras por caixa: [IMPRESSORAS.md](IMPRESSORAS.md). Documentação técnica: [TECNICO.md](TECNICO.md). Checklist de aceitação: [HOMOLOGACAO.md](HOMOLOGACAO.md).
+
+### Navegação nas listagens
+
+Use os controles abaixo das tabelas para mudar de página, ir diretamente a um número ou escolher 10, 25, 50 ou 100 registros. Pesquisar ou mudar filtros volta à primeira página. Ao voltar dos detalhes, a navegação da sessão é preservada. Os seletores permitem escrever e navegar pelas páginas de opções. Recibos e relatórios impressos continuam completos. Veja o inventário e os detalhes em [Paginação](../pagination.md).
+
+### Formato das datas
+
+Todos os campos de data usam **DD/MM/YYYY**, em português e inglês, independentemente do idioma do navegador. Digite a data (as barras são incluídas automaticamente ao escrever apenas números) ou use o botão de calendário. No PDV, a sugestão é hoje e datas futuras são bloqueadas. Datas impossíveis ou incompletas exibem orientação de correção.
+
+### Quantidade na venda
+
+Informe unidades inteiras (1, 2, 3…). Os controles aumentam ou diminuem uma unidade. Frações, zero e negativos são recusados. Para retirar um produto do carrinho, use **Excluir**.
+
+### Preço e saldo devedor no fechamento
+
+A forma de pagamento não altera o preço do produto: o fechamento mantém o preço exibido no carrinho. O preço à vista do cadastro é usado para todas as formas; se estiver ausente, o preço base é utilizado.
+
+Ao selecionar um cliente, confira o **Saldo devedor do cliente após a venda** no fechamento. Apenas **À prazo** e a parte não paga de **À prazo com entrada** aumentam a dívida. Dinheiro, cartão, transferência e outro exigem quitação integral; o troco não abate dívidas anteriores.
+
+Exemplo: com dívida anterior de R$ 500,00 e compra de R$ 100,00, o saldo será R$ 500,00 no pagamento imediato, R$ 600,00 à prazo ou R$ 580,00 com entrada de R$ 20,00. O valor antes de confirmar é estimado; a confirmação mostra o saldo efetivamente gravado.
+
+O recibo mostra esse saldo e o preserva nas reimpressões, mesmo após outros recebimentos ou vendas. Vendas anteriores a essa atualização não têm um saldo gravado naquele momento e mostram **Indisponivel** no recibo. Se a consulta do saldo falhar, use **Tentar novamente** antes de confirmar. A interface e os recibos também estão disponíveis em inglês.

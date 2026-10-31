@@ -1,18 +1,26 @@
-import type { PoolClient } from 'pg';
-import { query, withTransaction } from '../../../db.js';
-import { conflict } from '../../../errors.js';
-import { resolvePagination } from '../../../utils/pagination.js';
-import type { CreateSaleItemInput, ListSalesQueryDto } from '../contracts/sales-contracts.js';
-import { buildSaleStockMovements, buildCheckoutStockMovements } from '../domain/sales-domain.js';
+import type { PoolClient } from "pg";
+import { query, withTransaction } from "../../../db.js";
+import { conflict, notFound } from "../../../errors.js";
+import { resolvePagination } from "../../../utils/pagination.js";
+import { resolveCheckoutSeller } from "../../../services/user-sellers.js";
+import type {
+  CreateSaleItemInput,
+  ListSalesQueryDto,
+} from "../contracts/sales-contracts.js";
+import {
+  buildSaleStockMovements,
+  buildCheckoutStockMovements,
+} from "../domain/sales-domain.js";
 import type {
   SaleItemRecord,
   SaleProductPricingRecord,
   SaleRecord,
   SaleRecordWithoutItems,
-} from '../domain/sales-domain.js';
+} from "../domain/sales-domain.js";
 
 export type CreateSaleCommand = {
-  emissionDate: Date;
+  actorUserId: string;
+  emissionDate: string;
   paidAt: Date | null;
   orderNumber: string | null;
   sellerId: string | null;
@@ -40,17 +48,25 @@ export type SaleReceiptRecord = SaleRecordWithoutItems & {
 };
 
 export interface SalesRepository {
+  getCurrentDate(): Promise<string>;
   list(filters: ListSalesQueryDto): Promise<SaleRecord[]>;
-  findProductsForCheckout(productIds: string[]): Promise<SaleProductPricingRecord[]>;
-  create(command: CreateSaleCommand): Promise<SaleRecordWithoutItems & { items: SaleItemRecord[] }>;
+  findProductsForCheckout(
+    productIds: string[],
+  ): Promise<SaleProductPricingRecord[]>;
+  create(
+    command: CreateSaleCommand,
+  ): Promise<SaleRecordWithoutItems & { items: SaleItemRecord[] }>;
   findById(id: string): Promise<SaleRecord | null>;
   findReceiptById(id: string): Promise<SaleReceiptRecord | null>;
-  cancel(id: string, reason: string | null): Promise<SaleRecordWithoutItems | null>;
+  cancel(
+    id: string,
+    reason: string | null,
+  ): Promise<SaleRecordWithoutItems | null>;
 }
 
 function toNumber(value: string | number | null | undefined): number {
   if (value == null) return 0;
-  if (typeof value === 'number') {
+  if (typeof value === "number") {
     return Number.isFinite(value) ? value : 0;
   }
 
@@ -62,11 +78,14 @@ async function insertSaleStockMovements(
   client: PoolClient,
   saleId: string,
   movementDate: string,
-  movementType: 'venda' | 'entrada',
+  movementType: "venda" | "entrada",
   noteNumber: string | null,
-  items: CreateSaleItemInput[]
+  items: CreateSaleItemInput[],
 ): Promise<void> {
-  const movements = movementType === 'venda' ? buildCheckoutStockMovements(items) : buildSaleStockMovements(items);
+  const movements =
+    movementType === "venda"
+      ? buildCheckoutStockMovements(items)
+      : buildSaleStockMovements(items);
 
   for (const movement of movements) {
     await query(
@@ -82,12 +101,19 @@ async function insertSaleStockMovements(
         movement.total,
         noteNumber,
       ],
-      client
+      client,
     );
   }
 }
 
 export class PgSalesRepository implements SalesRepository {
+  async getCurrentDate(): Promise<string> {
+    // The database owns the store's calendar day; the API container may use UTC.
+    const { rows } = await query<{ today: string }>(
+      "select current_date::text as today",
+    );
+    return rows[0].today;
+  }
   async list(filters: ListSalesQueryDto): Promise<SaleRecord[]> {
     const params: unknown[] = [];
     const whereParts: string[] = [];
@@ -117,8 +143,12 @@ export class PgSalesRepository implements SalesRepository {
       whereParts.push(`s.payment_term_id = $${params.length}`);
     }
 
-    const whereClause = whereParts.length > 0 ? `where ${whereParts.join(' and ')}` : '';
-    const pagination = resolvePagination(filters, { defaultPageSize: 100, maxPageSize: 200 });
+    const whereClause =
+      whereParts.length > 0 ? `where ${whereParts.join(" and ")}` : "";
+    const pagination = resolvePagination(filters, {
+      defaultPageSize: 100,
+      maxPageSize: 200,
+    });
 
     params.push(pagination.limit);
     const limitParam = params.length;
@@ -138,6 +168,7 @@ export class PgSalesRepository implements SalesRepository {
            s.payment_method,
            s.amount_paid,
            s.change_amount,
+           s.customer_balance_after_sale,
            s.subtotal,
            s.discount,
            s.total,
@@ -164,6 +195,7 @@ export class PgSalesRepository implements SalesRepository {
          sp.payment_method,
          sp.amount_paid,
          sp.change_amount,
+         sp.customer_balance_after_sale,
          sp.subtotal,
          sp.discount,
          sp.total,
@@ -200,6 +232,7 @@ export class PgSalesRepository implements SalesRepository {
          sp.payment_method,
          sp.amount_paid,
          sp.change_amount,
+         sp.customer_balance_after_sale,
          sp.subtotal,
          sp.discount,
          sp.total,
@@ -210,13 +243,15 @@ export class PgSalesRepository implements SalesRepository {
          sp.cancelled_at,
          sp.cancellation_reason
        order by sp.emission_date desc, sp.id desc`,
-      params
+      params,
     );
 
     return rows;
   }
 
-  async findProductsForCheckout(productIds: string[]): Promise<SaleProductPricingRecord[]> {
+  async findProductsForCheckout(
+    productIds: string[],
+  ): Promise<SaleProductPricingRecord[]> {
     const uniqueIds = [...new Set(productIds)];
     if (uniqueIds.length === 0) {
       return [];
@@ -226,14 +261,30 @@ export class PgSalesRepository implements SalesRepository {
       `select id, name, price_cash, price_base
        from product
        where id = any($1::uuid[])`,
-      [uniqueIds]
+      [uniqueIds],
     );
 
     return rows;
   }
 
-  async create(command: CreateSaleCommand): Promise<SaleRecordWithoutItems & { items: SaleItemRecord[] }> {
+  async create(
+    command: CreateSaleCommand,
+  ): Promise<SaleRecordWithoutItems & { items: SaleItemRecord[] }> {
     return withTransaction(async (client) => {
+      // Serialize with customer payments/cancellations before reading any balance.
+      if (command.customerId) {
+        const customer = await query(
+          "select id from customer where id=$1 for update",
+          [command.customerId],
+          client,
+        );
+        if (!customer.rows.length) throw notFound("customer not found");
+      }
+      const sellerId = await resolveCheckoutSeller(
+        client,
+        command.actorUserId,
+        command.sellerId,
+      );
       const { rows: saleRows } = await query<SaleRecordWithoutItems>(
         `insert into sale (
            emission_date,
@@ -253,12 +304,12 @@ export class PgSalesRepository implements SalesRepository {
            source_key
          )
          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'completed',$13,$14)
-         returning id, emission_date, paid_at, order_number, seller_id, customer_id, payment_term_id, payment_method, amount_paid, change_amount, subtotal, discount, total, status, source, source_key, cancelled_at, cancellation_reason`,
+         returning id, emission_date, paid_at, order_number, seller_id, customer_id, payment_term_id, payment_method, amount_paid, change_amount, customer_balance_after_sale, subtotal, discount, total, status, source, source_key, cancelled_at, cancellation_reason`,
         [
           command.emissionDate,
           command.paidAt,
           command.orderNumber,
-          command.sellerId,
+          sellerId,
           command.customerId,
           command.paymentTermId,
           command.paymentMethod,
@@ -270,10 +321,22 @@ export class PgSalesRepository implements SalesRepository {
           command.source,
           command.sourceKey,
         ],
-        client
+        client,
       );
 
-      const saleRecord = saleRows[0];
+      let saleRecord = saleRows[0];
+      if (command.customerId) {
+        // Reuse the reconciled financial view; read after inserting the sale and
+        // save the exact transaction result for later receipt reprints.
+        const { rows } = await query<SaleRecordWithoutItems>(
+          `update sale set customer_balance_after_sale = (
+             select current_balance from customer_financial_totals where customer_id=$2
+           ) where id=$1 returning *`,
+          [saleRecord.id, command.customerId],
+          client,
+        );
+        saleRecord = rows[0];
+      }
       const insertedItems: SaleItemRecord[] = [];
 
       for (const item of command.items) {
@@ -281,8 +344,14 @@ export class PgSalesRepository implements SalesRepository {
           `insert into sale_item (sale_id, product_id, quantity, unit_price, total)
            values ($1,$2,$3,$4,$5)
            returning id, product_id, quantity, unit_price, total`,
-          [saleRecord.id, item.product_id, item.quantity, item.unit_price, item.total],
-          client
+          [
+            saleRecord.id,
+            item.product_id,
+            item.quantity,
+            item.unit_price,
+            item.total,
+          ],
+          client,
         );
         insertedItems.push(itemRows[0]);
       }
@@ -291,9 +360,9 @@ export class PgSalesRepository implements SalesRepository {
         client,
         saleRecord.id,
         saleRecord.emission_date,
-        'venda',
+        "venda",
         command.orderNumber ?? saleRecord.id,
-        command.items
+        command.items,
       );
 
       return {
@@ -304,49 +373,7 @@ export class PgSalesRepository implements SalesRepository {
   }
 
   async findById(id: string): Promise<SaleRecord | null> {
-    const { rows } = await query<SaleRecord>(
-      `select
-         s.id,
-         s.emission_date,
-         s.paid_at,
-         s.order_number,
-         s.seller_id,
-         s.customer_id,
-         s.payment_term_id,
-         s.payment_method,
-         s.amount_paid,
-         s.change_amount,
-         s.subtotal,
-         s.discount,
-         s.total,
-         greatest(coalesce(s.total, 0) - coalesce(s.amount_paid, 0), 0) as pending_amount,
-         s.status,
-         s.source,
-         s.source_key,
-         s.cancelled_at,
-         s.cancellation_reason,
-         coalesce(
-           json_agg(
-             json_build_object(
-               'id', si.id,
-               'product_id', si.product_id,
-               'product_name', p.name,
-               'quantity', si.quantity,
-               'unit_price', si.unit_price,
-               'total', si.total
-             )
-           ) filter (where si.id is not null),
-           '[]'
-         ) as items
-       from sale s
-       left join sale_item si on si.sale_id = s.id
-       left join product p on p.id = si.product_id
-       where s.id = $1
-       group by s.id`,
-      [id]
-    );
-
-    return rows[0] ?? null;
+    return this.findReceiptById(id);
   }
 
   async findReceiptById(id: string): Promise<SaleReceiptRecord | null> {
@@ -362,6 +389,7 @@ export class PgSalesRepository implements SalesRepository {
          s.payment_method,
          s.amount_paid,
          s.change_amount,
+         s.customer_balance_after_sale,
          s.subtotal,
          s.discount,
          s.total,
@@ -397,13 +425,16 @@ export class PgSalesRepository implements SalesRepository {
        left join product p on p.id = si.product_id
        where s.id = $1
        group by s.id, c.id, sel.id, pt.id`,
-      [id]
+      [id],
     );
 
     return rows[0] ?? null;
   }
 
-  async cancel(id: string, reason: string | null): Promise<SaleRecordWithoutItems | null> {
+  async cancel(
+    id: string,
+    reason: string | null,
+  ): Promise<SaleRecordWithoutItems | null> {
     return withTransaction(async (client) => {
       const { rows: validationRows } = await query<{
         id: string;
@@ -419,7 +450,7 @@ export class PgSalesRepository implements SalesRepository {
            and s.status <> 'cancelled'
          for update`,
         [id],
-        client
+        client,
       );
 
       const validation = validationRows[0] ?? null;
@@ -427,35 +458,36 @@ export class PgSalesRepository implements SalesRepository {
         return null;
       }
 
-      const pendingAmount = Number(toNumber(validation.pending_amount).toFixed(2));
+      if (validation.customer_id) {
+        await query(
+          "select id from customer where id=$1 for update",
+          [validation.customer_id],
+          client,
+        );
+      }
+      const pendingAmount = Number(
+        toNumber(validation.pending_amount).toFixed(2),
+      );
 
       if (validation.customer_id && pendingAmount > 0) {
-        const { rows: balanceRows } = await query<{ current_balance: string | number | null }>(
-          `select
-             coalesce(
-               (select sum(s.total) from sale s where s.customer_id = $1 and s.status = 'completed'),
-               0
-             ) -
-             (
-               coalesce(
-                 (select sum(s.amount_paid) from sale s where s.customer_id = $1 and s.status = 'completed'),
-                 0
-               ) +
-               coalesce(
-                 (select sum(cp.amount) from customer_payment cp where cp.customer_id = $1 and cp.cancelled_at is null),
-                 0
-               )
-             ) + coalesce((select adjustment from customer_legacy_balance where customer_id=$1),0) as current_balance`,
+        const { rows: balanceRows } = await query<{
+          current_balance: string | number | null;
+        }>(
+          `select current_balance from customer_financial_totals where customer_id=$1`,
           [validation.customer_id],
-          client
+          client,
         );
 
-        const currentBalance = Number(toNumber(balanceRows[0]?.current_balance).toFixed(2));
-        const projectedBalance = Number((currentBalance - pendingAmount).toFixed(2));
+        const currentBalance = Number(
+          toNumber(balanceRows[0]?.current_balance).toFixed(2),
+        );
+        const projectedBalance = Number(
+          (currentBalance - pendingAmount).toFixed(2),
+        );
 
         if (projectedBalance < -0.009) {
           throw conflict(
-            'sale cannot be cancelled because it would create a customer credit. Reverse customer payments or refund amounts first'
+            "sale cannot be cancelled because it would create a customer credit. Reverse customer payments or refund amounts first",
           );
         }
       }
@@ -467,9 +499,9 @@ export class PgSalesRepository implements SalesRepository {
              cancellation_reason = coalesce($2, cancellation_reason)
          where id = $1
            and status <> 'cancelled'
-         returning id, emission_date, paid_at, order_number, seller_id, customer_id, payment_term_id, payment_method, amount_paid, change_amount, subtotal, discount, total, status, source, source_key, cancelled_at, cancellation_reason`,
+         returning id, emission_date, paid_at, order_number, seller_id, customer_id, payment_term_id, payment_method, amount_paid, change_amount, customer_balance_after_sale, subtotal, discount, total, status, source, source_key, cancelled_at, cancellation_reason`,
         [id, reason],
-        client
+        client,
       );
 
       const saleRecord = rows[0] ?? null;
@@ -482,21 +514,23 @@ export class PgSalesRepository implements SalesRepository {
          from sale_item
          where sale_id = $1`,
         [id],
-        client
+        client,
       );
 
       await insertSaleStockMovements(
         client,
         saleRecord.id,
-        new Date(saleRecord.cancelled_at ?? Date.now()).toISOString().slice(0, 10),
-        'entrada',
+        new Date(saleRecord.cancelled_at ?? Date.now())
+          .toISOString()
+          .slice(0, 10),
+        "entrada",
         saleRecord.order_number ?? saleRecord.id,
         itemRows.map((item) => ({
           product_id: item.product_id,
           quantity: Number(item.quantity),
           unit_price: item.unit_price == null ? 0 : Number(item.unit_price),
           total: item.total == null ? null : Number(item.total),
-        }))
+        })),
       );
 
       return saleRecord;

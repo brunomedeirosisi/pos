@@ -1,37 +1,40 @@
-import React, { useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useTranslation } from 'react-i18next';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { usersService, rolesService } from '../../services/admin';
-import type { User, Role } from '../../types/admin';
-import { useToast } from '../../components/ui/ToastProvider';
-import { useHasPermission } from '../../store/auth';
-import { useDebouncedValue } from '../../hooks/useDebouncedValue';
-import { formatDateTimeDdMmYyyy } from '../../utils/date';
-import { Modal } from '../../components/ui/Modal';
-import { ConfirmDialog } from '../../components/ui/ConfirmDialog';
+import { SearchableSelect } from "../../components/ui/SearchableSelect";
+import { useListQuery, useListState } from "../../hooks/useListQuery";
+import { ListPagination } from "../../components/ui/Pagination";
+import React, { useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useTranslation } from "react-i18next";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { usersService } from "../../services/admin";
+import type { User } from "../../types/admin";
+import { useToast } from "../../components/ui/ToastProvider";
+import { useHasPermission } from "../../store/auth";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import { formatDateTimeDdMmYyyy } from "../../utils/date";
+import { Modal } from "../../components/ui/Modal";
+import { ConfirmDialog } from "../../components/ui/ConfirmDialog";
 
 const userFormSchema = z.object({
-  fullName: z.string().trim().min(1, 'Required'),
-  email: z.string().email('Invalid email'),
+  fullName: z.string().trim().min(1, "Required"),
+  email: z.string().email("Invalid email"),
   password: z
-    .union([z.string().min(8, 'Minimum 8 characters'), z.literal('')])
+    .union([z.string().min(8, "Minimum 8 characters"), z.literal("")])
     .optional()
     .transform((value) => (value ? value : undefined)),
-  roleId: z.string().min(1, 'Role is required'),
-  status: z.enum(['active', 'disabled']),
+  roleId: z.string().min(1, "Role is required"),
+  status: z.enum(["active", "disabled"]),
 });
 
 type UserFormValues = z.infer<typeof userFormSchema>;
 
 const defaultValues: UserFormValues = {
-  fullName: '',
-  email: '',
+  fullName: "",
+  email: "",
   password: undefined,
-  roleId: '',
-  status: 'active',
+  roleId: "",
+  status: "active",
 };
 
 export function UsersPage(): JSX.Element {
@@ -39,78 +42,76 @@ export function UsersPage(): JSX.Element {
   const toast = useToast();
   const queryClient = useQueryClient();
 
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useListState("admin/UsersPage-search", "");
   const debouncedSearch = useDebouncedValue(search, 350);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
   const [userToDisable, setUserToDisable] = useState<User | null>(null);
 
-  const canReadUsers = useHasPermission(['users:read', 'users:write']);
-  const canManageUsers = useHasPermission('users:write');
-  const canFetchRoles = useHasPermission(['roles:read', 'roles:write', 'users:read', 'users:write']);
+  const canReadUsers = useHasPermission(["users:read", "users:write"]);
+  const canManageUsers = useHasPermission("users:write");
 
   const form = useForm<UserFormValues>({
     resolver: zodResolver(userFormSchema),
     defaultValues,
   });
 
-  const usersQuery = useQuery({
-    queryKey: ['users', debouncedSearch],
-    queryFn: () => usersService.list(debouncedSearch || undefined),
+  const usersQuery = useListQuery<User>({
+    queryKey: ["users", debouncedSearch],
+    resource: "users",
+    filters: { search: debouncedSearch || undefined },
     enabled: canReadUsers,
   });
 
-  const rolesQuery = useQuery({
-    queryKey: ['roles', 'options'],
-    queryFn: () => rolesService.list(),
-    enabled: canFetchRoles,
-  });
-
   const users = usersQuery.data ?? [];
-  const roles = rolesQuery.data ?? [];
 
   const createMutation = useMutation({
     mutationFn: usersService.create,
     onSuccess: () => {
-      toast.show(t('common.saved'), 'success');
+      toast.show(t("common.saved"), "success");
       // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
-      void queryClient.invalidateQueries({ queryKey: ['users'] });
+      void queryClient.invalidateQueries({ queryKey: ["users"] });
       closeForm();
     },
-    onError: (error: Error) => toast.show(error.message, 'error'),
+    onError: (error: Error) => toast.show(error.message, "error"),
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: string; payload: Parameters<typeof usersService.update>[1] }) =>
-      usersService.update(id, payload),
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: string;
+      payload: Parameters<typeof usersService.update>[1];
+    }) => usersService.update(id, payload),
     onSuccess: () => {
-      toast.show(t('common.saved'), 'success');
+      toast.show(t("common.saved"), "success");
       // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
-      void queryClient.invalidateQueries({ queryKey: ['users'] });
+      void queryClient.invalidateQueries({ queryKey: ["users"] });
       closeForm();
     },
-    onError: (error: Error) => toast.show(error.message, 'error'),
+    onError: (error: Error) => toast.show(error.message, "error"),
   });
 
   const disableMutation = useMutation({
     mutationFn: (id: string) => usersService.disable(id),
     onSuccess: () => {
-      toast.show(t('common.saved'), 'success');
+      toast.show(t("common.saved"), "success");
       // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
-      void queryClient.invalidateQueries({ queryKey: ['users'] });
+      void queryClient.invalidateQueries({ queryKey: ["users"] });
       setUserToDisable(null);
     },
-    onError: (error: Error) => toast.show(error.message, 'error'),
+    onError: (error: Error) => toast.show(error.message, "error"),
   });
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
 
   function openCreateForm() {
     if (!canManageUsers) {
-      toast.show(t('common.noPermission'), 'error');
+      toast.show(t("common.noPermission"), "error");
       return;
     }
-    const defaultRoleId = roles[0]?.id ?? '';
+    const defaultRoleId = "";
     setEditing(null);
     form.reset({
       ...defaultValues,
@@ -122,7 +123,7 @@ export function UsersPage(): JSX.Element {
 
   function openEditForm(user: User) {
     if (!canManageUsers) {
-      toast.show(t('common.noPermission'), 'error');
+      toast.show(t("common.noPermission"), "error");
       return;
     }
     setEditing(user);
@@ -130,7 +131,7 @@ export function UsersPage(): JSX.Element {
       fullName: user.fullName,
       email: user.email,
       password: undefined,
-      roleId: user.role?.id ?? '',
+      roleId: user.role?.id ?? "",
       status: user.status,
     });
     setIsFormOpen(true);
@@ -143,12 +144,15 @@ export function UsersPage(): JSX.Element {
 
   const onSubmit = form.handleSubmit((values) => {
     if (!canManageUsers) {
-      toast.show(t('common.noPermission'), 'error');
+      toast.show(t("common.noPermission"), "error");
       return;
     }
 
     if (!editing && !values.password) {
-      form.setError('password', { type: 'manual', message: t('users.passwordHint') });
+      form.setError("password", {
+        type: "manual",
+        message: t("users.passwordHint"),
+      });
       return;
     }
 
@@ -160,7 +164,9 @@ export function UsersPage(): JSX.Element {
     };
 
     if (editing) {
-      const updatePayload: Parameters<typeof usersService.update>[1] = { ...payload };
+      const updatePayload: Parameters<typeof usersService.update>[1] = {
+        ...payload,
+      };
       if (values.password) {
         updatePayload.password = values.password;
       }
@@ -168,7 +174,7 @@ export function UsersPage(): JSX.Element {
     } else {
       const createPayload = {
         ...payload,
-        password: values.password ?? '',
+        password: values.password ?? "",
       };
       createMutation.mutate(createPayload);
     }
@@ -178,7 +184,7 @@ export function UsersPage(): JSX.Element {
     if (usersQuery.isLoading) {
       return (
         <tr>
-          <td colSpan={6}>{t('common.loading')}</td>
+          <td colSpan={6}>{t("common.loading")}</td>
         </tr>
       );
     }
@@ -194,7 +200,7 @@ export function UsersPage(): JSX.Element {
     if (users.length === 0) {
       return (
         <tr>
-          <td colSpan={6}>{t('common.empty')}</td>
+          <td colSpan={6}>{t("common.empty")}</td>
         </tr>
       );
     }
@@ -203,15 +209,26 @@ export function UsersPage(): JSX.Element {
       <tr key={item.id}>
         <td>{item.fullName}</td>
         <td>{item.email}</td>
-        <td>{item.role?.name ?? t('common.none')}</td>
+        <td>{item.role?.name ?? t("common.none")}</td>
         <td>
-          <span className="badge">{item.status === 'active' ? t('customers.statusActive') : t('customers.statusInactive')}</span>
+          <span className="badge">
+            {item.status === "active"
+              ? t("customers.statusActive")
+              : t("customers.statusInactive")}
+          </span>
         </td>
-        <td>{item.lastLoginAt ? formatDateTimeDdMmYyyy(item.lastLoginAt) : '--'}</td>
+        <td>
+          {item.lastLoginAt ? formatDateTimeDdMmYyyy(item.lastLoginAt) : "--"}
+        </td>
         <td>
           <div className="table-actions">
-            <button type="button" className="button secondary" onClick={() => openEditForm(item)} disabled={!canManageUsers}>
-              {t('common.edit')}
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => openEditForm(item)}
+              disabled={!canManageUsers}
+            >
+              {t("common.edit")}
             </button>
             <button
               type="button"
@@ -219,17 +236,25 @@ export function UsersPage(): JSX.Element {
               onClick={() => handleDisable(item)}
               disabled={!canManageUsers || disableMutation.isPending}
             >
-              {t('common.disable')}
+              {t("common.disable")}
             </button>
           </div>
         </td>
       </tr>
     ));
-  }, [usersQuery.isLoading, usersQuery.isError, usersQuery.error, users, t, canManageUsers, disableMutation.isPending]);
+  }, [
+    usersQuery.isLoading,
+    usersQuery.isError,
+    usersQuery.error,
+    users,
+    t,
+    canManageUsers,
+    disableMutation.isPending,
+  ]);
 
   const handleDisable = (user: User) => {
     if (!canManageUsers) {
-      toast.show(t('common.noPermission'), 'error');
+      toast.show(t("common.noPermission"), "error");
       return;
     }
     setUserToDisable(user);
@@ -238,8 +263,8 @@ export function UsersPage(): JSX.Element {
   if (!canReadUsers) {
     return (
       <div className="card">
-        <h2>{t('users.heading')}</h2>
-        <p>{t('common.noPermission')}</p>
+        <h2>{t("users.heading")}</h2>
+        <p>{t("common.noPermission")}</p>
       </div>
     );
   }
@@ -249,13 +274,17 @@ export function UsersPage(): JSX.Element {
       <div className="toolbar">
         <input
           type="search"
-          placeholder={`${t('common.search')}...`}
+          placeholder={`${t("common.search")}...`}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
         {canManageUsers && (
-          <button type="button" className="button primary" onClick={openCreateForm}>
-            {t('common.add')}
+          <button
+            type="button"
+            className="button primary"
+            onClick={openCreateForm}
+          >
+            {t("common.add")}
           </button>
         )}
       </div>
@@ -264,16 +293,17 @@ export function UsersPage(): JSX.Element {
         <table className="table">
           <thead>
             <tr>
-              <th>{t('users.fullName')}</th>
-              <th>{t('users.email')}</th>
-              <th>{t('users.role')}</th>
-              <th>{t('users.status')}</th>
-              <th>{t('users.lastLogin')}</th>
-              <th>{t('common.actions')}</th>
+              <th>{t("users.fullName")}</th>
+              <th>{t("users.email")}</th>
+              <th>{t("users.role")}</th>
+              <th>{t("users.status")}</th>
+              <th>{t("users.lastLogin")}</th>
+              <th>{t("common.actions")}</th>
             </tr>
           </thead>
           <tbody>{tableRows}</tbody>
         </table>
+        <ListPagination query={usersQuery} />
       </div>
 
       <Modal
@@ -282,64 +312,94 @@ export function UsersPage(): JSX.Element {
           if (isSubmitting) return;
           closeForm();
         }}
-        title={editing ? t('users.editTitle') : t('users.addTitle')}
+        title={editing ? t("users.editTitle") : t("users.addTitle")}
         width="760px"
       >
         <form onSubmit={onSubmit}>
           <div className="form-grid">
             <div className="form-group">
-              <label htmlFor="fullName">{t('users.fullName')}*</label>
-              <input id="fullName" {...form.register('fullName')} />
+              <label htmlFor="fullName">{t("users.fullName")}*</label>
+              <input id="fullName" {...form.register("fullName")} />
               {form.formState.errors.fullName && (
-                <small className="form-error">{form.formState.errors.fullName.message}</small>
+                <small className="form-error">
+                  {form.formState.errors.fullName.message}
+                </small>
               )}
             </div>
             <div className="form-group">
-              <label htmlFor="email">{t('users.email')}*</label>
-              <input id="email" type="email" {...form.register('email')} />
+              <label htmlFor="email">{t("users.email")}*</label>
+              <input id="email" type="email" {...form.register("email")} />
               {form.formState.errors.email && (
-                <small className="form-error">{form.formState.errors.email.message}</small>
+                <small className="form-error">
+                  {form.formState.errors.email.message}
+                </small>
               )}
             </div>
             <div className="form-group">
               <label htmlFor="password">
-                {t('users.password')}
-                {!editing && '*'}
+                {t("users.password")}
+                {!editing && "*"}
               </label>
-              <input id="password" type="password" {...form.register('password')} placeholder={editing ? t('users.passwordHint') : ''} />
+              <input
+                id="password"
+                type="password"
+                {...form.register("password")}
+                placeholder={editing ? t("users.passwordHint") : ""}
+              />
               {form.formState.errors.password && (
-                <small className="form-error">{form.formState.errors.password.message}</small>
+                <small className="form-error">
+                  {form.formState.errors.password.message}
+                </small>
               )}
             </div>
             <div className="form-group">
-              <label htmlFor="roleId">{t('users.role')}*</label>
-              <select id="roleId" {...form.register('roleId')}>
-                <option value="">{t('common.none')}</option>
-                {roles.map((role: Role) => (
-                  <option key={role.id} value={role.id}>
-                    {role.name}
-                  </option>
-                ))}
-              </select>
+              <label id="roleId-label" htmlFor="roleId">
+                {t("users.role")}*
+              </label>
+              <SearchableSelect
+                id="roleId"
+                resource="roles"
+                value={form.watch("roleId") ?? ""}
+                options={[]}
+                onChange={(option) =>
+                  form.setValue("roleId", option.value, {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  })
+                }
+              />
               {form.formState.errors.roleId && (
-                <small className="form-error">{form.formState.errors.roleId.message}</small>
+                <small className="form-error">
+                  {form.formState.errors.roleId.message}
+                </small>
               )}
             </div>
             <div className="form-group">
-              <label htmlFor="status">{t('users.status')}*</label>
-              <select id="status" {...form.register('status')}>
-                <option value="active">{t('customers.statusActive')}</option>
-                <option value="disabled">{t('customers.statusInactive')}</option>
+              <label htmlFor="status">{t("users.status")}*</label>
+              <select id="status" {...form.register("status")}>
+                <option value="active">{t("customers.statusActive")}</option>
+                <option value="disabled">
+                  {t("customers.statusInactive")}
+                </option>
               </select>
             </div>
           </div>
-          {editing && <p className="text-muted">{t('users.passwordHint')}</p>}
+          {editing && <p className="text-muted">{t("users.passwordHint")}</p>}
           <div className="form-actions">
-            <button type="button" className="button secondary" onClick={closeForm} disabled={isSubmitting}>
-              {t('common.cancel')}
+            <button
+              type="button"
+              className="button secondary"
+              onClick={closeForm}
+              disabled={isSubmitting}
+            >
+              {t("common.cancel")}
             </button>
-            <button type="submit" className="button primary" disabled={isSubmitting}>
-              {isSubmitting ? t('common.loading') : t('common.save')}
+            <button
+              type="submit"
+              className="button primary"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? t("common.loading") : t("common.save")}
             </button>
           </div>
         </form>
@@ -347,9 +407,13 @@ export function UsersPage(): JSX.Element {
 
       <ConfirmDialog
         open={Boolean(userToDisable)}
-        title={t('users.confirmDisable')}
-        description={userToDisable ? `${userToDisable.fullName} (${userToDisable.email})` : undefined}
-        confirmLabel={t('common.disable')}
+        title={t("users.confirmDisable")}
+        description={
+          userToDisable
+            ? `${userToDisable.fullName} (${userToDisable.email})`
+            : undefined
+        }
+        confirmLabel={t("common.disable")}
         onClose={() => setUserToDisable(null)}
         onConfirm={() => {
           if (!userToDisable) return;

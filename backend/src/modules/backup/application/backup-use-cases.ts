@@ -1,19 +1,25 @@
-import bcrypt from 'bcryptjs';
-import { notFound, unauthorized } from '../../../errors.js';
-import type { BackupDto } from '../contracts/backup-contracts.js';
-import type { BackupRepository, BackupRow } from '../repository/backup-repository.js';
+import bcrypt from "bcryptjs";
+import { notFound, unauthorized } from "../../../errors.js";
+import type { BackupDto } from "../contracts/backup-contracts.js";
+import type {
+  BackupRepository,
+  BackupRow,
+} from "../repository/backup-repository.js";
 import {
   createManagedBackup,
   enforceRetentionPolicy,
   restoreBackupWithRollback,
-} from '../../../services/backup-restore-service.js';
+} from "../../../services/backup-restore-service.js";
 import {
   deleteBackupFile,
   replicateBackupFile,
   writeBackupManifest,
-} from '../../../utils/backup.js';
-import { withBackupLock, type BackupLease } from '../../../services/backup-lock.js';
-import { logAudit } from '../../../utils/audit.js';
+} from "../../../utils/backup.js";
+import {
+  withBackupLock,
+  type BackupLease,
+} from "../../../services/backup-lock.js";
+import { logAudit } from "../../../utils/audit.js";
 
 export type BackupActor = {
   userId: string;
@@ -21,7 +27,7 @@ export type BackupActor = {
   ipAddress?: string | null;
 };
 
-function mapBackupRow(row: BackupRow): BackupDto {
+export function mapBackupRow(row: BackupRow): BackupDto {
   return {
     id: row.id,
     filename: row.filename,
@@ -31,7 +37,7 @@ function mapBackupRow(row: BackupRow): BackupDto {
     metadata: row.metadata ?? null,
     createdBy: row.created_by_full_name
       ? {
-          id: row.created_by_id ?? '',
+          id: row.created_by_id ?? "",
           fullName: row.created_by_full_name,
         }
       : null,
@@ -39,7 +45,10 @@ function mapBackupRow(row: BackupRow): BackupDto {
 }
 
 export function createListBackupsUseCase(repository: BackupRepository) {
-  return async (pagination: { limit: number; offset: number }): Promise<BackupDto[]> => {
+  return async (pagination: {
+    limit: number;
+    offset: number;
+  }): Promise<BackupDto[]> => {
     const rows = await repository.listBackups(pagination);
     return rows.map(mapBackupRow);
   };
@@ -54,14 +63,16 @@ export function createBackupUseCase(repository: BackupRepository) {
 
     const stored = await repository.findByFilename(backup.filename);
     if (!stored) {
-      throw notFound('backup not found after creation');
+      throw notFound("backup not found after creation");
     }
 
     return mapBackupRow(stored);
   };
 }
 
-export function createRegisterUploadedBackupUseCase(repository: BackupRepository) {
+export function createRegisterUploadedBackupUseCase(
+  repository: BackupRepository,
+) {
   return async (input: {
     actor: BackupActor;
     filename: string;
@@ -71,7 +82,12 @@ export function createRegisterUploadedBackupUseCase(repository: BackupRepository
     lease: BackupLease;
   }): Promise<BackupDto> => {
     input.lease.assertHeld();
-    await replicateBackupFile(input.filename, input.checksum, input.metadata, input.lease.signal);
+    await replicateBackupFile(
+      input.filename,
+      input.checksum,
+      input.metadata,
+      input.lease.signal,
+    );
     input.lease.assertHeld();
     await writeBackupManifest(input);
     input.lease.assertHeld();
@@ -88,13 +104,13 @@ export function createRegisterUploadedBackupUseCase(repository: BackupRepository
         userId: input.actor.userId,
         ipAddress: input.actor.ipAddress,
       },
-      'backup:upload',
+      "backup:upload",
       input.lease,
     );
 
     await logAudit({
       userId: input.actor.userId,
-      action: 'BACKUP_UPLOAD',
+      action: "BACKUP_UPLOAD",
       details: { filename: input.filename, sizeBytes: input.sizeBytes },
       ipAddress: input.actor.ipAddress,
     });
@@ -107,14 +123,15 @@ export function createRegisterUploadedBackupUseCase(repository: BackupRepository
 export function createDeleteBackupUseCase(repository: BackupRepository) {
   return async (actor: BackupActor, filename: string): Promise<void> => {
     await withBackupLock(async (lease) => {
-      if (!(await repository.findByFilename(filename))) throw notFound('backup not found');
+      if (!(await repository.findByFilename(filename)))
+        throw notFound("backup not found");
       lease.assertHeld();
       await deleteBackupFile(filename);
       lease.assertHeld();
       await repository.deleteByFilename(filename);
       await logAudit({
         userId: actor.userId,
-        action: 'BACKUP_DELETE',
+        action: "BACKUP_DELETE",
         details: { filename },
         ipAddress: actor.ipAddress,
       });
@@ -123,20 +140,26 @@ export function createDeleteBackupUseCase(repository: BackupRepository) {
 }
 
 export function createRestoreBackupUseCase(repository: BackupRepository) {
-  return async (input: { actor: BackupActor; filename: string; password: string }) => {
-    const passwordHash = await repository.getUserPasswordHash(input.actor.userId);
+  return async (input: {
+    actor: BackupActor;
+    filename: string;
+    password: string;
+  }) => {
+    const passwordHash = await repository.getUserPasswordHash(
+      input.actor.userId,
+    );
     if (!passwordHash) {
       throw unauthorized();
     }
 
     const matches = await bcrypt.compare(input.password, passwordHash);
     if (!matches) {
-      throw unauthorized('invalid credentials');
+      throw unauthorized("invalid credentials");
     }
 
     const existing = await repository.findByFilename(input.filename);
     if (!existing) {
-      throw notFound('backup not found');
+      throw notFound("backup not found");
     }
 
     return restoreBackupWithRollback({

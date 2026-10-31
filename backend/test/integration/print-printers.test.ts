@@ -41,12 +41,14 @@ beforeAll(async () => {
   await query("insert into product(id,name,price_cash,price_base) values($1,'Synthetic multi-printer',10,10)", [productId]);
 });
 afterAll(async () => {
+  const sellers = (await query('select distinct seller_id from sale where id=any($1::uuid[]) and seller_id is not null', [sales])).rows.map((row) => row.seller_id);
   await query('delete from sale where id=any($1::uuid[])', [sales]);
   await query('delete from print_agent_state where printer_id=any($1::text[])', [printers]);
   await query('delete from print_enrollment where printer_id=any($1::text[])', [printers]);
   await query('delete from print_printer where id=any($1::text[])', [printers]);
   await query("delete from audit_log where user_id=$1 or details->>'printer_id'=any($2::text[])", [adminId,printers]);
   await query('delete from product where id=$1', [productId]); await query('delete from app_user where id=$1', [adminId]);
+  await query('delete from seller where id=any($1::uuid[])', [sellers]);
   for (const key of ['PRINT_MODE','PRINT_AGENT_TOKEN_SHA256','STORE_ID','PRINT_QUEUE_MAX_PENDING']) delete process.env[key]; resetEnvForTests();
   await closeDatabase();
 });

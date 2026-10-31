@@ -59,6 +59,14 @@ create table if not exists seller (
   name text not null
 );
 
+alter table seller add column if not exists user_id uuid unique references app_user(id) on delete set null;
+create table if not exists user_seller (
+  user_id uuid primary key references app_user(id) on delete cascade,
+  seller_id uuid not null unique references seller(id),
+  automatic boolean not null default false,
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists payment_term (
   id uuid primary key default gen_random_uuid(),
   legacy_code text unique,
@@ -79,6 +87,7 @@ create table if not exists sale (
   subtotal numeric(14,2),
   discount numeric(14,2),
   refund_amount numeric(14,2) not null default 0,
+  customer_balance_after_sale numeric(20,2),
   total numeric(14,2),
   status text not null default 'completed' check (status in ('draft','completed','cancelled')),
   cancelled_at timestamptz,
@@ -258,7 +267,9 @@ select c.id as customer_id,
        ) end as legacy_balance
 from customer c
 left join lateral (
-  select sum(s.total) as total, sum(s.amount_paid) as paid
+  select sum(s.total) as total, sum(case when s.source in ('VENDAS','PEDIDOS') or s.payment_method is null
+                then s.amount_paid
+                else least(coalesce(s.amount_paid,0), coalesce(s.total,0)) end) as paid
   from sale s where s.customer_id = c.id and s.status = 'completed'
 ) charges on true
 left join lateral (
@@ -283,3 +294,16 @@ on conflict (name) do update set
   permissions = excluded.permissions,
   discount_limit = excluded.discount_limit;
 
+
+-- Deterministic page ordering, including duplicate names and dates.
+create index if not exists idx_product_page_name on product(lower(name),id);
+create index if not exists idx_product_group_page_name on product_group(lower(name),id);
+create index if not exists idx_customer_page_name on customer(lower(name),id);
+create index if not exists idx_seller_page_name on seller(lower(name),id);
+create index if not exists idx_payment_term_page_name on payment_term(lower(name),id);
+create index if not exists idx_app_role_page_name on app_role(lower(name),id);
+create index if not exists idx_app_user_page_name on app_user(lower(full_name),id);
+create index if not exists idx_app_user_role_page_name on app_user(role_id,lower(full_name),id);
+create index if not exists idx_customer_payment_active_page on customer_payment(customer_id,payment_date desc,id desc) where cancelled_at is null;
+create index if not exists idx_legacy_log_page on system_legacy_import_log(import_id,created_at,id);
+create index if not exists idx_backup_page on system_backup(created_at desc,id desc);

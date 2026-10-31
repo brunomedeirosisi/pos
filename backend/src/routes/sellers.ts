@@ -33,7 +33,7 @@ const baseSchema = z.object({
 
 router.get(
   '/',
-  requirePermission('catalog:read'),
+  requirePermission('catalog:read', 'users:write'),
   asyncHandler(async (req, res) => {
     const { search, ...paginationInput } = listQuerySchema.parse(req.query);
     const pagination = resolvePagination(paginationInput, { defaultPageSize: 100, maxPageSize: 200 });

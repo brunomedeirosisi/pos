@@ -1,5 +1,7 @@
 # Fase 3 — Primeiro corte: cálculo e escala do checkout
 
+> Atualização de 30/10/2026: novas vendas agora aceitam somente unidades inteiras positivas (1 a 99999999999). A escala e a aritmética decimal descritas neste relatório histórico permanecem para os dados existentes e importações. Veja [quantidades de venda](../sales-quantities.md).
+
 Data: **22/10/2026**. Escopo: **TSK-013 / TEC-013, corte inicial**. A fase 3 está em andamento; este incremento não conclui as invariantes financeiras do roadmap.
 
 ## 1. Política adotada

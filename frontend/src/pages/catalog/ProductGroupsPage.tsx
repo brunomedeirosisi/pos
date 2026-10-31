@@ -1,73 +1,80 @@
-﻿import React, { useMemo, useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useTranslation } from 'react-i18next';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { productGroupsService } from '../../services/catalog';
-import type { ProductGroup } from '../../types/catalog';
-import { useToast } from '../../components/ui/ToastProvider';
-import { useDebouncedValue } from '../../hooks/useDebouncedValue';
-import { useHasPermission } from '../../store/auth';
-import { Modal } from '../../components/ui/Modal';
+import { useListQuery, useListState } from "../../hooks/useListQuery";
+import { ListPagination } from "../../components/ui/Pagination";
+import React, { useMemo, useState } from "react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useTranslation } from "react-i18next";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { productGroupsService } from "../../services/catalog";
+import type { ProductGroup } from "../../types/catalog";
+import { useToast } from "../../components/ui/ToastProvider";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import { useHasPermission } from "../../store/auth";
+import { Modal } from "../../components/ui/Modal";
 
 const schema = z.object({
-  name: z.string().trim().min(1, 'Required'),
+  name: z.string().trim().min(1, "Required"),
   legacy_code: z.string().trim().optional(),
 });
 
 type FormValues = z.infer<typeof schema>;
 
 const defaults: FormValues = {
-  name: '',
-  legacy_code: '',
+  name: "",
+  legacy_code: "",
 };
 
 export function ProductGroupsPage(): JSX.Element {
   const { t } = useTranslation();
   const toast = useToast();
   const queryClient = useQueryClient();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useListState(
+    "catalog/ProductGroupsPage-search",
+    "",
+  );
   const debouncedSearch = useDebouncedValue(search, 400);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editing, setEditing] = useState<ProductGroup | null>(null);
-  const canReadCatalog = useHasPermission('catalog:read');
-  const canWriteCatalog = useHasPermission('catalog:write');
+  const canReadCatalog = useHasPermission("catalog:read");
+  const canWriteCatalog = useHasPermission("catalog:write");
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: defaults,
   });
 
-  const groupsQuery = useQuery({
-    queryKey: ['product-groups', debouncedSearch],
-    queryFn: () => productGroupsService.list(debouncedSearch || undefined),
+  const groupsQuery = useListQuery<ProductGroup>({
+    queryKey: ["product-groups", debouncedSearch],
+    resource: "product-groups",
+    filters: { search: debouncedSearch || undefined },
     enabled: canReadCatalog,
   });
 
   const createMutation = useMutation({
-    mutationFn: (values: FormValues) => productGroupsService.create(buildPayload(values)),
+    mutationFn: (values: FormValues) =>
+      productGroupsService.create(buildPayload(values)),
     onSuccess: () => {
-      toast.show(t('common.saved'), 'success');
+      toast.show(t("common.saved"), "success");
       // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
-      void queryClient.invalidateQueries({ queryKey: ['product-groups'] });
+      void queryClient.invalidateQueries({ queryKey: ["product-groups"] });
       closeForm();
     },
-    onError: (error: Error) => toast.show(error.message, 'error'),
+    onError: (error: Error) => toast.show(error.message, "error"),
   });
 
   const updateMutation = useMutation({
     mutationFn: (values: FormValues) => {
-      if (!editing) throw new Error('No record selected');
+      if (!editing) throw new Error("No record selected");
       return productGroupsService.update(editing.id, buildPayload(values));
     },
     onSuccess: () => {
-      toast.show(t('common.saved'), 'success');
+      toast.show(t("common.saved"), "success");
       // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
-      void queryClient.invalidateQueries({ queryKey: ['product-groups'] });
+      void queryClient.invalidateQueries({ queryKey: ["product-groups"] });
       closeForm();
     },
-    onError: (error: Error) => toast.show(error.message, 'error'),
+    onError: (error: Error) => toast.show(error.message, "error"),
   });
 
   function buildPayload(values: FormValues) {
@@ -79,7 +86,7 @@ export function ProductGroupsPage(): JSX.Element {
 
   function openCreateForm() {
     if (!canWriteCatalog) {
-      toast.show(t('common.noPermission'), 'error');
+      toast.show(t("common.noPermission"), "error");
       return;
     }
     setEditing(null);
@@ -89,13 +96,13 @@ export function ProductGroupsPage(): JSX.Element {
 
   function openEditForm(record: ProductGroup) {
     if (!canWriteCatalog) {
-      toast.show(t('common.noPermission'), 'error');
+      toast.show(t("common.noPermission"), "error");
       return;
     }
     setEditing(record);
     form.reset({
       name: record.name,
-      legacy_code: record.legacy_code ?? '',
+      legacy_code: record.legacy_code ?? "",
     });
     setIsFormOpen(true);
   }
@@ -108,7 +115,7 @@ export function ProductGroupsPage(): JSX.Element {
 
   const onSubmit = form.handleSubmit((values) => {
     if (!canWriteCatalog) {
-      toast.show(t('common.noPermission'), 'error');
+      toast.show(t("common.noPermission"), "error");
       return;
     }
     if (editing) {
@@ -129,7 +136,7 @@ export function ProductGroupsPage(): JSX.Element {
       return (
         <tr>
           <td colSpan={3}>
-            <div className="empty-state">{t('common.noPermission')}</div>
+            <div className="empty-state">{t("common.noPermission")}</div>
           </td>
         </tr>
       );
@@ -138,7 +145,7 @@ export function ProductGroupsPage(): JSX.Element {
       return (
         <tr>
           <td colSpan={3}>
-            <div className="empty-state">{t('common.loading')}</div>
+            <div className="empty-state">{t("common.loading")}</div>
           </td>
         </tr>
       );
@@ -148,7 +155,9 @@ export function ProductGroupsPage(): JSX.Element {
       return (
         <tr>
           <td colSpan={3}>
-            <div className="empty-state">{error?.message ?? t('common.error')}</div>
+            <div className="empty-state">
+              {error?.message ?? t("common.error")}
+            </div>
           </td>
         </tr>
       );
@@ -158,7 +167,7 @@ export function ProductGroupsPage(): JSX.Element {
       return (
         <tr>
           <td colSpan={3}>
-            <div className="empty-state">{t('common.empty')}</div>
+            <div className="empty-state">{t("common.empty")}</div>
           </td>
         </tr>
       );
@@ -167,11 +176,15 @@ export function ProductGroupsPage(): JSX.Element {
     return groups.map((group) => (
       <tr key={group.id}>
         <td>{group.name}</td>
-        <td>{group.legacy_code ?? '-'}</td>
+        <td>{group.legacy_code ?? "-"}</td>
         <td>
           {canWriteCatalog && (
-            <button type="button" className="button secondary" onClick={() => openEditForm(group)}>
-              {t('common.edit')}
+            <button
+              type="button"
+              className="button secondary"
+              onClick={() => openEditForm(group)}
+            >
+              {t("common.edit")}
             </button>
           )}
         </td>
@@ -182,8 +195,8 @@ export function ProductGroupsPage(): JSX.Element {
   if (!canReadCatalog) {
     return (
       <div className="card">
-        <h2>{t('productGroups.heading')}</h2>
-        <p>{t('common.noPermission')}</p>
+        <h2>{t("productGroups.heading")}</h2>
+        <p>{t("common.noPermission")}</p>
       </div>
     );
   }
@@ -201,13 +214,17 @@ export function ProductGroupsPage(): JSX.Element {
       <div className="toolbar">
         <input
           type="search"
-          placeholder={`${t('common.search')}...`}
+          placeholder={`${t("common.search")}...`}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
         {canWriteCatalog && (
-          <button type="button" className="button primary" onClick={openCreateForm}>
-            {t('common.add')}
+          <button
+            type="button"
+            className="button primary"
+            onClick={openCreateForm}
+          >
+            {t("common.add")}
           </button>
         )}
       </div>
@@ -216,43 +233,55 @@ export function ProductGroupsPage(): JSX.Element {
         <table className="table">
           <thead>
             <tr>
-              <th>{t('productGroups.heading')}</th>
-              <th>{t('products.legacyCode')}</th>
-              <th>{t('common.actions')}</th>
+              <th>{t("productGroups.heading")}</th>
+              <th>{t("products.legacyCode")}</th>
+              <th>{t("common.actions")}</th>
             </tr>
           </thead>
           <tbody>{rows}</tbody>
         </table>
+        <ListPagination query={groupsQuery} />
       </div>
 
       <Modal
         open={modalOpen}
         onClose={handleModalClose}
-        title={editing ? t('productGroups.editTitle') : t('productGroups.addTitle')}
+        title={
+          editing ? t("productGroups.editTitle") : t("productGroups.addTitle")
+        }
         width="520px"
       >
         <form onSubmit={onSubmit}>
           <div className="form-grid">
             <div className="form-group">
-              <label htmlFor="group-name">
-                {t('productGroups.heading')}*
-              </label>
-              <input id="group-name" {...form.register('name')} />
+              <label htmlFor="group-name">{t("productGroups.heading")}*</label>
+              <input id="group-name" {...form.register("name")} />
               {form.formState.errors.name && (
-                <small style={{ color: '#dc2626' }}>{form.formState.errors.name.message}</small>
+                <small style={{ color: "#dc2626" }}>
+                  {form.formState.errors.name.message}
+                </small>
               )}
             </div>
             <div className="form-group">
-              <label htmlFor="group-legacy">{t('products.legacyCode')}</label>
-              <input id="group-legacy" {...form.register('legacy_code')} />
+              <label htmlFor="group-legacy">{t("products.legacyCode")}</label>
+              <input id="group-legacy" {...form.register("legacy_code")} />
             </div>
           </div>
           <div className="form-actions">
-            <button type="button" className="button secondary" onClick={handleModalClose} disabled={isSubmitting}>
-              {t('common.cancel')}
+            <button
+              type="button"
+              className="button secondary"
+              onClick={handleModalClose}
+              disabled={isSubmitting}
+            >
+              {t("common.cancel")}
             </button>
-            <button type="submit" className="button primary" disabled={isSubmitting}>
-              {isSubmitting ? t('common.loading') : t('common.save')}
+            <button
+              type="submit"
+              className="button primary"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? t("common.loading") : t("common.save")}
             </button>
           </div>
         </form>
@@ -260,4 +289,3 @@ export function ProductGroupsPage(): JSX.Element {
     </div>
   );
 }
-

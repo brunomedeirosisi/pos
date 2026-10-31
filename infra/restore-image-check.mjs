@@ -5,7 +5,8 @@ import { createWriteStream } from 'node:fs';
 import { copyFile, chmod } from 'node:fs/promises';
 import { setTimeout } from 'node:timers/promises';
 import archiver from 'archiver';
-import { query, closeDatabase } from './dist/db.js';
+import { query, closeDatabase, withTransaction } from './dist/db.js';
+import { resolveCheckoutSeller } from './dist/services/user-sellers.js';
 import { app } from './dist/app.js';
 import { ensureBootstrapAdmin } from './dist/services/bootstrap-admin.js';
 import { runPendingMigrations } from './dist/services/migrations.js';
@@ -23,6 +24,7 @@ let server;
 try {
   await runPendingMigrations(); await recoverInterruptedRestore(); await ensureBootstrapAdmin();
   const actor = { userId: (await query('select id from app_user where email=$1', [process.env.BOOTSTRAP_ADMIN_EMAIL])).rows[0].id };
+  const personalSeller = await withTransaction((client) => resolveCheckoutSeller(client, actor.userId, null));
   server = app.listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}/api/v1`;
@@ -38,6 +40,14 @@ try {
       body: JSON.stringify({ file: filename, password, confirm }) });
   }
   await login();
+  const balanceCustomer = randomUUID(), balanceProduct = randomUUID();
+  await query("insert into customer(id,name) values($1,'Synthetic balance restore')", [balanceCustomer]);
+  await query("insert into product(id,name,price_cash,price_base) values($1,'Synthetic balance restore',100,125)", [balanceProduct]);
+  const checkoutResponse = await fetch(base + '/sales', { method: 'POST', headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ customer_id: balanceCustomer, payment_method: 'credit', amount_paid: 0, items: [{ product_id: balanceProduct, quantity: 1 }] }) });
+  assert.equal(checkoutResponse.status, 201);
+  const balanceSale = await checkoutResponse.json();
+  assert.equal(balanceSale.total, 100); assert.equal(balanceSale.customer_balance_after_sale, 100);
   const original = await createManagedBackup(actor, 'restore-test');
   const marker = randomUUID();
   await query("insert into customer(id,name) values ($1,'Synthetic restore marker')", [marker]);
@@ -76,6 +86,14 @@ try {
   assert.equal((await query('select count(*)::int as n from system_backup where filename=any($1)', [[original.filename, restored.snapshot]])).rows[0].n, 2);
   assert.equal((await fetch(base + '/auth/me', { headers: { Cookie: cookie } })).status, 401);
   check('real HTTP restore retains durable journal, target and recovery snapshot; revokes sessions');
+  const sellerLink = (await query(`select us.seller_id,s.user_id from user_seller us
+    join seller s on s.id=us.seller_id where us.user_id=$1`, [actor.userId])).rows[0];
+  assert.equal(sellerLink.seller_id, personalSeller); assert.equal(sellerLink.user_id, actor.userId);
+  check('native backup restores individual seller links and stable account identities');
+  const savedBalance = (await query('select customer_balance_after_sale from sale where id=$1', [balanceSale.id])).rows[0];
+  assert.equal(Number(savedBalance.customer_balance_after_sale), 100);
+  assert.equal(Number((await query('select current_balance from customer_financial_totals where customer_id=$1', [balanceCustomer])).rows[0].current_balance), 100);
+  check('native backup restores immutable after-sale customer balance and effective selling price');
 
   // A backup that restores an audit fault forces the post-cutover rollback.
   await query(`create function fail_restore_audit() returns trigger language plpgsql as $$ begin

@@ -321,7 +321,9 @@ export class PgCustomerPaymentsRepository implements CustomerPaymentsRepository 
 
   async getSalesPaidBefore(customerId: string, createdAt: Date, client?: PoolClient): Promise<number> {
     const { rows } = await query<{ total: string | null }>(
-      `select coalesce(sum(s.amount_paid), 0) as total
+      `select coalesce(sum(case when s.source in ('VENDAS','PEDIDOS') or s.payment_method is null
+                then s.amount_paid
+                else least(coalesce(s.amount_paid,0), coalesce(s.total,0)) end), 0) as total
        from sale s
        where s.customer_id = $1
          and s.status = 'completed'

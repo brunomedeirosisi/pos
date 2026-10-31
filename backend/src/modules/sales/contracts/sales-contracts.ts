@@ -1,13 +1,35 @@
-import { z } from 'zod';
-import { isDecimalValue } from '../../../utils/checkout-decimal.js';
+import { z } from "zod";
+import {
+  isDecimalValue,
+  MAX_CHECKOUT_QUANTITY,
+} from "../../../utils/checkout-decimal.js";
 
-export const checkoutMoneySchema = z.number().finite().nonnegative().refine((value) => isDecimalValue(value, 2), 'Expected numeric(14,2) money without rounding');
-const checkoutQuantitySchema = z.number().finite().positive().refine((value) => isDecimalValue(value, 3), 'Expected positive numeric(14,3) quantity without rounding');
-import { paginationQuerySchema } from '../../../utils/pagination.js';
+export const checkoutMoneySchema = z
+  .number()
+  .finite()
+  .nonnegative()
+  .refine(
+    (value) => isDecimalValue(value, 2),
+    "Expected numeric(14,2) money without rounding",
+  );
+const checkoutQuantitySchema = z
+  .number()
+  .finite()
+  .int()
+  .positive()
+  .max(MAX_CHECKOUT_QUANTITY);
+import { paginationQuerySchema } from "../../../utils/pagination.js";
 
-export type SaleStatus = 'draft' | 'completed' | 'cancelled';
-export const salePaymentMethodValues = ['cash', 'card', 'bank', 'other', 'credit', 'credit_with_entry'] as const;
-export const saleReceiptLocaleValues = ['pt-BR', 'en'] as const;
+export type SaleStatus = "draft" | "completed" | "cancelled";
+export const salePaymentMethodValues = [
+  "cash",
+  "card",
+  "bank",
+  "other",
+  "credit",
+  "credit_with_entry",
+] as const;
+export const saleReceiptLocaleValues = ["pt-BR", "en"] as const;
 export type SalePaymentMethod = (typeof salePaymentMethodValues)[number];
 export type SaleReceiptLocale = (typeof saleReceiptLocaleValues)[number];
 
@@ -16,7 +38,7 @@ const optionalNullableTextSchema = z.preprocess((value) => {
     return undefined;
   }
 
-  if (typeof value === 'string') {
+  if (typeof value === "string") {
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : undefined;
   }
@@ -34,6 +56,9 @@ export type SaleItemDto = {
 };
 
 export type SaleDto = {
+  customer_name?: string | null;
+  seller_name?: string | null;
+  payment_term_name?: string | null;
   id: string;
   emission_date: string;
   paid_at: string | null;
@@ -48,6 +73,7 @@ export type SaleDto = {
   discount: number | null;
   total: number | null;
   pending_amount: number | null;
+  customer_balance_after_sale: number | null;
   status: SaleStatus;
   source: string | null;
   source_key: string | null;
@@ -83,12 +109,14 @@ export const saleItemSchema = z.object({
   total: checkoutMoneySchema.nullable().optional(),
 });
 
+export const saleDateSchema = z
+  .string()
+  .trim()
+  .date("invalid_sale_date")
+  .refine((value) => !value.startsWith("0000-"), "invalid_sale_date");
+
 export const createSaleSchema = z.object({
-  emission_date: z
-    .string()
-    .transform((value) => value.trim())
-    .pipe(z.coerce.date())
-    .optional(),
+  emission_date: saleDateSchema.optional(),
   paid_at: z
     .string()
     .transform((value) => value.trim())
@@ -125,7 +153,7 @@ export const saleReceiptQuerySchema = z.object({
 export type SaleReceiptQueryDto = z.infer<typeof saleReceiptQuerySchema>;
 
 export const printSaleReceiptSchema = z.object({
-  printer_id: z.union([z.literal('principal'), z.string().uuid()]).optional(),
+  printer_id: z.union([z.literal("principal"), z.string().uuid()]).optional(),
   request_id: z.string().uuid().optional(),
   locale: z.enum(saleReceiptLocaleValues).optional(),
   copies: z.number().int().min(1).max(10).optional(),
@@ -150,6 +178,7 @@ export type SaleReceiptDto = {
     discount: number;
     total: number;
     pending_amount: number | null;
+    customer_balance_after_sale: number | null;
     payment_method: SalePaymentMethod | null;
     payment_term_name: string | null;
     amount_paid: number | null;

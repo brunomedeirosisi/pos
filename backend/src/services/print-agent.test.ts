@@ -21,6 +21,7 @@ function createReceipt(): SaleReceiptDto {
       discount: 0,
       total: 100,
       pending_amount: 0,
+      customer_balance_after_sale: null,
       payment_method: 'cash',
       payment_term_name: 'A vista',
       amount_paid: 120,

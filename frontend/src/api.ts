@@ -1,7 +1,11 @@
-import i18n from './lib/i18n';
-import { assertSessionGeneration, currentSessionGeneration, trackSessionRequest } from './lib/session-lifecycle';
+import i18n from "./lib/i18n";
+import {
+  assertSessionGeneration,
+  currentSessionGeneration,
+  trackSessionRequest,
+} from "./lib/session-lifecycle";
 
-export const API_BASE = import.meta.env.VITE_API_BASE || '/api/v1';
+export const API_BASE = import.meta.env.VITE_API_BASE || "/api/v1";
 const unauthorizedListeners = new Set<() => void>();
 
 export class ApiError extends Error {
@@ -19,7 +23,7 @@ type ApiOptions = RequestInit & {
   query?: Record<string, string | number | boolean | undefined>;
   json?: unknown;
   formData?: FormData;
-  responseType?: 'json' | 'blob' | 'text';
+  responseType?: "json" | "blob" | "text";
 };
 
 type ApiValidationIssue = {
@@ -31,34 +35,47 @@ type ApiValidationIssue = {
 };
 
 const apiValidationFieldKeys: Record<string, string> = {
-  amount_paid: 'sales.amountPaid',
-  change_amount: 'sales.changeAmount',
-  customer_id: 'sales.customer',
-  discount: 'sales.discount',
-  order_number: 'sales.orderNumber',
-  payment_method: 'sales.paymentMethod',
-  payment_term_id: 'sales.paymentTerm',
-  seller_id: 'sales.seller',
-  subtotal: 'sales.subtotal',
-  total: 'sales.total',
+  quantity: "sales.quantity",
+  emission_date: "sales.saleDate",
+  amount_paid: "sales.amountPaid",
+  change_amount: "sales.changeAmount",
+  customer_id: "sales.customer",
+  discount: "sales.discount",
+  order_number: "sales.orderNumber",
+  payment_method: "sales.paymentMethod",
+  payment_term_id: "sales.paymentTerm",
+  seller_id: "sales.seller",
+  subtotal: "sales.subtotal",
+  total: "sales.total",
 };
 
 const apiMessageTranslationKeys: Record<string, string> = {
-  database_restore_disabled_pending_recovery_validation: 'backups.restoreDisabled',
-  database_restore_in_progress: 'backups.maintenance',
-  restore_database_busy: 'backups.databaseBusy',
-  backup_source_not_verified: 'backups.sourceNotVerified',
-  backup_required_for_recovery: 'backups.pinnedBackup',
-  database_restore_recovery_required: 'backups.recoveryRequired',
-  restore_failed_rollback_failed: 'backups.recoveryRequired',
-  'backup checksum mismatch': 'backups.checksumMismatch',
-  payment_not_found: 'paymentHistory.notFound',
-  payment_already_cancelled: 'paymentHistory.alreadyCancelled',
-  payment_cancellation_forbidden: 'paymentHistory.cancellationForbidden',
-  payment_report_limit_exceeded: 'apiErrors.paymentReportLimitExceeded',
-  payment_report_inconsistent: 'apiErrors.paymentReportInconsistent',
-  'sale cannot be cancelled because it would create a customer credit. Reverse customer payments or refund amounts first':
-    'apiErrors.saleCancellationCreatesCustomerCredit',
+  invalid_sale_quantity: "sales.invalidQuantity",
+  invalid_date_range: "paymentHistory.invalidDates",
+  invalid_sort_field: "pagination.invalidSort",
+  seller_not_found: "sales.sellerNotFound",
+  seller_link_in_use: "roles.sellerLinkInUse",
+  user_role_changed: "roles.userRoleChanged",
+  user_not_found: "roles.userNotFound",
+  "role not found": "roles.roleNotFound",
+  invalid_sale_date: "sales.saleDateInvalid",
+  sale_date_in_future: "sales.saleDateInFuture",
+  database_restore_disabled_pending_recovery_validation:
+    "backups.restoreDisabled",
+  database_restore_in_progress: "backups.maintenance",
+  restore_database_busy: "backups.databaseBusy",
+  backup_source_not_verified: "backups.sourceNotVerified",
+  backup_required_for_recovery: "backups.pinnedBackup",
+  database_restore_recovery_required: "backups.recoveryRequired",
+  restore_failed_rollback_failed: "backups.recoveryRequired",
+  "backup checksum mismatch": "backups.checksumMismatch",
+  payment_not_found: "paymentHistory.notFound",
+  payment_already_cancelled: "paymentHistory.alreadyCancelled",
+  payment_cancellation_forbidden: "paymentHistory.cancellationForbidden",
+  payment_report_limit_exceeded: "apiErrors.paymentReportLimitExceeded",
+  payment_report_inconsistent: "apiErrors.paymentReportInconsistent",
+  "sale cannot be cancelled because it would create a customer credit. Reverse customer payments or refund amounts first":
+    "apiErrors.saleCancellationCreatesCustomerCredit",
 };
 
 function getValidationFieldLabel(issue: ApiValidationIssue): string | null {
@@ -68,7 +85,7 @@ function getValidationFieldLabel(issue: ApiValidationIssue): string | null {
 
   for (let index = issue.path.length - 1; index >= 0; index -= 1) {
     const segment = issue.path[index];
-    if (typeof segment !== 'string') {
+    if (typeof segment !== "string") {
       continue;
     }
 
@@ -82,30 +99,29 @@ function getValidationFieldLabel(issue: ApiValidationIssue): string | null {
 }
 
 function formatValidationIssueMessage(issue: ApiValidationIssue): string {
+  if (Array.isArray(issue.path) && issue.path.at(-1) === "quantity")
+    return i18n.t("sales.invalidQuantity");
   const fieldLabel = getValidationFieldLabel(issue);
   if (!fieldLabel) {
-    return i18n.t('apiErrors.validationFailed');
+    return i18n.t("apiErrors.validationFailed");
+  }
+
+  if (issue.code === "invalid_type" && issue.received === "undefined") {
+    return i18n.t("apiErrors.requiredField", { field: fieldLabel });
   }
 
   if (
-    issue.code === 'invalid_type' &&
-    issue.received === 'undefined'
-  ) {
-    return i18n.t('apiErrors.requiredField', { field: fieldLabel });
-  }
-
-  if (
-    issue.code === 'too_small' &&
-    issue.type === 'string' &&
+    issue.code === "too_small" &&
+    issue.type === "string" &&
     issue.minimum === 1
   ) {
-    return i18n.t('apiErrors.requiredField', { field: fieldLabel });
+    return i18n.t("apiErrors.requiredField", { field: fieldLabel });
   }
 
-  return i18n.t('apiErrors.invalidFieldValue', { field: fieldLabel });
+  return i18n.t("apiErrors.invalidFieldValue", { field: fieldLabel });
 }
 
-function buildUrl(path: string, query?: ApiOptions['query']) {
+function buildUrl(path: string, query?: ApiOptions["query"]) {
   const params = new URLSearchParams();
   if (query) {
     Object.entries(query).forEach(([key, value]) => {
@@ -115,21 +131,26 @@ function buildUrl(path: string, query?: ApiOptions['query']) {
     });
   }
   const queryString = params.toString();
-  return queryString ? `${API_BASE}${path}?${queryString}` : `${API_BASE}${path}`;
+  return queryString
+    ? `${API_BASE}${path}?${queryString}`
+    : `${API_BASE}${path}`;
 }
 
-export function parseApiErrorMessage(statusText: string, body: unknown): string {
-  if (body && typeof body === 'object') {
+export function parseApiErrorMessage(
+  statusText: string,
+  body: unknown,
+): string {
+  if (body && typeof body === "object") {
     const { message, issues } = body as { message?: unknown; issues?: unknown };
-    if (message === 'validation_failed') {
+    if (message === "validation_failed") {
       if (Array.isArray(issues) && issues.length > 0) {
         return formatValidationIssueMessage(issues[0] as ApiValidationIssue);
       }
 
-      return i18n.t('apiErrors.validationFailed');
+      return i18n.t("apiErrors.validationFailed");
     }
 
-    if (typeof message === 'string' && message.trim().length > 0) {
+    if (typeof message === "string" && message.trim().length > 0) {
       const translatedKey = apiMessageTranslationKeys[message];
       if (translatedKey) {
         return i18n.t(translatedKey);
@@ -139,18 +160,28 @@ export function parseApiErrorMessage(statusText: string, body: unknown): string 
     }
   }
 
-  if (typeof body === 'string' && body.trim().length > 0) {
+  if (typeof body === "string" && body.trim().length > 0) {
     return body;
   }
 
   return statusText;
 }
 
-export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
-  const { query, json, formData, headers, responseType = 'json', ...rest } = options;
+export async function api<T>(
+  path: string,
+  options: ApiOptions = {},
+): Promise<T> {
+  const {
+    query,
+    json,
+    formData,
+    headers,
+    responseType = "json",
+    ...rest
+  } = options;
   const url = buildUrl(path, query);
   const init: RequestInit = {
-    credentials: 'include',
+    credentials: "include",
     ...rest,
   };
 
@@ -161,7 +192,8 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   if (formData) {
     init.body = formData;
   } else if (json !== undefined) {
-    mergedHeaders['Content-Type'] = mergedHeaders['Content-Type'] ?? 'application/json';
+    mergedHeaders["Content-Type"] =
+      mergedHeaders["Content-Type"] ?? "application/json";
     init.body = JSON.stringify(json);
   }
 
@@ -174,7 +206,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
   const originalSignal = init.signal;
   const abort = () => controller.abort();
   if (originalSignal?.aborted) controller.abort();
-  originalSignal?.addEventListener('abort', abort, { once: true });
+  originalSignal?.addEventListener("abort", abort, { once: true });
   init.signal = controller.signal;
   const untrack = trackSessionRequest(controller);
   try {
@@ -185,8 +217,8 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
       let errorBody: unknown = null;
       let message = response.statusText;
 
-      const errorContentType = response.headers.get('content-type');
-      if (errorContentType?.includes('application/json')) {
+      const errorContentType = response.headers.get("content-type");
+      if (errorContentType?.includes("application/json")) {
         try {
           errorBody = await response.json();
           message = parseApiErrorMessage(message, errorBody);
@@ -216,13 +248,13 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
       throw new ApiError(response.status, message, errorBody);
     }
 
-    if (responseType === 'blob') {
+    if (responseType === "blob") {
       const body = await response.blob();
       assertSessionGeneration(generation);
       return body as T;
     }
 
-    if (responseType === 'text') {
+    if (responseType === "text") {
       const body = await response.text();
       assertSessionGeneration(generation);
       return body as T;
@@ -237,18 +269,22 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
     return body as T;
   } finally {
     untrack();
-    originalSignal?.removeEventListener('abort', abort);
+    originalSignal?.removeEventListener("abort", abort);
   }
 }
 
 export const http = {
-  get: <T>(path: string, query?: ApiOptions['query']) => api<T>(path, { method: 'GET', query }),
-  post: <T>(path: string, json?: unknown) => api<T>(path, { method: 'POST', json }),
-  patch: <T>(path: string, json?: unknown) => api<T>(path, { method: 'PATCH', json }),
-  delete: <T>(path: string) => api<T>(path, { method: 'DELETE' }),
-  postForm: <T>(path: string, formData: FormData) => api<T>(path, { method: 'POST', formData }),
-  getBlob: (path: string, query?: ApiOptions['query']) =>
-    api<Blob>(path, { method: 'GET', query, responseType: 'blob' }),
+  get: <T>(path: string, query?: ApiOptions["query"]) =>
+    api<T>(path, { method: "GET", query }),
+  post: <T>(path: string, json?: unknown) =>
+    api<T>(path, { method: "POST", json }),
+  patch: <T>(path: string, json?: unknown) =>
+    api<T>(path, { method: "PATCH", json }),
+  delete: <T>(path: string) => api<T>(path, { method: "DELETE" }),
+  postForm: <T>(path: string, formData: FormData) =>
+    api<T>(path, { method: "POST", formData }),
+  getBlob: (path: string, query?: ApiOptions["query"]) =>
+    api<Blob>(path, { method: "GET", query, responseType: "blob" }),
 };
 
 export function onUnauthorized(listener: () => void): () => void {

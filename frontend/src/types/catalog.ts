@@ -1,4 +1,5 @@
 export type Product = {
+  group_name?: string | null;
   id: string;
   legacy_code: string | null;
   name: string;
@@ -31,7 +32,7 @@ export type ProductGroupInput = {
   name: string;
 };
 
-export type CustomerStatus = 'active' | 'delinquent' | 'inactive';
+export type CustomerStatus = "active" | "delinquent" | "inactive";
 
 export type Customer = {
   id: string;
@@ -62,7 +63,7 @@ export type CustomerInput = {
 };
 
 export type LegacyBalanceReconciliation = {
-  source_field: 'CLIENTES.DBF.DEBITO';
+  source_field: "CLIENTES.DBF.DEBITO";
   source_balance: number;
   reconstructed_balance: number;
   adjustment: number;
@@ -83,7 +84,8 @@ export type CustomerDetails = Customer & {
   totals: CustomerTotals;
 };
 
-export type CustomerPaymentMethod = 'cash' | 'card' | 'bank' | 'other' | 'legacy';
+export type CustomerPaymentMethod =
+  "cash" | "card" | "bank" | "other" | "legacy";
 
 export type CustomerPayment = {
   id: string;
@@ -94,7 +96,7 @@ export type CustomerPayment = {
   notes: string | null;
   received_by: string | null;
   received_by_name: string | null;
-  source: 'manual' | 'legacy';
+  source: "manual" | "legacy";
   created_at: string | null;
   cancelled_at?: string | null;
   cancelled_by?: string | null;
@@ -105,7 +107,7 @@ export type CustomerPayment = {
 export type CustomerPaymentInput = {
   amount: number;
   payment_date?: string | null;
-  method?: Exclude<CustomerPaymentMethod, 'legacy'>;
+  method?: Exclude<CustomerPaymentMethod, "legacy">;
   reference?: string | null;
   notes?: string | null;
 };
@@ -114,7 +116,7 @@ export type CustomerPaymentsFilters = {
   start_date?: string;
   end_date?: string;
   method?: CustomerPaymentMethod;
-  sort?: 'asc' | 'desc';
+  sort?: "asc" | "desc";
   page?: number;
   page_size?: number;
   limit?: number;
@@ -131,7 +133,7 @@ export type CustomerPaymentsSummary = {
     start_date: string | null;
     end_date: string | null;
     method: CustomerPaymentMethod | null;
-    sort: 'asc' | 'desc';
+    sort: "asc" | "desc";
   };
 };
 
@@ -166,7 +168,15 @@ export type CompanyInfo = {
 
 export type CustomerSummary = Pick<
   Customer,
-  'id' | 'legacy_code' | 'name' | 'cpf' | 'address' | 'city' | 'uf' | 'cep' | 'phone'
+  | "id"
+  | "legacy_code"
+  | "name"
+  | "cpf"
+  | "address"
+  | "city"
+  | "uf"
+  | "cep"
+  | "phone"
 >;
 
 export type CustomerPaymentReceipt = {
@@ -200,7 +210,7 @@ export type CustomerSale = {
   order_number: string | null;
   total: number | null;
   pending_amount: number | null;
-  status: 'draft' | 'completed' | 'cancelled';
+  status: "draft" | "completed" | "cancelled";
   seller_id: string | null;
   seller_name: string | null;
   items: CustomerSaleItem[];

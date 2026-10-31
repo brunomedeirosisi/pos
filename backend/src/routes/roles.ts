@@ -5,6 +5,7 @@ import { query } from '../db.js';
 import { requirePermission } from '../middleware/auth.js';
 import { badRequest, conflict, notFound } from '../errors.js';
 import { paginationQuerySchema, resolvePagination } from '../utils/pagination.js';
+import { listRoleUserSellers, setUserSeller } from '../services/user-sellers.js';
 
 type RoleRow = {
   id: string;
@@ -15,6 +16,21 @@ type RoleRow = {
 };
 
 const router = Router();
+const memberQuerySchema = paginationQuerySchema.extend({ search: z.string().trim().optional() });
+const memberIdSchema = z.string().uuid().transform((value) => value.toLowerCase());
+const memberParamsSchema = z.object({ id: memberIdSchema, userId: memberIdSchema });
+
+router.get('/:id/users', requirePermission('users:read', 'users:write'), asyncHandler(async (req, res) => {
+  const roleId = z.string().uuid().parse(req.params.id);
+  const { search, ...pagination } = memberQuerySchema.parse(req.query);
+  const { limit, offset } = resolvePagination(pagination, { defaultPageSize: 25, maxPageSize: 100 });
+  res.json(await listRoleUserSellers(roleId, search, limit, offset));
+}));
+router.patch('/:id/users/:userId/seller', requirePermission('users:write'), asyncHandler(async (req, res) => {
+  const { id: roleId, userId } = memberParamsSchema.parse(req.params);
+  const { sellerId } = z.object({ sellerId: memberIdSchema.nullable() }).strict().parse(req.body);
+  res.json(await setUserSeller({ roleId, userId, sellerId, actorId: req.user!.id, ip: req.ip }));
+}));
 
 function normalizeNullableString(value?: string | null) {
   if (value === undefined || value === null) return null;
@@ -102,7 +118,7 @@ async function ensureRoleExists(id: string) {
 
 router.get(
   '/',
-  requirePermission('roles:read', 'users:read'),
+  requirePermission('roles:read', 'roles:write', 'users:read', 'users:write'),
   asyncHandler(async (req, res) => {
     const { search, ...paginationInput } = listRolesQuerySchema.parse(req.query);
     const pagination = resolvePagination(paginationInput, { defaultPageSize: 100, maxPageSize: 200 });
@@ -129,7 +145,7 @@ router.get(
 
 router.get(
   '/:id',
-  requirePermission('roles:read', 'users:read'),
+  requirePermission('roles:read', 'roles:write', 'users:read', 'users:write'),
   asyncHandler(async (req, res) => {
     const role = await ensureRoleExists(req.params.id);
     res.json(role);

@@ -9,8 +9,8 @@ This feature adds receipt printing and reprinting for completed sales, with a la
   - amount paid
   - change (calculated automatically)
 - The API recalculates the official sale prices and totals from the product catalog before saving:
-  - `cash` prefers `price_cash`
-  - `card`, `bank`, `other`, `credit`, and `credit_with_entry` prefer `price_base` with fallback to `price_cash`
+  - all methods use `price_cash`, falling back to `price_base` only if the cash price is missing
+  - switching payment methods does not change the selling price
 - Client-submitted subtotal/total/change values are treated as checkout previews and normalized on the server.
 - The order number field is optional and blank/null values are ignored safely by the API.
 - After the sale is saved, the user can:
@@ -38,10 +38,28 @@ The sale model now persists:
 - `payment_method`
 - `amount_paid`
 - `change_amount`
+- `customer_balance_after_sale` (nullable signed account balance saved at checkout)
 - normalized catalog-backed `subtotal`, `discount`, and `total`
 - aggregated stock movements per product in `stock_movement` linked by `sale_id`
 
 This allows the original receipt content to be reprinted later without recalculating payment values.
+
+## Customer debt at checkout and on reprints
+
+When a customer is selected, checkout reuses the customer's financial summary to show projected debt after the sale. Loading/error feedback prevents confirming against an unknown balance; failed reads can be retried. The completion modal displays the confirmed server balance, including changes made at another register during checkout.
+
+- Cash, card, bank and other payments must settle the whole sale. They do not add debt. Change is returned to the buyer; it does not repay earlier debt.
+- Credit adds the sale total after discounts. Credit with a down payment adds only the unpaid remainder. A full down payment adds zero.
+- Existing account credit offsets new debt. The signed snapshot is exposed by the API; debt displayed on screen and paper is `max(0, balance)`.
+- With an existing R$500 debt and a R$100 purchase: immediate payment leaves R$500; credit leaves R$600; a R$20 down payment leaves R$580.
+
+The sale transaction locks the customer **before** resolving the seller, matching the customer-payment lock order and avoiding foreign-key deadlocks with the receiving user. It inserts the sale, reads `customer_financial_totals` (including the authoritative legacy reconciliation), saves `sale.customer_balance_after_sale`, and writes items/stock in one transaction. Failures roll back the whole sale. Concurrent sales, payments and cancellations share the customer lock. The preview is an estimate; the stored transaction result is authoritative.
+
+The nullable read-only field is returned in sale DTOs and `receipt.sale.customer_balance_after_sale`. Both the printable browser receipt and printer queue use the same localized plain text. Reprinting after another sale/payment keeps the original balance. A backdated sale captures the account balance when it is recorded, after applying that sale.
+
+Migration `20261030_002_sale_customer_balance.sql` adds the snapshot and caps the applied sale payment at its total in the financial view, excluding tendered change. Imported VENDAS/PEDIDOS and untyped legacy sales retain their accounting and reconciliation. Stored prices, quantities and legacy adjustments are not recalculated. Existing receipts have no trustworthy after-sale snapshot; identified historical customers therefore show **Indisponivel / Unavailable**, rather than today's balance. Anonymous receipts omit the customer-debt line. No seed update is necessary.
+
+Docker validation covers all six payment methods, catalog prices overriding forged client totals, discounts, authoritative legacy debt, change, down payments, account credits, failed balance reads, simultaneous sales/payments, immutable reprints and PT-BR/EN checkout and 40-column receipts. [Validation evidence](test-evidence/checkout-balance-docker-20261030.log.gz).
 
 ## Stock synchronization
 

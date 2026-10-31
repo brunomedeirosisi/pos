@@ -1,4 +1,4 @@
-import { http } from '../api';
+import { http } from "../api";
 
 export type LegacyImportResponse = {
   status: string;
@@ -24,7 +24,7 @@ export type LegacyImportStatusLog = {
 
 export type LegacyImportCheckpoint = {
   stage: string;
-  status: 'pending' | 'running' | 'completed' | 'failed';
+  status: "pending" | "running" | "completed" | "failed";
   startedAt: string | null;
   finishedAt: string | null;
   summary: unknown;
@@ -32,8 +32,15 @@ export type LegacyImportCheckpoint = {
 };
 
 export type LegacyImportSummary = {
-  master?: Partial<Record<'productGroups' | 'products' | 'customers' | 'sellers' | 'paymentTerms', number>>;
-  sales?: Partial<Record<'sales' | 'saleItems' | 'orders' | 'orderItems', number>> & { mismatches?: string[] };
+  master?: Partial<
+    Record<
+      "productGroups" | "products" | "customers" | "sellers" | "paymentTerms",
+      number
+    >
+  >;
+  sales?: Partial<
+    Record<"sales" | "saleItems" | "orders" | "orderItems", number>
+  > & { mismatches?: string[] };
   customerPayments?: number;
   stockMovements?: number;
   customerBalances?: {
@@ -48,6 +55,8 @@ export type LegacyImportSummary = {
 };
 
 export type LegacyImportStatus = {
+  logCount?: number;
+  mismatchCount?: number;
   status: string;
   stages: readonly string[];
   currentStage: string | null;
@@ -66,20 +75,30 @@ export type LegacyImportStatus = {
 
 export const legacyImportService = {
   options() {
-    return http.get<{ overwriteEnabled: boolean }>('/admin/import/legacy/options');
+    return http.get<{ overwriteEnabled: boolean }>(
+      "/admin/import/legacy/options",
+    );
   },
   run(payload: LegacyImportPayload) {
     const formData = new FormData();
-    payload.files.forEach((file) => formData.append('files', file));
-    formData.append('overwrite', payload.overwrite ? 'true' : 'false');
-    formData.append('password', payload.password);
-    formData.append('confirmation', payload.confirmation);
-    return http.postForm<LegacyImportResponse>('/admin/import/legacy', formData);
+    payload.files.forEach((file) => formData.append("files", file));
+    formData.append("overwrite", payload.overwrite ? "true" : "false");
+    formData.append("password", payload.password);
+    formData.append("confirmation", payload.confirmation);
+    return http.postForm<LegacyImportResponse>(
+      "/admin/import/legacy",
+      formData,
+    );
   },
   status(sessionId: string) {
-    return http.get<LegacyImportStatus>(`/admin/import/legacy/${encodeURIComponent(sessionId)}/status`);
+    return http.get<LegacyImportStatus>(
+      `/admin/import/legacy/${encodeURIComponent(sessionId)}/status`,
+      { compact: true },
+    );
   },
   downloadReport(sessionId: string) {
-    return http.getBlob(`/admin/import/legacy/${encodeURIComponent(sessionId)}/report`);
+    return http.getBlob(
+      `/admin/import/legacy/${encodeURIComponent(sessionId)}/report`,
+    );
   },
 };

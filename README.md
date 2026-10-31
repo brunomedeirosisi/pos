@@ -18,6 +18,10 @@ Complete payment history reports: [phase-four implementation and remaining work]
 
 Checkout money and quantity precision: [phase-three implementation and remaining work](docs/technical-audit/12-fase-tres-primeiro-corte.md).
 
+Sale date selection, validation and calendar/timezone rules: [sale date guide](docs/sale-date.md).
+
+Automatic checkout seller and individual user links inside permission roles: [user seller guide](docs/user-sellers.md).
+
 Legacy import isolation: [phase-two implementation and remaining work](docs/technical-audit/10-fase-dois-primeiro-corte.md).
 
 Backup durability and coordination: [phase-one implementation](docs/technical-audit/08-fase-um-primeiro-corte.md) and [operational runbook](docs/backup-restore-runbook.md).
@@ -149,14 +153,16 @@ powershell -ExecutionPolicy Bypass -File .\infra\remove-dev-certificate.ps1
 - POS checkout now collects payment method, amount paid, and change before saving the sale.
 - Sale persistence no longer trusts browser-submitted item prices or totals:
   - the API recalculates each item price from the product catalog before saving;
-  - `cash` prefers `product.price_cash`;
-  - `card`, `bank`, `other`, `credit`, and `credit_with_entry` prefer `product.price_base` with fallback to `price_cash`;
+  - every payment method uses `product.price_cash`, falling back to `price_base` only when the cash price is unavailable;
+  - changing the payment method never changes item prices;
   - subtotal, total, pending amount, and change are normalized on the server.
 - Completed sales now write aggregated `stock_movement` rows per product with `type = 'venda'`.
 - Cancelling a sale writes the inverse `stock_movement` entries with `type = 'entrada'`, keeping operational stock and the critical-stock dashboard consistent.
 - Cancelling a sale is now blocked when it would leave a customer with credit balance from prior on-account payments, preserving receivables consistency.
 - Role discount limits are enforced as percentages of the recalculated subtotal, matching the admin UI label.
 - The checkout order number remains optional; leaving it blank no longer blocks the sale submission.
+- Customer checkout shows debt after the sale. Only credit sales add unpaid amounts; immediate payments and change leave previous debt intact.
+- The confirmed customer balance is saved atomically and printed in PT-BR/EN. Reprints retain that snapshot; older sales without a snapshot show it as unavailable.
 - Completed sales can print a receipt immediately or finish without printing.
 - Reprinting is available from sales history and sale details.
 - A matrix-friendly plain-text receipt endpoint is available at:
@@ -245,3 +251,7 @@ node infra/test-disposable.mjs --docker --images --backups --seeds
 Test dependencies are installed from the lockfiles inside dedicated Docker images; no local npm installation or node_modules is needed. The harness recreates only `pos-phase0-tests` and, with `--seeds`, `pos-seed-tests`. Their PostgreSQL data uses tmpfs, published ports use dynamic loopback bindings, and the harness removes their containers, networks and volumes afterward. [Test guide and scope](docs/testing-docker.md).
 
 The original host-runner mode remains available without `--docker` and requires local test dependencies and `NPM_CLI` pointing to npm/bin/npm-cli.js. Restore and legacy overwrite remain disabled by default pending recovery validation. Applying the authentication migration invalidates previous stateless sessions; operators must sign in again.
+
+A paginação compartilhada das listagens, os contratos de leitura e o inventário de telas estão em [docs/pagination.md](docs/pagination.md).
+
+O PDV aceita somente quantidades inteiras positivas em novas vendas: [quantidades de venda](docs/sales-quantities.md).

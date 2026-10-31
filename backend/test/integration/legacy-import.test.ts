@@ -15,7 +15,8 @@ import {
 } from '../../src/services/legacy-import/execution-lock.js';
 import { prepareDatabase } from '../support/database.js';
 import { syntheticArj } from '../support/arj-fixture.js';
-import { getLegacyImportStatus } from '../../src/services/legacy-import/worker.js';
+import { getLegacyImportStatus, processLegacyImportJob } from '../../src/services/legacy-import/worker.js';
+import { resetEnvForTests } from '../../src/config/env.js';
 import express from 'express';
 import request from 'supertest';
 import { salesRouter } from '../../src/modules/sales/http/sales-router.js';
@@ -46,6 +47,31 @@ const barrierKey = 20_261_023;
 const backendDir = fileURLToPath(new URL('../../', import.meta.url));
 
 beforeAll(() => prepareDatabase());
+it('preserves accounts, seller identities and configured links during overwrite', async () => {
+  const userA = randomUUID(), userB = randomUUID(), linked = randomUUID(), automatic = randomUUID(), discarded = randomUUID();
+  const id = await fixture('1910');
+  await replaceDbf('VENDEDOR', ['CODIGO', 'NOME'], [{ CODIGO: '1910', NOME: 'Updated linked seller' }]);
+  for (const user of [userA, userB]) await query("insert into app_user(id,email,password_hash,full_name) values($1,$2,'synthetic','Preserved user')", [user, `${user}@example.test`]);
+  await query("insert into seller(id,name,legacy_code,user_id) values($1,'Linked','1910',null),($2,'Automatic',null,$4),($3,'Discarded','1911',null)", [linked, automatic, discarded, userB]);
+  await query('insert into user_seller(user_id,seller_id) values($1,$2),($3,$4)', [userA, linked, userB, automatic]);
+  await query('update system_legacy_import set overwrite=true where id=$1', [id]);
+  const previous = process.env.ENABLE_LEGACY_OVERWRITE;
+  process.env.ENABLE_LEGACY_OVERWRITE = 'true'; resetEnvForTests();
+  try {
+    await processLegacyImportJob({ data: { importId: id }, attemptsMade: 0, opts: { attempts: 3 } });
+    expect((await query('select seller_id from user_seller where user_id=$1', [userA])).rows[0].seller_id).toBe(linked);
+    expect((await query('select seller_id from user_seller where user_id=$1', [userB])).rows[0].seller_id).toBe(automatic);
+    expect((await query('select name from seller where id=$1', [linked])).rows[0].name).toBe('Updated linked seller');
+    expect((await query('select * from seller where id=$1', [discarded])).rowCount).toBe(0);
+    expect((await query('select id from app_user where id=any($1::uuid[])', [[userA, userB]])).rowCount).toBe(2);
+  } finally {
+    if (previous === undefined) delete process.env.ENABLE_LEGACY_OVERWRITE; else process.env.ENABLE_LEGACY_OVERWRITE = previous;
+    resetEnvForTests();
+    await query('delete from user_seller where user_id=any($1::uuid[])', [[userA, userB]]);
+    await query('delete from seller where id=any($1::uuid[])', [[linked, automatic, discarded]]);
+    await query('delete from app_user where id=any($1::uuid[])', [[userA, userB]]);
+  }
+});
 afterEach(async () => {
   await Promise.all(
     [...children].map(

@@ -1,36 +1,44 @@
-import express from 'express';
-import helmet from 'helmet';
-import cors from 'cors';
-import swaggerUi from 'swagger-ui-express';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import YAML from 'yaml';
-import { getEnv } from './config/env.js';
-import { router as healthRouter } from './routes/health.js';
-import { router as authRouter } from './routes/auth.js';
-import { router as productGroupsRouter } from './routes/product-groups.js';
-import { router as productsRouter } from './routes/products.js';
-import { router as customersRouter } from './routes/customers.js';
-import { router as sellersRouter } from './routes/sellers.js';
-import { router as paymentTermsRouter } from './routes/payment-terms.js';
-import { router as salesRouter } from './routes/sales.js';
-import { paymentHistoryRouter } from './modules/customer-payments/http/payment-history-router.js';
-import { router as usersRouter } from './routes/users.js';
-import { router as rolesRouter } from './routes/roles.js';
-import { router as adminBackupsRouter } from './routes/admin-backups.js';
-import { router as adminLegacyImportRouter } from './routes/admin-legacy-import.js';
-import { dashboardRouter } from './modules/dashboard/http/dashboard-router.js';
-import { errorHandler } from './middleware/error-handler.js';
-import { recoveryMiddleware } from './middleware/recovery.js';
-import { requireAuth } from './middleware/auth.js';
-import { attachRequestId, requestLoggingMiddleware } from './observability/request-context.js';
-import { metricsHandler, metricsMiddleware } from './observability/metrics.js';
-import { printAgentRouter, printJobsRouter, printPrintersRouter } from './modules/print-jobs/print-jobs-router.js';
+import express from "express";
+import helmet from "helmet";
+import cors from "cors";
+import swaggerUi from "swagger-ui-express";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import YAML from "yaml";
+import { getEnv } from "./config/env.js";
+import { router as healthRouter } from "./routes/health.js";
+import { router as authRouter } from "./routes/auth.js";
+import { router as productGroupsRouter } from "./routes/product-groups.js";
+import { router as productsRouter } from "./routes/products.js";
+import { router as customersRouter } from "./routes/customers.js";
+import { router as sellersRouter } from "./routes/sellers.js";
+import { router as paymentTermsRouter } from "./routes/payment-terms.js";
+import { router as salesRouter } from "./routes/sales.js";
+import { paymentHistoryRouter } from "./modules/customer-payments/http/payment-history-router.js";
+import { router as usersRouter } from "./routes/users.js";
+import { router as rolesRouter } from "./routes/roles.js";
+import { listsRouter } from "./routes/lists.js";
+import { router as adminBackupsRouter } from "./routes/admin-backups.js";
+import { router as adminLegacyImportRouter } from "./routes/admin-legacy-import.js";
+import { dashboardRouter } from "./modules/dashboard/http/dashboard-router.js";
+import { errorHandler } from "./middleware/error-handler.js";
+import { recoveryMiddleware } from "./middleware/recovery.js";
+import { requireAuth } from "./middleware/auth.js";
+import {
+  attachRequestId,
+  requestLoggingMiddleware,
+} from "./observability/request-context.js";
+import { metricsHandler, metricsMiddleware } from "./observability/metrics.js";
+import {
+  printAgentRouter,
+  printJobsRouter,
+  printPrintersRouter,
+} from "./modules/print-jobs/print-jobs-router.js";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
-const openApiPath = path.resolve(currentDir, '../openapi/openapi.yaml');
-const openApiDocument = YAML.parse(readFileSync(openApiPath, 'utf8'));
+const openApiPath = path.resolve(currentDir, "../openapi/openapi.yaml");
+const openApiDocument = YAML.parse(readFileSync(openApiPath, "utf8"));
 const env = getEnv();
 
 const allowedOrigins = new Set(env.CORS_ALLOWED_ORIGINS);
@@ -51,9 +59,11 @@ const corsOptions: cors.CorsOptions = {
 };
 
 export const app = express();
-const trustedProxies = env.TRUSTED_PROXY_CIDRS.split(',').map((value) => value.trim()).filter(Boolean);
-app.set('trust proxy', trustedProxies.length ? trustedProxies : false);
-app.disable('x-powered-by');
+const trustedProxies = env.TRUSTED_PROXY_CIDRS.split(",")
+  .map((value) => value.trim())
+  .filter(Boolean);
+app.set("trust proxy", trustedProxies.length ? trustedProxies : false);
+app.disable("x-powered-by");
 app.use(attachRequestId);
 app.use(metricsMiddleware);
 app.use(helmet());
@@ -61,36 +71,41 @@ app.use(cors(corsOptions));
 app.use(express.json());
 app.use(requestLoggingMiddleware);
 
-app.use('/api/v1/health', healthRouter);
-app.use('/api/v1', recoveryMiddleware);
-app.use('/api/v1/auth', authRouter);
-app.use('/api/v1/print-agent', printAgentRouter);
-app.get('/api/v1/store-info', (_req, res) => {
-  if (!env.STORE_ID) { res.status(503).json({ message: 'store_not_configured' }); return; }
+app.use("/api/v1/health", healthRouter);
+app.use("/api/v1", recoveryMiddleware);
+app.use("/api/v1/auth", authRouter);
+app.use("/api/v1/print-agent", printAgentRouter);
+app.get("/api/v1/store-info", (_req, res) => {
+  if (!env.STORE_ID) {
+    res.status(503).json({ message: "store_not_configured" });
+    return;
+  }
   res.json({ store_id: env.STORE_ID, print_mode: env.PRINT_MODE });
 });
-app.get('/api/v1/metrics', metricsHandler);
+app.get("/api/v1/metrics", metricsHandler);
 
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openApiDocument));
-app.get('/api/v1/openapi.json', (_req, res) => {
+app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(openApiDocument));
+app.get("/api/v1/openapi.json", (_req, res) => {
   res.json(openApiDocument);
 });
 
 app.use(requireAuth);
 
-app.use('/api/v1/product-groups', productGroupsRouter);
-app.use('/api/v1/products', productsRouter);
-app.use('/api/v1/customers', customersRouter);
-app.use('/api/v1/sellers', sellersRouter);
-app.use('/api/v1/payment-terms', paymentTermsRouter);
-app.use('/api/v1/sales', salesRouter);
-app.use('/api/v1/payments', paymentHistoryRouter);
-app.use('/api/v1/print-jobs', printJobsRouter);
-app.use('/api/v1/print-printers', printPrintersRouter);
-app.use('/api/v1/dashboard', dashboardRouter);
-app.use('/api/v1/users', usersRouter);
-app.use('/api/v1/roles', rolesRouter);
-app.use('/api/v1/admin', adminBackupsRouter);
-app.use('/api/v1/admin', adminLegacyImportRouter);
+app.use("/api/v1/lists", listsRouter);
+
+app.use("/api/v1/product-groups", productGroupsRouter);
+app.use("/api/v1/products", productsRouter);
+app.use("/api/v1/customers", customersRouter);
+app.use("/api/v1/sellers", sellersRouter);
+app.use("/api/v1/payment-terms", paymentTermsRouter);
+app.use("/api/v1/sales", salesRouter);
+app.use("/api/v1/payments", paymentHistoryRouter);
+app.use("/api/v1/print-jobs", printJobsRouter);
+app.use("/api/v1/print-printers", printPrintersRouter);
+app.use("/api/v1/dashboard", dashboardRouter);
+app.use("/api/v1/users", usersRouter);
+app.use("/api/v1/roles", rolesRouter);
+app.use("/api/v1/admin", adminBackupsRouter);
+app.use("/api/v1/admin", adminLegacyImportRouter);
 
 app.use(errorHandler);

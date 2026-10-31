@@ -15,6 +15,21 @@ export type RoleCreateInput = {
 
 export type RoleUpdateInput = Partial<RoleCreateInput>;
 
+export type RoleUserSeller = {
+  id: string;
+  fullName: string;
+  email: string;
+  status: string;
+  seller: { id: string; name: string; legacy_code: string | null } | null;
+  automatic: boolean;
+};
+export type RoleUserSellersPage = {
+  items: RoleUserSeller[];
+  limit: number;
+  offset: number;
+  hasMore: boolean;
+};
+
 export type UserRoleSummary = {
   id: string;
   name: string;
@@ -22,7 +37,7 @@ export type UserRoleSummary = {
   discountLimit: number;
 };
 
-export type UserStatus = 'active' | 'disabled';
+export type UserStatus = "active" | "disabled";
 
 export type User = {
   id: string;

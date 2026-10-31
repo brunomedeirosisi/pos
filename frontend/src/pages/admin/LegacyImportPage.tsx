@@ -1,89 +1,116 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { legacyImportService, type LegacyImportResponse, type LegacyImportStatus } from '../../services/legacyImport';
-import { useToast } from '../../components/ui/ToastProvider';
-import { useHasPermission } from '../../store/auth';
-import { ApiError } from '../../api';
-import { formatDateTimeDdMmYyyy } from '../../utils/date';
+import { useListQuery } from "../../hooks/useListQuery";
+import { ListPagination } from "../../components/ui/Pagination";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import {
+  legacyImportService,
+  type LegacyImportResponse,
+  type LegacyImportStatus,
+} from "../../services/legacyImport";
+import { useToast } from "../../components/ui/ToastProvider";
+import { useHasPermission } from "../../store/auth";
+import { ApiError } from "../../api";
+import { formatDateTimeDdMmYyyy } from "../../utils/date";
 
-const CONFIRMATION_PHRASE = 'IMPORT LEGACY DATA NOW';
+const CONFIRMATION_PHRASE = "IMPORT LEGACY DATA NOW";
 const POLL_INTERVAL_MS = 5_000;
 
 const STAGE_KEYS: Record<string, string> = {
-  'reset-target': 'legacyImport.stages.prepare',
-  'migrate-master': 'legacyImport.stages.master',
-  'migrate-sales': 'legacyImport.stages.sales',
-  'migrate-customer-payments': 'legacyImport.stages.payments',
-  'migrate-stock': 'legacyImport.stages.stock',
-  'reconcile-customer-balances': 'legacyImport.stages.balances',
-  'reconciliation-report': 'legacyImport.stages.reconciliation',
+  "reset-target": "legacyImport.stages.prepare",
+  "migrate-master": "legacyImport.stages.master",
+  "migrate-sales": "legacyImport.stages.sales",
+  "migrate-customer-payments": "legacyImport.stages.payments",
+  "migrate-stock": "legacyImport.stages.stock",
+  "reconcile-customer-balances": "legacyImport.stages.balances",
+  "reconciliation-report": "legacyImport.stages.reconciliation",
 };
 
 const STAGING_FILES: Record<string, string> = {
-  stg_grupo: 'GRUPO.DBF',
-  stg_produto: 'PRODUTO.DBF',
-  stg_clientes: 'CLIENTES.DBF',
-  stg_vendedor: 'VENDEDOR.DBF',
-  stg_forma_pg: 'FORMA_PG.DBF',
-  stg_vendas: 'VENDAS.DBF',
-  stg_pedidos: 'PEDIDOS.DBF',
-  stg_pagament: 'PAGAMENT.DBF',
-  stg_mov_est: 'MOV_EST.DBF',
+  stg_grupo: "GRUPO.DBF",
+  stg_produto: "PRODUTO.DBF",
+  stg_clientes: "CLIENTES.DBF",
+  stg_vendedor: "VENDEDOR.DBF",
+  stg_forma_pg: "FORMA_PG.DBF",
+  stg_vendas: "VENDAS.DBF",
+  stg_pedidos: "PEDIDOS.DBF",
+  stg_pagament: "PAGAMENT.DBF",
+  stg_mov_est: "MOV_EST.DBF",
 };
 
 function formatDate(value: string | null | undefined): string {
-  return formatDateTimeDdMmYyyy(value, 'N/A');
+  return formatDateTimeDdMmYyyy(value, "N/A");
 }
 
 function normalizeConfirmationPhrase(value: string): string {
-  return value.normalize('NFKC').replace(/\s+/g, ' ').trim().toUpperCase();
+  return value.normalize("NFKC").replace(/\s+/g, " ").trim().toUpperCase();
 }
 
-function resolveImportErrorMessage(error: Error, t: (key: string) => string): string {
-  if (error.message === 'legacy_overwrite_disabled_pending_recovery_validation') {
-    return t('legacyImport.overwriteDisabled');
+function resolveImportErrorMessage(
+  error: Error,
+  t: (key: string) => string,
+): string {
+  if (
+    error.message === "legacy_overwrite_disabled_pending_recovery_validation"
+  ) {
+    return t("legacyImport.overwriteDisabled");
   }
-  if (error.message === 'invalid_legacy_zip') return t('legacyImport.invalidZip');
-  if (error.message === 'invalid_or_unsafe_archive') return t('legacyImport.invalidZip');
-  if (error.message === 'legacy_arj_extractor_unavailable') return t('legacyImport.arjUnavailable');
-  if (error.message === 'file_too_large' || error.message === 'legacy_upload_total_size_exceeded') {
-    return t('legacyImport.fileTooLarge');
+  if (error.message === "invalid_legacy_zip")
+    return t("legacyImport.invalidZip");
+  if (error.message === "invalid_or_unsafe_archive")
+    return t("legacyImport.invalidZip");
+  if (error.message === "legacy_arj_extractor_unavailable")
+    return t("legacyImport.arjUnavailable");
+  if (
+    error.message === "file_too_large" ||
+    error.message === "legacy_upload_total_size_exceeded"
+  ) {
+    return t("legacyImport.fileTooLarge");
   }
-  if (error.message.startsWith('missing required legacy files:')) return t('legacyImport.missingFiles');
-  if (error.message.startsWith('unsupported file type:') || error.message === 'invalid_upload') {
-    return t('legacyImport.invalidFiles');
+  if (error.message.startsWith("missing required legacy files:"))
+    return t("legacyImport.missingFiles");
+  if (
+    error.message.startsWith("unsupported file type:") ||
+    error.message === "invalid_upload"
+  ) {
+    return t("legacyImport.invalidFiles");
   }
-  if (error.message === 'duplicate_legacy_filename') return t('legacyImport.duplicateFiles');
-  if (error.message === 'confirmation phrase mismatch') return t('legacyImport.confirmationRequired');
-  if (error instanceof ApiError && error.status === 401) return t('legacyImport.invalidCredentials');
-  if (error instanceof ApiError && error.status === 403) return t('common.noPermission');
-  return t('legacyImport.submitError');
+  if (error.message === "duplicate_legacy_filename")
+    return t("legacyImport.duplicateFiles");
+  if (error.message === "confirmation phrase mismatch")
+    return t("legacyImport.confirmationRequired");
+  if (error instanceof ApiError && error.status === 401)
+    return t("legacyImport.invalidCredentials");
+  if (error instanceof ApiError && error.status === 403)
+    return t("common.noPermission");
+  return t("legacyImport.submitError");
 }
 
 export function LegacyImportPage(): JSX.Element {
   const { t } = useTranslation();
   const toast = useToast();
-  const canImport = useHasPermission('system:import:legacy');
+  const canImport = useHasPermission("system:import:legacy");
 
   const [files, setFiles] = useState<File[]>([]);
   const [overwrite, setOverwrite] = useState(false);
-  const [confirmation, setConfirmation] = useState('');
-  const [password, setPassword] = useState('');
+  const [confirmation, setConfirmation] = useState("");
+  const [password, setPassword] = useState("");
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [initialResponse, setInitialResponse] = useState<LegacyImportResponse | null>(null);
+  const [initialResponse, setInitialResponse] =
+    useState<LegacyImportResponse | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const notifiedSession = useRef<string | null>(null);
   const normalizedConfirmation = normalizeConfirmationPhrase(confirmation);
   const expectedConfirmation = normalizeConfirmationPhrase(CONFIRMATION_PHRASE);
 
   const optionsQuery = useQuery({
-    queryKey: ['legacy-import-options'],
+    queryKey: ["legacy-import-options"],
     queryFn: legacyImportService.options,
     enabled: canImport,
     refetchOnWindowFocus: true,
   });
-  const overwriteAvailable = !optionsQuery.isError && optionsQuery.data?.overwriteEnabled === true;
+  const overwriteAvailable =
+    !optionsQuery.isError && optionsQuery.data?.overwriteEnabled === true;
 
   const importMutation = useMutation({
     mutationFn: legacyImportService.run,
@@ -95,75 +122,129 @@ export function LegacyImportPage(): JSX.Element {
     onSuccess: (response) => {
       setInitialResponse(response);
       setSessionId(response.sessionId);
-      setPassword('');
-      toast.show(t('legacyImport.queued', { session: response.sessionId }));
+      setPassword("");
+      toast.show(t("legacyImport.queued", { session: response.sessionId }));
     },
     onError: (error: Error) => {
-      toast.show(resolveImportErrorMessage(error, t), 'error');
-      if (error.message === 'legacy_overwrite_disabled_pending_recovery_validation') {
+      toast.show(resolveImportErrorMessage(error, t), "error");
+      if (
+        error.message ===
+        "legacy_overwrite_disabled_pending_recovery_validation"
+      ) {
         void optionsQuery.refetch();
       }
     },
   });
 
   const statusQuery = useQuery<LegacyImportStatus, Error>({
-    queryKey: ['legacy-import-status', sessionId],
+    queryKey: ["legacy-import-status", sessionId],
     queryFn: () => legacyImportService.status(sessionId!),
     enabled: Boolean(sessionId),
     refetchIntervalInBackground: true,
     refetchInterval: (query) => {
       const data = query.state.data as LegacyImportStatus | undefined;
       if (!data) return POLL_INTERVAL_MS;
-      return data.status === 'completed' || data.status === 'failed' ? false : POLL_INTERVAL_MS;
+      return data.status === "completed" || data.status === "failed"
+        ? false
+        : POLL_INTERVAL_MS;
     },
   });
 
+  const [logsOpen, setLogsOpen] = useState(false);
+  const [warningsOpen, setWarningsOpen] = useState(false);
+  const logPage = useListQuery<{
+    id: number;
+    message: string;
+    created_at: string;
+  }>({
+    resource: "legacy-logs",
+    queryKey: ["legacy-logs", sessionId],
+    stateKey: `legacy-${sessionId}-logs`,
+    filters: { sessionId: sessionId ?? undefined },
+    enabled: Boolean(sessionId) && logsOpen && canImport,
+    refetchInterval: logsOpen ? POLL_INTERVAL_MS : false,
+  });
+  const warningPage = useListQuery<{ id: number; message: string }>({
+    resource: "legacy-warnings",
+    queryKey: ["legacy-warnings", sessionId],
+    stateKey: `legacy-${sessionId}-warnings`,
+    filters: { sessionId: sessionId ?? undefined },
+    enabled: Boolean(sessionId) && warningsOpen && canImport,
+  });
   const status = statusQuery.data;
-  const logs = status?.logs ?? [];
+  const logs =
+    logPage.data?.map((row) => ({ ...row, createdAt: row.created_at })) ??
+    status?.logs ??
+    [];
+  const logCount = status?.logCount ?? logs.length;
   const summary = status?.summary;
-  const effectiveStatus = status?.status ?? initialResponse?.status ?? 'queued';
-  const isTerminal = effectiveStatus === 'completed' || effectiveStatus === 'failed';
-  const isBusy = importMutation.isPending || (Boolean(sessionId) && !isTerminal);
+  const effectiveStatus = status?.status ?? initialResponse?.status ?? "queued";
+  const isTerminal =
+    effectiveStatus === "completed" || effectiveStatus === "failed";
+  const isBusy =
+    importMutation.isPending || (Boolean(sessionId) && !isTerminal);
   const stages = status?.stages ?? [];
   const completedStages = stages.filter((stage) =>
-    status?.checkpoints.some((checkpoint) => checkpoint.stage === stage && checkpoint.status === 'completed')
+    status?.checkpoints.some(
+      (checkpoint) =>
+        checkpoint.stage === stage && checkpoint.status === "completed",
+    ),
   ).length;
-  const mismatches = summary?.sales?.mismatches ?? [];
+  const mismatches =
+    warningPage.data?.map((row) => row.message) ??
+    summary?.sales?.mismatches ??
+    [];
+  const mismatchCount = status?.mismatchCount ?? mismatches.length;
   const resultKey =
-    effectiveStatus === 'failed'
-      ? 'legacyImport.failed'
+    effectiveStatus === "failed"
+      ? "legacyImport.failed"
       : mismatches.length
-        ? 'legacyImport.completedWithWarnings'
-        : 'legacyImport.completed';
+        ? "legacyImport.completedWithWarnings"
+        : "legacyImport.completed";
   const reportAvailable = Boolean(status?.reportAvailable);
   const summaryRows = summary
     ? [
         ...Object.entries(summary.master ?? {}),
-        ...Object.entries(summary.sales ?? {}).filter(([key]) => key !== 'mismatches'),
-        ['customerPayments', summary.customerPayments],
-        ['stockMovements', summary.stockMovements],
-      ].filter((row): row is [string, number] => typeof row[1] === 'number')
+        ...Object.entries(summary.sales ?? {}).filter(
+          ([key]) => key !== "mismatches",
+        ),
+        ["customerPayments", summary.customerPayments],
+        ["stockMovements", summary.stockMovements],
+      ].filter((row): row is [string, number] => typeof row[1] === "number")
     : [];
 
   useEffect(() => {
-    if (!sessionId || !status || !isTerminal || notifiedSession.current === sessionId) return;
+    if (
+      !sessionId ||
+      !status ||
+      !isTerminal ||
+      notifiedSession.current === sessionId
+    )
+      return;
     notifiedSession.current = sessionId;
-    toast.show(t(resultKey), status.status === 'failed' ? 'error' : mismatches.length ? 'default' : 'success');
+    toast.show(
+      t(resultKey),
+      status.status === "failed"
+        ? "error"
+        : mismatches.length
+          ? "default"
+          : "success",
+    );
   }, [sessionId, status, isTerminal, resultKey, mismatches.length, t, toast]);
 
   const stageLabel = (stage: string): string => {
-    const table = stage.replace('load-staging:', '');
-    if (stage.startsWith('load-staging:') && STAGING_FILES[table]) {
-      return t('legacyImport.stages.staging', { file: STAGING_FILES[table] });
+    const table = stage.replace("load-staging:", "");
+    if (stage.startsWith("load-staging:") && STAGING_FILES[table]) {
+      return t("legacyImport.stages.staging", { file: STAGING_FILES[table] });
     }
-    return t(STAGE_KEYS[stage] ?? 'legacyImport.stages.processing');
+    return t(STAGE_KEYS[stage] ?? "legacyImport.stages.processing");
   };
 
   const filesSelectedText = useMemo(() => {
     if (!files.length) {
-      return t('legacyImport.noFilesSelected');
+      return t("legacyImport.noFilesSelected");
     }
-    return t('legacyImport.filesSelected', { count: files.length });
+    return t("legacyImport.filesSelected", { count: files.length });
   }, [files, t]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -183,23 +264,30 @@ export function LegacyImportPage(): JSX.Element {
   const handleRunImport = () => {
     if (isBusy) return;
     if (!canImport) {
-      toast.show(t('common.noPermission'), 'error');
+      toast.show(t("common.noPermission"), "error");
       return;
     }
     if (overwrite && !overwriteAvailable) {
-      toast.show(t(optionsQuery.isError ? 'legacyImport.optionsError' : 'legacyImport.overwriteDisabled'), 'error');
+      toast.show(
+        t(
+          optionsQuery.isError
+            ? "legacyImport.optionsError"
+            : "legacyImport.overwriteDisabled",
+        ),
+        "error",
+      );
       return;
     }
     if (!files.length) {
-      toast.show(t('legacyImport.noFilesSelected'), 'error');
+      toast.show(t("legacyImport.noFilesSelected"), "error");
       return;
     }
     if (normalizedConfirmation !== expectedConfirmation) {
-      toast.show(t('legacyImport.confirmationRequired'), 'error');
+      toast.show(t("legacyImport.confirmationRequired"), "error");
       return;
     }
     if (!password.trim()) {
-      toast.show(t('legacyImport.passwordRequired'), 'error');
+      toast.show(t("legacyImport.passwordRequired"), "error");
       return;
     }
 
@@ -215,12 +303,12 @@ export function LegacyImportPage(): JSX.Element {
     if (isBusy) return;
     setFiles([]);
     setOverwrite(false);
-    setConfirmation('');
-    setPassword('');
+    setConfirmation("");
+    setPassword("");
     setSessionId(null);
     setInitialResponse(null);
     importMutation.reset();
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleDownloadReport = async () => {
@@ -228,7 +316,7 @@ export function LegacyImportPage(): JSX.Element {
     try {
       const blob = await legacyImportService.downloadReport(sessionId);
       const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
       link.download = `reconciliation_${sessionId}.csv`;
       document.body.appendChild(link);
@@ -236,30 +324,40 @@ export function LegacyImportPage(): JSX.Element {
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
     } catch {
-      toast.show(t('legacyImport.reportError'), 'error');
+      toast.show(t("legacyImport.reportError"), "error");
     }
   };
 
   if (!canImport) {
     return (
       <div className="card">
-        <h2>{t('legacyImport.heading')}</h2>
-        <p>{t('common.noPermission')}</p>
+        <h2>{t("legacyImport.heading")}</h2>
+        <p>{t("common.noPermission")}</p>
       </div>
     );
   }
 
   return (
-    <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+    <div
+      className="card"
+      style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}
+    >
       <header>
-        <h2 style={{ marginBottom: '0.35rem' }}>{t('legacyImport.heading')}</h2>
-        <p style={{ margin: 0, color: '#475569' }}>{t('legacyImport.description')}</p>
+        <h2 style={{ marginBottom: "0.35rem" }}>{t("legacyImport.heading")}</h2>
+        <p style={{ margin: 0, color: "#475569" }}>
+          {t("legacyImport.description")}
+        </p>
       </header>
 
       {importMutation.isPending && (
-        <div className="empty-state" role="status" aria-live="polite" aria-busy="true">
-          <p>{t('legacyImport.uploading')}</p>
-          <progress aria-label={t('legacyImport.uploading')} />
+        <div
+          className="empty-state"
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <p>{t("legacyImport.uploading")}</p>
+          <progress aria-label={t("legacyImport.uploading")} />
         </div>
       )}
       {importMutation.isError && (
@@ -270,29 +368,34 @@ export function LegacyImportPage(): JSX.Element {
 
       {(initialResponse || status) && (
         <section>
-          <h4>{t('legacyImport.statusTitle')}</h4>
+          <h4>{t("legacyImport.statusTitle")}</h4>
           <div
             className="card"
             style={{
-              background: 'rgba(248, 250, 252, 0.75)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '0.75rem',
+              background: "rgba(248, 250, 252, 0.75)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.75rem",
             }}
           >
             <div role="status" aria-live="polite" aria-atomic="true">
               <strong>{t(`legacyImport.status.${effectiveStatus}`)}</strong>
-              <p>{isTerminal ? t(resultKey) : t(`legacyImport.feedback.${effectiveStatus}`)}</p>
-              {effectiveStatus === 'retrying' && (
+              <p>
+                {isTerminal
+                  ? t(resultKey)
+                  : t(`legacyImport.feedback.${effectiveStatus}`)}
+              </p>
+              {effectiveStatus === "retrying" && (
                 <p>
-                  {t('legacyImport.retryCount', {
+                  {t("legacyImport.retryCount", {
                     count: status?.retryCount ?? 0,
                   })}
                 </p>
               )}
               {status?.currentStage && (
                 <p>
-                  {t('legacyImport.currentStage')}: {stageLabel(status.currentStage)}
+                  {t("legacyImport.currentStage")}:{" "}
+                  {stageLabel(status.currentStage)}
                 </p>
               )}
               {stages.length > 0 ? (
@@ -300,23 +403,25 @@ export function LegacyImportPage(): JSX.Element {
                   <progress
                     max={stages.length}
                     value={completedStages}
-                    aria-label={t('legacyImport.progressTitle')}
-                    style={{ width: '100%' }}
+                    aria-label={t("legacyImport.progressTitle")}
+                    style={{ width: "100%" }}
                   />
                   <span>
-                    {t('legacyImport.stageCount', {
+                    {t("legacyImport.stageCount", {
                       completed: completedStages,
                       total: stages.length,
                     })}
                   </span>
                 </>
               ) : (
-                !isTerminal && <progress aria-label={t('legacyImport.progressTitle')} />
+                !isTerminal && (
+                  <progress aria-label={t("legacyImport.progressTitle")} />
+                )
               )}
             </div>
             {statusQuery.isError && (
               <div role="alert">
-                <p>{t('legacyImport.statusError')}</p>
+                <p>{t("legacyImport.statusError")}</p>
                 <button
                   type="button"
                   className="button secondary"
@@ -325,57 +430,78 @@ export function LegacyImportPage(): JSX.Element {
                     void statusQuery.refetch();
                   }}
                 >
-                  {t('legacyImport.refreshStatus')}
+                  {t("legacyImport.refreshStatus")}
                 </button>
               </div>
             )}
             <div
               style={{
-                fontSize: '0.9rem',
-                color: '#475569',
-                display: 'grid',
-                gap: '0.25rem',
+                fontSize: "0.9rem",
+                color: "#475569",
+                display: "grid",
+                gap: "0.25rem",
               }}
             >
               <div>
-                <strong>{t('legacyImport.sessionIdLabel')}:</strong> {sessionId ?? initialResponse?.sessionId ?? 'N/A'}
+                <strong>{t("legacyImport.sessionIdLabel")}:</strong>{" "}
+                {sessionId ?? initialResponse?.sessionId ?? "N/A"}
               </div>
               <div>
-                <strong>{t('legacyImport.startedAtLabel')}:</strong> {formatDate(status?.startedAt)}
+                <strong>{t("legacyImport.startedAtLabel")}:</strong>{" "}
+                {formatDate(status?.startedAt)}
               </div>
               <div>
-                <strong>{t('legacyImport.finishedAtLabel')}:</strong> {formatDate(status?.finishedAt)}
+                <strong>{t("legacyImport.finishedAtLabel")}:</strong>{" "}
+                {formatDate(status?.finishedAt)}
               </div>
               {status?.error && (
-                <details>
-                  <summary>{t('legacyImport.errorLabel')}</summary>
+                <details
+                  onToggle={(event) =>
+                    setWarningsOpen(event.currentTarget.open)
+                  }
+                >
+                  <summary>{t("legacyImport.errorLabel")}</summary>
                   {status.error}
                 </details>
               )}
             </div>
             <div>
-              <h5 style={{ margin: '0 0 0.35rem' }}>{t('legacyImport.progressTitle')}</h5>
+              <h5 style={{ margin: "0 0 0.35rem" }}>
+                {t("legacyImport.progressTitle")}
+              </h5>
               <ol
                 style={{
                   margin: 0,
-                  paddingLeft: '1.25rem',
-                  maxHeight: '220px',
-                  overflowY: 'auto',
+                  paddingLeft: "1.25rem",
+                  maxHeight: "220px",
+                  overflowY: "auto",
                 }}
               >
                 {stages.map((stage) => {
-                  const checkpoint = status?.checkpoints.find((entry) => entry.stage === stage);
-                  const state = status?.currentStage === stage ? 'running' : (checkpoint?.status ?? 'pending');
+                  const checkpoint = status?.checkpoints.find(
+                    (entry) => entry.stage === stage,
+                  );
+                  const state =
+                    status?.currentStage === stage
+                      ? "running"
+                      : (checkpoint?.status ?? "pending");
                   return (
-                    <li key={stage} aria-current={state === 'running' ? 'step' : undefined}>
-                      {stageLabel(stage)} — {t(`legacyImport.stageStatus.${state}`)}
+                    <li
+                      key={stage}
+                      aria-current={state === "running" ? "step" : undefined}
+                    >
+                      {stageLabel(stage)} —{" "}
+                      {t(`legacyImport.stageStatus.${state}`)}
                     </li>
                   );
                 })}
               </ol>
-              {logs.length > 0 && (
-                <details style={{ marginTop: '0.75rem' }}>
-                  <summary>{t('legacyImport.technicalDetails')}</summary>
+              {logCount > 0 && (
+                <details
+                  onToggle={(event) => setLogsOpen(event.currentTarget.open)}
+                  style={{ marginTop: "0.75rem" }}
+                >
+                  <summary>{t("legacyImport.technicalDetails")}</summary>
                   <ul>
                     {logs.map((log, index) => (
                       <li key={index}>
@@ -383,6 +509,7 @@ export function LegacyImportPage(): JSX.Element {
                       </li>
                     ))}
                   </ul>
+                  <ListPagination query={logPage} />
                 </details>
               )}
             </div>
@@ -390,17 +517,26 @@ export function LegacyImportPage(): JSX.Element {
         </section>
       )}
 
-      {summary && effectiveStatus === 'completed' && (
+      {summary && effectiveStatus === "completed" && (
         <section>
-          <h4>{t('legacyImport.summaryTitle')}</h4>
-          <div className="card" style={{ background: 'rgba(248, 250, 252, 0.75)' }}>
-            <p>{t('legacyImport.summaryHint')}</p>
-            {summary.customerBalances && <p role="status">{t('legacyImport.balancesVerified', { count: summary.customerBalances.verified })}</p>}
+          <h4>{t("legacyImport.summaryTitle")}</h4>
+          <div
+            className="card"
+            style={{ background: "rgba(248, 250, 252, 0.75)" }}
+          >
+            <p>{t("legacyImport.summaryHint")}</p>
+            {summary.customerBalances && (
+              <p role="status">
+                {t("legacyImport.balancesVerified", {
+                  count: summary.customerBalances.verified,
+                })}
+              </p>
+            )}
             <table className="table">
               <thead>
                 <tr>
-                  <th>{t('legacyImport.recordType')}</th>
-                  <th>{t('legacyImport.processedRecords')}</th>
+                  <th>{t("legacyImport.recordType")}</th>
+                  <th>{t("legacyImport.processedRecords")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -412,11 +548,11 @@ export function LegacyImportPage(): JSX.Element {
                 ))}
               </tbody>
             </table>
-            {mismatches.length > 0 && (
+            {mismatchCount > 0 && (
               <div role="alert">
-                <p>{t('legacyImport.mismatches', { count: mismatches.length })}</p>
+                <p>{t("legacyImport.mismatches", { count: mismatchCount })}</p>
                 <details>
-                  <summary>{t('legacyImport.technicalDetails')}</summary>
+                  <summary>{t("legacyImport.technicalDetails")}</summary>
                   <ul>
                     {mismatches.map((message, index) => (
                       <li key={index}>{message}</li>
@@ -430,8 +566,12 @@ export function LegacyImportPage(): JSX.Element {
       )}
       {reportAvailable && (
         <div>
-          <button type="button" className="button secondary" onClick={handleDownloadReport}>
-            {t('legacyImport.downloadReport')}
+          <button
+            type="button"
+            className="button secondary"
+            onClick={handleDownloadReport}
+          >
+            {t("legacyImport.downloadReport")}
           </button>
         </div>
       )}
@@ -440,16 +580,20 @@ export function LegacyImportPage(): JSX.Element {
         onDragOver={(event) => event.preventDefault()}
         onDrop={handleDrop}
         style={{
-          border: '2px dashed rgba(148, 163, 184, 0.6)',
-          borderRadius: '1rem',
-          padding: '2rem',
-          textAlign: 'center',
-          background: 'rgba(248, 250, 252, 0.7)',
+          border: "2px dashed rgba(148, 163, 184, 0.6)",
+          borderRadius: "1rem",
+          padding: "2rem",
+          textAlign: "center",
+          background: "rgba(248, 250, 252, 0.7)",
         }}
       >
-        <p style={{ margin: '0 0 1rem' }}>{t('legacyImport.dragHint')}</p>
-        <label htmlFor="legacy-files" className="button secondary" style={{ cursor: isBusy ? 'default' : 'pointer' }}>
-          {t('legacyImport.selectFiles')}
+        <p style={{ margin: "0 0 1rem" }}>{t("legacyImport.dragHint")}</p>
+        <label
+          htmlFor="legacy-files"
+          className="button secondary"
+          style={{ cursor: isBusy ? "default" : "pointer" }}
+        >
+          {t("legacyImport.selectFiles")}
         </label>
         <input
           id="legacy-files"
@@ -457,28 +601,40 @@ export function LegacyImportPage(): JSX.Element {
           type="file"
           multiple
           accept=".dbf,.DBF,.dbt,.DBT,.zip,.ZIP,.arj,.ARJ"
-          style={{ display: 'none' }}
+          style={{ display: "none" }}
           onChange={handleFileChange}
           disabled={isBusy}
         />
-        <p style={{ marginTop: '0.75rem', color: '#475569' }}>{filesSelectedText}</p>
+        <p style={{ marginTop: "0.75rem", color: "#475569" }}>
+          {filesSelectedText}
+        </p>
       </div>
 
       <div
         style={{
-          padding: '1rem 1.25rem',
-          borderRadius: '0.9rem',
-          background: 'rgba(254, 226, 226, 0.6)',
-          border: '1px solid rgba(248, 113, 113, 0.7)',
+          padding: "1rem 1.25rem",
+          borderRadius: "0.9rem",
+          background: "rgba(254, 226, 226, 0.6)",
+          border: "1px solid rgba(248, 113, 113, 0.7)",
         }}
       >
-        <strong style={{ display: 'block', marginBottom: '0.25rem' }}>{t('common.warning')}</strong>
-        <span style={{ color: '#7f1d1d', display: 'block' }}>{t('legacyImport.warning')}</span>
+        <strong style={{ display: "block", marginBottom: "0.25rem" }}>
+          {t("common.warning")}
+        </strong>
+        <span style={{ color: "#7f1d1d", display: "block" }}>
+          {t("legacyImport.warning")}
+        </span>
       </div>
 
       <div className="form-grid">
         <div className="form-group">
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem' }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "0.75rem",
+            }}
+          >
             <input
               id="legacy-overwrite"
               type="checkbox"
@@ -488,14 +644,14 @@ export function LegacyImportPage(): JSX.Element {
               onChange={(event) => setOverwrite(event.target.checked)}
             />
             <label htmlFor="legacy-overwrite" style={{ fontWeight: 500 }}>
-              {t('legacyImport.overwrite')}
+              {t("legacyImport.overwrite")}
             </label>
           </div>
           <div id="legacy-overwrite-help" aria-live="polite">
-            {optionsQuery.isPending && <small>{t('common.loading')}</small>}
+            {optionsQuery.isPending && <small>{t("common.loading")}</small>}
             {optionsQuery.isError ? (
               <div role="alert">
-                <small>{t('legacyImport.optionsError')}</small>
+                <small>{t("legacyImport.optionsError")}</small>
                 <button
                   type="button"
                   className="button secondary"
@@ -504,27 +660,33 @@ export function LegacyImportPage(): JSX.Element {
                     void optionsQuery.refetch();
                   }}
                 >
-                  {t('legacyImport.refreshOptions')}
+                  {t("legacyImport.refreshOptions")}
                 </button>
               </div>
             ) : (
-              optionsQuery.data?.overwriteEnabled === false && <small>{t('legacyImport.overwriteDisabled')}</small>
+              optionsQuery.data?.overwriteEnabled === false && (
+                <small>{t("legacyImport.overwriteDisabled")}</small>
+              )
             )}
           </div>
         </div>
         <div className="form-group">
-          <label htmlFor="legacy-confirmation">{t('legacyImport.confirmationLabel')}</label>
+          <label htmlFor="legacy-confirmation">
+            {t("legacyImport.confirmationLabel")}
+          </label>
           <input
             id="legacy-confirmation"
             value={confirmation}
             disabled={isBusy}
             onChange={(event) => setConfirmation(event.target.value)}
-            placeholder={t('legacyImport.confirmationPlaceholder')}
+            placeholder={t("legacyImport.confirmationPlaceholder")}
             autoComplete="off"
           />
         </div>
         <div className="form-group">
-          <label htmlFor="legacy-password">{t('legacyImport.passwordLabel')}</label>
+          <label htmlFor="legacy-password">
+            {t("legacyImport.passwordLabel")}
+          </label>
           <input
             id="legacy-password"
             type="password"
@@ -533,21 +695,33 @@ export function LegacyImportPage(): JSX.Element {
             onChange={(event) => setPassword(event.target.value)}
             autoComplete="current-password"
           />
-          <small style={{ color: '#64748b' }}>{t('legacyImport.passwordHint')}</small>
+          <small style={{ color: "#64748b" }}>
+            {t("legacyImport.passwordHint")}
+          </small>
         </div>
       </div>
 
-      <div className="form-actions" style={{ justifyContent: 'flex-start', gap: '0.75rem' }}>
+      <div
+        className="form-actions"
+        style={{ justifyContent: "flex-start", gap: "0.75rem" }}
+      >
         <button
           type="button"
           className="button primary"
           onClick={handleRunImport}
           disabled={isBusy || (overwrite && !overwriteAvailable)}
         >
-          {importMutation.isPending ? t('legacyImport.running') : t('legacyImport.runImport')}
+          {importMutation.isPending
+            ? t("legacyImport.running")
+            : t("legacyImport.runImport")}
         </button>
-        <button type="button" className="button secondary" onClick={handleReset} disabled={isBusy}>
-          {t('common.reset')}
+        <button
+          type="button"
+          className="button secondary"
+          onClick={handleReset}
+          disabled={isBusy}
+        >
+          {t("common.reset")}
         </button>
       </div>
     </div>

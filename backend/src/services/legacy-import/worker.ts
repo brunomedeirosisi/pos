@@ -1,21 +1,28 @@
-import { assertDestructiveOperationEnabled } from '../../utils/destructive-operation-policy.js';
-import path from 'node:path';
-import os from 'node:os';
-import { promises as fsp } from 'node:fs';
-import { randomUUID } from 'node:crypto';
-import { setTimeout } from 'node:timers/promises';
-import { HttpError } from '../../errors.js';
-import { prepareLegacyFiles } from './archive-files.js';
-import { DBFFile } from 'dbffile';
-import type { Job } from 'bullmq';
-import { Queue, Worker } from 'bullmq';
-import IORedis from 'ioredis';
-import type { PoolClient } from 'pg';
-import { query } from '../../db.js';
-import { withLegacyImportLock, withImportTransaction } from './execution-lock.js';
-import { getEnv } from '../../config/env.js';
-import { formatDateOnly, normalizeLegacyDate } from './date-utils.js';
-import { readLegacyCustomerBalances, reconcileLegacyCustomerBalances, type LegacyBalanceSummary } from './customer-balances.js';
+import { assertDestructiveOperationEnabled } from "../../utils/destructive-operation-policy.js";
+import path from "node:path";
+import os from "node:os";
+import { promises as fsp } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { setTimeout } from "node:timers/promises";
+import { HttpError } from "../../errors.js";
+import { prepareLegacyFiles } from "./archive-files.js";
+import { DBFFile } from "dbffile";
+import type { Job } from "bullmq";
+import { Queue, Worker } from "bullmq";
+import IORedis from "ioredis";
+import type { PoolClient } from "pg";
+import { query } from "../../db.js";
+import {
+  withLegacyImportLock,
+  withImportTransaction,
+} from "./execution-lock.js";
+import { getEnv } from "../../config/env.js";
+import { formatDateOnly, normalizeLegacyDate } from "./date-utils.js";
+import {
+  readLegacyCustomerBalances,
+  reconcileLegacyCustomerBalances,
+  type LegacyBalanceSummary,
+} from "./customer-balances.js";
 
 type LegacyImportJob = {
   id: string;
@@ -32,6 +39,8 @@ type LegacyImportStatusLog = {
 };
 
 type LegacyImportStatus = {
+  logCount?: number;
+  mismatchCount?: number;
   status: string;
   stages: readonly string[];
   overwrite: boolean;
@@ -50,7 +59,8 @@ type LegacyImportStatus = {
   logs: LegacyImportStatusLog[];
 };
 
-type LegacyImportCheckpointStatus = 'pending' | 'running' | 'completed' | 'failed';
+type LegacyImportCheckpointStatus =
+  "pending" | "running" | "completed" | "failed";
 
 type LegacyImportCheckpoint = {
   stage: string;
@@ -72,7 +82,15 @@ let importQueue: Queue<LegacyImportQueuePayload> | null = null;
 let dlqQueue: Queue<Record<string, unknown>> | null = null;
 let importWorker: Worker<LegacyImportQueuePayload> | null = null;
 
-const REQUIRED_FILES = ['PRODUTO.DBF', 'GRUPO.DBF', 'CLIENTES.DBF', 'VENDEDOR.DBF', 'VENDAS.DBF', 'PEDIDOS.DBF', 'PAGAMENT.DBF'];
+const REQUIRED_FILES = [
+  "PRODUTO.DBF",
+  "GRUPO.DBF",
+  "CLIENTES.DBF",
+  "VENDEDOR.DBF",
+  "VENDAS.DBF",
+  "PEDIDOS.DBF",
+  "PAGAMENT.DBF",
+];
 
 type StagingColumn = {
   name: string;
@@ -87,195 +105,195 @@ type StagingConfig = {
 
 const STAGING_CONFIG: StagingConfig[] = [
   {
-    file: 'GRUPO.DBF',
-    table: 'stg_grupo',
+    file: "GRUPO.DBF",
+    table: "stg_grupo",
     columns: [
-      { name: 'cod_grup', field: 'COD_GRUP' },
-      { name: 'nome', field: 'NOME_GRUP' },
+      { name: "cod_grup", field: "COD_GRUP" },
+      { name: "nome", field: "NOME_GRUP" },
     ],
   },
   {
-    file: 'PRODUTO.DBF',
-    table: 'stg_produto',
+    file: "PRODUTO.DBF",
+    table: "stg_produto",
     columns: [
-      { name: 'cod_prod', field: 'COD_PROD' },
-      { name: 'nome_prod', field: 'NOME_PROD' },
-      { name: 'cod_barra', field: 'COD_BARRA' },
-      { name: 'referencia', field: 'REFERENCIA' },
-      { name: 'cod_grup', field: 'COD_GRUP' },
-      { name: 'esto_min', field: 'EST_MINIMO' },
-      { name: 'avista', field: 'AVISTA' },
-      { name: 'preco_base', field: 'VLR_UN_PRO' },
+      { name: "cod_prod", field: "COD_PROD" },
+      { name: "nome_prod", field: "NOME_PROD" },
+      { name: "cod_barra", field: "COD_BARRA" },
+      { name: "referencia", field: "REFERENCIA" },
+      { name: "cod_grup", field: "COD_GRUP" },
+      { name: "esto_min", field: "EST_MINIMO" },
+      { name: "avista", field: "AVISTA" },
+      { name: "preco_base", field: "VLR_UN_PRO" },
     ],
   },
   {
-    file: 'CLIENTES.DBF',
-    table: 'stg_clientes',
+    file: "CLIENTES.DBF",
+    table: "stg_clientes",
     columns: [
-      { name: 'codigo', field: 'CODIGO' },
-      { name: 'nome', field: 'NOME' },
-      { name: 'cpf', field: 'CPF' },
-      { name: 'endereco', field: 'ENDERECO' },
-      { name: 'cidade', field: 'CIDADE' },
-      { name: 'uf', field: 'UF' },
-      { name: 'cep', field: 'CEP' },
-      { name: 'fone', field: 'FONE' },
-      { name: 'status', field: 'SITUACAO' },
-      { name: 'obs', field: 'OBSERVACAO' },
+      { name: "codigo", field: "CODIGO" },
+      { name: "nome", field: "NOME" },
+      { name: "cpf", field: "CPF" },
+      { name: "endereco", field: "ENDERECO" },
+      { name: "cidade", field: "CIDADE" },
+      { name: "uf", field: "UF" },
+      { name: "cep", field: "CEP" },
+      { name: "fone", field: "FONE" },
+      { name: "status", field: "SITUACAO" },
+      { name: "obs", field: "OBSERVACAO" },
     ],
   },
   {
-    file: 'VENDEDOR.DBF',
-    table: 'stg_vendedor',
+    file: "VENDEDOR.DBF",
+    table: "stg_vendedor",
     columns: [
-      { name: 'codigo', field: 'CODIGO' },
-      { name: 'nome', field: 'NOME' },
+      { name: "codigo", field: "CODIGO" },
+      { name: "nome", field: "NOME" },
     ],
   },
   {
-    file: 'FORMA_PG.DBF',
-    table: 'stg_forma_pg',
+    file: "FORMA_PG.DBF",
+    table: "stg_forma_pg",
     columns: [
-      { name: 'cod_fpg', field: 'COD_FPG' },
-      { name: 'forma', field: 'FORMA' },
+      { name: "cod_fpg", field: "COD_FPG" },
+      { name: "forma", field: "FORMA" },
     ],
   },
   {
-    file: 'VENDAS.DBF',
-    table: 'stg_vendas',
+    file: "VENDAS.DBF",
+    table: "stg_vendas",
     columns: [
-      { name: 'pedido', field: 'PEDIDO' },
-      { name: 'emissao', field: 'EMISSAO' },
-      { name: 'cod_vend', field: 'COD_VEND' },
-      { name: 'cod_cli', field: 'COD_CLI' },
-      { name: 'cod_fpg', field: 'COD_FPG' },
-      { name: 'sub_total', field: 'SUB_TOTAL' },
-      { name: 'desconto', field: 'DESCONTO' },
-      { name: 'total_gera', field: 'TOTAL_GERA' },
-      { name: 'cod1', field: 'COD1' },
-      { name: 'cod2', field: 'COD2' },
-      { name: 'cod3', field: 'COD3' },
-      { name: 'cod4', field: 'COD4' },
-      { name: 'cod5', field: 'COD5' },
-      { name: 'cod6', field: 'COD6' },
-      { name: 'cod7', field: 'COD7' },
-      { name: 'qtde1', field: 'QTDE1' },
-      { name: 'qtde2', field: 'QTDE2' },
-      { name: 'qtde3', field: 'QTDE3' },
-      { name: 'qtde4', field: 'QTDE4' },
-      { name: 'qtde5', field: 'QTDE5' },
-      { name: 'qtde6', field: 'QTDE6' },
-      { name: 'qtde7', field: 'QTDE7' },
-      { name: 'vlr1', field: 'VLR1' },
-      { name: 'vlr2', field: 'VLR2' },
-      { name: 'vlr3', field: 'VLR3' },
-      { name: 'vlr4', field: 'VLR4' },
-      { name: 'vlr5', field: 'VLR5' },
-      { name: 'vlr6', field: 'VLR6' },
-      { name: 'vlr7', field: 'VLR7' },
-      { name: 'total1', field: 'TOTAL1' },
-      { name: 'total2', field: 'TOTAL2' },
-      { name: 'total3', field: 'TOTAL3' },
-      { name: 'total4', field: 'TOTAL4' },
-      { name: 'total5', field: 'TOTAL5' },
-      { name: 'total6', field: 'TOTAL6' },
-      { name: 'total7', field: 'TOTAL7' },
+      { name: "pedido", field: "PEDIDO" },
+      { name: "emissao", field: "EMISSAO" },
+      { name: "cod_vend", field: "COD_VEND" },
+      { name: "cod_cli", field: "COD_CLI" },
+      { name: "cod_fpg", field: "COD_FPG" },
+      { name: "sub_total", field: "SUB_TOTAL" },
+      { name: "desconto", field: "DESCONTO" },
+      { name: "total_gera", field: "TOTAL_GERA" },
+      { name: "cod1", field: "COD1" },
+      { name: "cod2", field: "COD2" },
+      { name: "cod3", field: "COD3" },
+      { name: "cod4", field: "COD4" },
+      { name: "cod5", field: "COD5" },
+      { name: "cod6", field: "COD6" },
+      { name: "cod7", field: "COD7" },
+      { name: "qtde1", field: "QTDE1" },
+      { name: "qtde2", field: "QTDE2" },
+      { name: "qtde3", field: "QTDE3" },
+      { name: "qtde4", field: "QTDE4" },
+      { name: "qtde5", field: "QTDE5" },
+      { name: "qtde6", field: "QTDE6" },
+      { name: "qtde7", field: "QTDE7" },
+      { name: "vlr1", field: "VLR1" },
+      { name: "vlr2", field: "VLR2" },
+      { name: "vlr3", field: "VLR3" },
+      { name: "vlr4", field: "VLR4" },
+      { name: "vlr5", field: "VLR5" },
+      { name: "vlr6", field: "VLR6" },
+      { name: "vlr7", field: "VLR7" },
+      { name: "total1", field: "TOTAL1" },
+      { name: "total2", field: "TOTAL2" },
+      { name: "total3", field: "TOTAL3" },
+      { name: "total4", field: "TOTAL4" },
+      { name: "total5", field: "TOTAL5" },
+      { name: "total6", field: "TOTAL6" },
+      { name: "total7", field: "TOTAL7" },
     ],
   },
   {
-    file: 'PEDIDOS.DBF',
-    table: 'stg_pedidos',
+    file: "PEDIDOS.DBF",
+    table: "stg_pedidos",
     columns: [
-      { name: 'pedido', field: 'PEDIDO' },
-      { name: 'emissao', field: 'EMISSAO' },
-      { name: 'cod_vend', field: 'COD_VEND' },
-      { name: 'cod_cli', field: 'COD_CLI' },
-      { name: 'cod_fpg', field: 'F_PG' },
-      { name: 'sub_total', field: 'SUB_TOTAL' },
-      { name: 'desconto', field: 'DESCONTO' },
-      { name: 'total_gera', field: 'TOTAL_GERA' },
-      { name: 'cod1', field: 'COD1' },
-      { name: 'cod2', field: 'COD2' },
-      { name: 'cod3', field: 'COD3' },
-      { name: 'cod4', field: 'COD4' },
-      { name: 'cod5', field: 'COD5' },
-      { name: 'cod6', field: 'COD6' },
-      { name: 'cod7', field: 'COD7' },
-      { name: 'qtde1', field: 'QTDE1' },
-      { name: 'qtde2', field: 'QTDE2' },
-      { name: 'qtde3', field: 'QTDE3' },
-      { name: 'qtde4', field: 'QTDE4' },
-      { name: 'qtde5', field: 'QTDE5' },
-      { name: 'qtde6', field: 'QTDE6' },
-      { name: 'qtde7', field: 'QTDE7' },
-      { name: 'vlr1', field: 'VLR1' },
-      { name: 'vlr2', field: 'VLR2' },
-      { name: 'vlr3', field: 'VLR3' },
-      { name: 'vlr4', field: 'VLR4' },
-      { name: 'vlr5', field: 'VLR5' },
-      { name: 'vlr6', field: 'VLR6' },
-      { name: 'vlr7', field: 'VLR7' },
-      { name: 'total1', field: 'TOTAL1' },
-      { name: 'total2', field: 'TOTAL2' },
-      { name: 'total3', field: 'TOTAL3' },
-      { name: 'total4', field: 'TOTAL4' },
-      { name: 'total5', field: 'TOTAL5' },
-      { name: 'total6', field: 'TOTAL6' },
-      { name: 'total7', field: 'TOTAL7' },
+      { name: "pedido", field: "PEDIDO" },
+      { name: "emissao", field: "EMISSAO" },
+      { name: "cod_vend", field: "COD_VEND" },
+      { name: "cod_cli", field: "COD_CLI" },
+      { name: "cod_fpg", field: "F_PG" },
+      { name: "sub_total", field: "SUB_TOTAL" },
+      { name: "desconto", field: "DESCONTO" },
+      { name: "total_gera", field: "TOTAL_GERA" },
+      { name: "cod1", field: "COD1" },
+      { name: "cod2", field: "COD2" },
+      { name: "cod3", field: "COD3" },
+      { name: "cod4", field: "COD4" },
+      { name: "cod5", field: "COD5" },
+      { name: "cod6", field: "COD6" },
+      { name: "cod7", field: "COD7" },
+      { name: "qtde1", field: "QTDE1" },
+      { name: "qtde2", field: "QTDE2" },
+      { name: "qtde3", field: "QTDE3" },
+      { name: "qtde4", field: "QTDE4" },
+      { name: "qtde5", field: "QTDE5" },
+      { name: "qtde6", field: "QTDE6" },
+      { name: "qtde7", field: "QTDE7" },
+      { name: "vlr1", field: "VLR1" },
+      { name: "vlr2", field: "VLR2" },
+      { name: "vlr3", field: "VLR3" },
+      { name: "vlr4", field: "VLR4" },
+      { name: "vlr5", field: "VLR5" },
+      { name: "vlr6", field: "VLR6" },
+      { name: "vlr7", field: "VLR7" },
+      { name: "total1", field: "TOTAL1" },
+      { name: "total2", field: "TOTAL2" },
+      { name: "total3", field: "TOTAL3" },
+      { name: "total4", field: "TOTAL4" },
+      { name: "total5", field: "TOTAL5" },
+      { name: "total6", field: "TOTAL6" },
+      { name: "total7", field: "TOTAL7" },
     ],
   },
   {
-    file: 'PAGAMENT.DBF',
-    table: 'stg_pagament',
+    file: "PAGAMENT.DBF",
+    table: "stg_pagament",
     columns: [
-      { name: 'cod_cli', field: 'COD_CLI' },
-      { name: 'valor_doc', field: 'VALOR_DOC' },
-      { name: 'vlr_pago', field: 'VLR_PAGO' },
-      { name: 'restante', field: 'RESTANTE' },
-      { name: 'pagamento', field: 'PAGAMENTO' },
+      { name: "cod_cli", field: "COD_CLI" },
+      { name: "valor_doc", field: "VALOR_DOC" },
+      { name: "vlr_pago", field: "VLR_PAGO" },
+      { name: "restante", field: "RESTANTE" },
+      { name: "pagamento", field: "PAGAMENTO" },
     ],
   },
   {
-    file: 'MOV_EST.DBF',
-    table: 'stg_mov_est',
+    file: "MOV_EST.DBF",
+    table: "stg_mov_est",
     columns: [
-      { name: 'tip_mov', field: 'TIP_MOV' },
-      { name: 'data', field: 'DATA' },
-      { name: 'cod_prod', field: 'COD_PROD' },
-      { name: 'qtde', field: 'QTDE' },
-      { name: 'valor', field: 'VALOR' },
-      { name: 'total', field: 'TOTAL' },
-      { name: 'nf', field: 'NF' },
+      { name: "tip_mov", field: "TIP_MOV" },
+      { name: "data", field: "DATA" },
+      { name: "cod_prod", field: "COD_PROD" },
+      { name: "qtde", field: "QTDE" },
+      { name: "valor", field: "VALOR" },
+      { name: "total", field: "TOTAL" },
+      { name: "nf", field: "NF" },
     ],
   },
 ];
 
-const RECONCILIATION_VERSION = 'legacy-reconciliation/v1';
+const RECONCILIATION_VERSION = "legacy-reconciliation/v1";
 
 const IMPORT_STAGE_SEQUENCE = [
-  'reset-target',
+  "reset-target",
   ...STAGING_CONFIG.map((config) => `load-staging:${config.table}`),
-  'migrate-master',
-  'migrate-sales',
-  'migrate-customer-payments',
-  'migrate-stock',
-  'reconcile-customer-balances',
-  'reconciliation-report',
+  "migrate-master",
+  "migrate-sales",
+  "migrate-customer-payments",
+  "migrate-stock",
+  "reconcile-customer-balances",
+  "reconciliation-report",
 ] as const;
 
 type ImportStage = (typeof IMPORT_STAGE_SEQUENCE)[number];
 
 function normalizeString(value: unknown): string | null {
   if (value == null) return null;
-  if (value instanceof Date) return value.toISOString().split('T')[0];
+  if (value instanceof Date) return value.toISOString().split("T")[0];
   const str = String(value).trim();
   return str.length ? str : null;
 }
 
 function normalizeNumber(value: unknown): number | null {
-  if (value == null || value === '') return null;
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  const parsed = Number(String(value).replace(',', '.'));
+  if (value == null || value === "") return null;
+  if (typeof value === "number") return Number.isFinite(value) ? value : null;
+  const parsed = Number(String(value).replace(",", "."));
   return Number.isFinite(parsed) ? parsed : null;
 }
 
@@ -287,24 +305,22 @@ function normalizeLegacyCodeNumber(value: string): string | null {
   return String(parsed);
 }
 
-async function runDbQuery<T extends Record<string, unknown> = Record<string, unknown>>(
-  text: string,
-  params?: unknown[],
-  client?: PoolClient
-) {
+async function runDbQuery<
+  T extends Record<string, unknown> = Record<string, unknown>,
+>(text: string, params?: unknown[], client?: PoolClient) {
   return query<T>(text, params as any[] | undefined, client);
 }
 
 async function appendLog(
   importId: string,
-  level: 'info' | 'warn' | 'error',
+  level: "info" | "warn" | "error",
   message: string,
-  client?: PoolClient
+  client?: PoolClient,
 ): Promise<void> {
   await runDbQuery(
     `insert into system_legacy_import_log (import_id, level, message) values ($1, $2, $3)`,
     [importId, level, message],
-    client
+    client,
   );
 }
 
@@ -312,16 +328,20 @@ async function updateImportStatus(
   importId: string,
   status: string,
   fields: Record<string, unknown> = {},
-  client?: PoolClient
+  client?: PoolClient,
 ): Promise<void> {
   const keys = Object.keys(fields);
-  const sets = ['status = $2'];
+  const sets = ["status = $2"];
   const values: unknown[] = [importId, status];
   keys.forEach((key, index) => {
     sets.push(`${key} = $${index + 3}`);
     values.push(fields[key]);
   });
-  await runDbQuery(`update system_legacy_import set ${sets.join(', ')} where id = $1`, values, client);
+  await runDbQuery(
+    `update system_legacy_import set ${sets.join(", ")} where id = $1`,
+    values,
+    client,
+  );
 }
 
 async function upsertStageCheckpoint(
@@ -334,7 +354,7 @@ async function upsertStageCheckpoint(
     summary?: unknown;
     errorMessage?: string | null;
   },
-  client?: PoolClient
+  client?: PoolClient,
 ): Promise<void> {
   await runDbQuery(
     `insert into system_legacy_import_checkpoint (
@@ -364,19 +384,19 @@ async function upsertStageCheckpoint(
       input.summary == null ? null : JSON.stringify(input.summary),
       input.errorMessage ?? null,
     ],
-    client
+    client,
   );
 }
 
 async function assertLegacyImportSchemaReady(): Promise<void> {
   const requiredTables = [
     ...STAGING_CONFIG.map((config) => config.table),
-    'system_legacy_import',
-    'system_legacy_import_log',
-    'system_legacy_import_checkpoint',
-    'system_legacy_import_dead_letter',
-    'customer_legacy_balance',
-    'customer_financial_totals',
+    "system_legacy_import",
+    "system_legacy_import_log",
+    "system_legacy_import_checkpoint",
+    "system_legacy_import_dead_letter",
+    "customer_legacy_balance",
+    "customer_financial_totals",
   ];
 
   const { rows } = await runDbQuery<{ table_name: string }>(
@@ -384,40 +404,52 @@ async function assertLegacyImportSchemaReady(): Promise<void> {
      from information_schema.tables
      where table_schema = 'public'
        and table_name = any($1::text[])`,
-    [requiredTables]
+    [requiredTables],
   );
 
   const existing = new Set(rows.map((row) => row.table_name));
-  const missing = requiredTables.filter((tableName) => !existing.has(tableName));
+  const missing = requiredTables.filter(
+    (tableName) => !existing.has(tableName),
+  );
   if (missing.length) {
     throw new Error(
-      `legacy import schema is not ready; missing tables: ${missing.join(', ')}. Run versioned migrations before importing.`
+      `legacy import schema is not ready; missing tables: ${missing.join(", ")}. Run versioned migrations before importing.`,
     );
   }
 }
 
-
-async function ensureStagingTable(config: StagingConfig, client?: PoolClient): Promise<void> {
+async function ensureStagingTable(
+  config: StagingConfig,
+  client?: PoolClient,
+): Promise<void> {
   await runDbQuery(`truncate ${config.table}`, undefined, client);
 }
 
-async function batchInsertRows(table: string, columns: string[], rows: unknown[][], client?: PoolClient): Promise<void> {
+async function batchInsertRows(
+  table: string,
+  columns: string[],
+  rows: unknown[][],
+  client?: PoolClient,
+): Promise<void> {
   if (!rows.length) {
     return;
   }
 
   const values: unknown[] = [];
   const tuples = rows.map((row, rowIndex) => {
-    const placeholders = row.map((_value, columnIndex) => `$${rowIndex * columns.length + columnIndex + 1}`);
+    const placeholders = row.map(
+      (_value, columnIndex) =>
+        `$${rowIndex * columns.length + columnIndex + 1}`,
+    );
     values.push(...row);
-    return `(${placeholders.join(', ')})`;
+    return `(${placeholders.join(", ")})`;
   });
 
   await runDbQuery(
-    `insert into ${table} (${columns.join(', ')})
-     values ${tuples.join(', ')}`,
+    `insert into ${table} (${columns.join(", ")})
+     values ${tuples.join(", ")}`,
     values,
-    client
+    client,
   );
 }
 
@@ -425,17 +457,22 @@ async function loadDbfIntoStaging(
   importId: string,
   config: StagingConfig,
   files: Map<string, string>,
-  client?: PoolClient
+  client?: PoolClient,
 ): Promise<number> {
   const filePath = files.get(config.file);
   if (!filePath) {
-    await appendLog(importId, 'warn', `Optional file ${config.file} not provided; skipping.`, client);
+    await appendLog(
+      importId,
+      "warn",
+      `Optional file ${config.file} not provided; skipping.`,
+      client,
+    );
     return 0;
   }
 
   await ensureStagingTable(config, client);
 
-  const dbf = await DBFFile.open(filePath, { encoding: 'latin1' });
+  const dbf = await DBFFile.open(filePath, { encoding: "latin1" });
   let total = 0;
   let removedNulBytes = 0;
   let normalizedFields = 0;
@@ -455,7 +492,7 @@ async function loadDbfIntoStaging(
         // Legacy DBFs can contain NUL-filled character fields. PostgreSQL text
         // rejects U+0000 even after decoding Latin-1; trim() does not remove it.
         const raw = String(value);
-        const sanitized = raw.replaceAll('\u0000', '');
+        const sanitized = raw.replaceAll("\u0000", "");
         if (sanitized.length !== raw.length) {
           removedNulBytes += raw.length - sanitized.length;
           normalizedFields += 1;
@@ -471,7 +508,7 @@ async function loadDbfIntoStaging(
       config.table,
       config.columns.map((column) => column.name),
       rows,
-      client
+      client,
     );
     total += rows.length;
   }
@@ -479,9 +516,9 @@ async function loadDbfIntoStaging(
   if (removedNulBytes > 0) {
     await appendLog(
       importId,
-      'warn',
+      "warn",
       `Removed ${removedNulBytes} NUL bytes from ${normalizedFields} field values in ${normalizedRecords} records before staging ${config.file}`,
-      client
+      client,
     );
   }
 
@@ -489,15 +526,21 @@ async function loadDbfIntoStaging(
 }
 
 async function truncateCoreTables(client?: PoolClient): Promise<void> {
-  await runDbQuery('truncate sale_item cascade', undefined, client);
-  await runDbQuery('truncate sale cascade', undefined, client);
-  await runDbQuery('truncate customer_payment cascade', undefined, client);
-  await runDbQuery('truncate stock_movement cascade', undefined, client);
-  await runDbQuery('truncate product cascade', undefined, client);
-  await runDbQuery('truncate product_group cascade', undefined, client);
-  await runDbQuery('truncate customer cascade', undefined, client);
-  await runDbQuery('truncate seller cascade', undefined, client);
-  await runDbQuery('truncate payment_term cascade', undefined, client);
+  await runDbQuery("truncate sale_item cascade", undefined, client);
+  await runDbQuery("truncate sale cascade", undefined, client);
+  await runDbQuery("truncate customer_payment cascade", undefined, client);
+  await runDbQuery("truncate stock_movement cascade", undefined, client);
+  await runDbQuery("truncate product cascade", undefined, client);
+  await runDbQuery("truncate product_group cascade", undefined, client);
+  await runDbQuery("truncate customer cascade", undefined, client);
+  // Account identities and configured links are administrative data. Keep their
+  // IDs; the master-data upsert refreshes linked legacy sellers by legacy_code.
+  await runDbQuery(
+    "delete from seller where user_id is null and id not in (select seller_id from user_seller)",
+    undefined,
+    client,
+  );
+  await runDbQuery("truncate payment_term cascade", undefined, client);
 }
 
 async function truncateStagingTables(client?: PoolClient): Promise<void> {
@@ -506,11 +549,14 @@ async function truncateStagingTables(client?: PoolClient): Promise<void> {
   }
 }
 
-async function buildLegacyMap(table: string, client?: PoolClient): Promise<Map<string, string>> {
+async function buildLegacyMap(
+  table: string,
+  client?: PoolClient,
+): Promise<Map<string, string>> {
   const { rows } = await runDbQuery<{ legacy_code: string | null; id: string }>(
     `select legacy_code, id from ${table} where legacy_code is not null`,
     undefined,
-    client
+    client,
   );
   const map = new Map<string, string>();
   for (const row of rows) {
@@ -533,16 +579,16 @@ function buildLegacyVariants(value: string): string[] {
     variants.add(numericVariant);
   }
 
-  const noLeadingZeros = trimmed.replace(/^0+/, '');
+  const noLeadingZeros = trimmed.replace(/^0+/, "");
   if (noLeadingZeros) {
     variants.add(noLeadingZeros);
     variants.add(noLeadingZeros.toUpperCase());
   }
 
-  const digitsOnly = trimmed.replace(/[^0-9]/g, '');
+  const digitsOnly = trimmed.replace(/[^0-9]/g, "");
   if (digitsOnly) {
     variants.add(digitsOnly);
-    variants.add(digitsOnly.replace(/^0+/, ''));
+    variants.add(digitsOnly.replace(/^0+/, ""));
   }
 
   return Array.from(variants).filter((entry) => entry.length > 0);
@@ -560,7 +606,7 @@ function buildProductLegacyVariants(value: string): string[] {
     variants.add(numericVariant);
   }
 
-  const noLeadingZeros = trimmed.replace(/^0+/, '');
+  const noLeadingZeros = trimmed.replace(/^0+/, "");
   if (noLeadingZeros) {
     variants.add(noLeadingZeros);
     variants.add(noLeadingZeros.toUpperCase());
@@ -569,11 +615,13 @@ function buildProductLegacyVariants(value: string): string[] {
   return Array.from(variants).filter((entry) => entry.length > 0);
 }
 
-async function buildCustomerLegacyMap(client?: PoolClient): Promise<Map<string, string>> {
+async function buildCustomerLegacyMap(
+  client?: PoolClient,
+): Promise<Map<string, string>> {
   const { rows } = await runDbQuery<{ legacy_code: string | null; id: string }>(
     `select legacy_code, id from customer where legacy_code is not null`,
     undefined,
-    client
+    client,
   );
   const map = new Map<string, string>();
   for (const row of rows) {
@@ -584,11 +632,13 @@ async function buildCustomerLegacyMap(client?: PoolClient): Promise<Map<string, 
   return map;
 }
 
-async function buildProductLegacyMap(client?: PoolClient): Promise<Map<string, string>> {
+async function buildProductLegacyMap(
+  client?: PoolClient,
+): Promise<Map<string, string>> {
   const { rows } = await runDbQuery<{ legacy_code: string | null; id: string }>(
     `select legacy_code, id from product where legacy_code is not null`,
     undefined,
-    client
+    client,
   );
   const map = new Map<string, string>();
   for (const row of rows) {
@@ -599,7 +649,10 @@ async function buildProductLegacyMap(client?: PoolClient): Promise<Map<string, s
   return map;
 }
 
-function resolveCustomerId(customerMap: Map<string, string>, value: unknown): string | null {
+function resolveCustomerId(
+  customerMap: Map<string, string>,
+  value: unknown,
+): string | null {
   if (value == null) return null;
   const raw = String(value).trim();
   if (!raw) return null;
@@ -613,7 +666,10 @@ function resolveCustomerId(customerMap: Map<string, string>, value: unknown): st
   return customerMap.get(raw) ?? null;
 }
 
-function resolveProductId(productMap: Map<string, string>, value: unknown): string | null {
+function resolveProductId(
+  productMap: Map<string, string>,
+  value: unknown,
+): string | null {
   if (value == null) return null;
   const raw = String(value).trim();
   if (!raw) return null;
@@ -627,7 +683,10 @@ function resolveProductId(productMap: Map<string, string>, value: unknown): stri
   return productMap.get(raw) ?? null;
 }
 
-function resolveLegacyId(map: Map<string, string>, value: unknown): string | null {
+function resolveLegacyId(
+  map: Map<string, string>,
+  value: unknown,
+): string | null {
   if (value == null) return null;
   const raw = String(value).trim();
   if (!raw) return null;
@@ -641,7 +700,10 @@ function resolveLegacyId(map: Map<string, string>, value: unknown): string | nul
   return map.get(raw) ?? null;
 }
 
-async function migrateMasterData(_overwrite: boolean, client?: PoolClient): Promise<Record<string, number>> {
+async function migrateMasterData(
+  _overwrite: boolean,
+  client?: PoolClient,
+): Promise<Record<string, number>> {
   const summary: Record<string, number> = {};
 
   await runDbQuery(
@@ -655,9 +717,12 @@ async function migrateMasterData(_overwrite: boolean, client?: PoolClient): Prom
       set name = excluded.name
   `,
     undefined,
-    client
+    client,
   );
-  summary.productGroups = Number((await runDbQuery('select count(*) from stg_grupo', undefined, client)).rows[0].count);
+  summary.productGroups = Number(
+    (await runDbQuery("select count(*) from stg_grupo", undefined, client))
+      .rows[0].count,
+  );
 
   await runDbQuery(
     `
@@ -684,9 +749,12 @@ async function migrateMasterData(_overwrite: boolean, client?: PoolClient): Prom
       group_id = excluded.group_id
   `,
     undefined,
-    client
+    client,
   );
-  summary.products = Number((await runDbQuery('select count(*) from stg_produto', undefined, client)).rows[0].count);
+  summary.products = Number(
+    (await runDbQuery("select count(*) from stg_produto", undefined, client))
+      .rows[0].count,
+  );
 
   await runDbQuery(
     `
@@ -722,9 +790,12 @@ async function migrateMasterData(_overwrite: boolean, client?: PoolClient): Prom
       notes = excluded.notes
   `,
     undefined,
-    client
+    client,
   );
-  summary.customers = Number((await runDbQuery('select count(*) from stg_clientes', undefined, client)).rows[0].count);
+  summary.customers = Number(
+    (await runDbQuery("select count(*) from stg_clientes", undefined, client))
+      .rows[0].count,
+  );
 
   await runDbQuery(
     `
@@ -735,9 +806,12 @@ async function migrateMasterData(_overwrite: boolean, client?: PoolClient): Prom
     on conflict (legacy_code) do update set name = excluded.name
   `,
     undefined,
-    client
+    client,
   );
-  summary.sellers = Number((await runDbQuery('select count(*) from stg_vendedor', undefined, client)).rows[0].count);
+  summary.sellers = Number(
+    (await runDbQuery("select count(*) from stg_vendedor", undefined, client))
+      .rows[0].count,
+  );
 
   await runDbQuery(
     `
@@ -748,15 +822,22 @@ async function migrateMasterData(_overwrite: boolean, client?: PoolClient): Prom
     on conflict (legacy_code) do update set name = excluded.name
   `,
     undefined,
-    client
+    client,
   );
-  summary.paymentTerms = Number((await runDbQuery('select count(*) from stg_forma_pg', undefined, client)).rows[0].count);
+  summary.paymentTerms = Number(
+    (await runDbQuery("select count(*) from stg_forma_pg", undefined, client))
+      .rows[0].count,
+  );
 
   return summary;
 }
 
 async function migrateCustomerPayments(client?: PoolClient): Promise<number> {
-  const { rows } = await runDbQuery('select * from stg_pagament', undefined, client);
+  const { rows } = await runDbQuery(
+    "select * from stg_pagament",
+    undefined,
+    client,
+  );
   const customerMap = await buildCustomerLegacyMap(client);
   let count = 0;
   const batch: unknown[][] = [];
@@ -765,21 +846,21 @@ async function migrateCustomerPayments(client?: PoolClient): Promise<number> {
   const flush = async () => {
     if (!batch.length) return;
     await batchInsertRows(
-      'customer_payment',
+      "customer_payment",
       [
-        'customer_id',
-        'amount',
-        'payment_date',
-        'method',
-        'reference',
-        'notes',
-        'received_by',
-        'source',
-        'legacy_document_value',
-        'legacy_remaining',
+        "customer_id",
+        "amount",
+        "payment_date",
+        "method",
+        "reference",
+        "notes",
+        "received_by",
+        "source",
+        "legacy_document_value",
+        "legacy_remaining",
       ],
       batch,
-      client
+      client,
     );
     batch.length = 0;
   };
@@ -806,11 +887,11 @@ async function migrateCustomerPayments(client?: PoolClient): Promise<number> {
       customerId,
       amount,
       paymentDate,
-      'legacy',
+      "legacy",
       null,
       null,
       null,
-      'legacy',
+      "legacy",
       documentValue,
       remaining,
     ]);
@@ -824,7 +905,11 @@ async function migrateCustomerPayments(client?: PoolClient): Promise<number> {
 }
 
 async function migrateStockMovements(client?: PoolClient): Promise<number> {
-  const { rows } = await runDbQuery('select * from stg_mov_est', undefined, client);
+  const { rows } = await runDbQuery(
+    "select * from stg_mov_est",
+    undefined,
+    client,
+  );
   let count = 0;
   const productMap = await buildProductLegacyMap(client);
   const batch: unknown[][] = [];
@@ -833,10 +918,18 @@ async function migrateStockMovements(client?: PoolClient): Promise<number> {
   const flush = async () => {
     if (!batch.length) return;
     await batchInsertRows(
-      'stock_movement',
-      ['product_id', 'date', 'type', 'quantity', 'unit_value', 'total', 'note_number'],
+      "stock_movement",
+      [
+        "product_id",
+        "date",
+        "type",
+        "quantity",
+        "unit_value",
+        "total",
+        "note_number",
+      ],
       batch,
-      client
+      client,
     );
     batch.length = 0;
   };
@@ -871,8 +964,15 @@ type SaleSummary = {
   mismatches: string[];
 };
 
-function extractSaleItems(row: any): Array<{ cod: string; quantity: number; price: number; total: number }> {
-  const items: Array<{ cod: string; quantity: number; price: number; total: number }> = [];
+function extractSaleItems(
+  row: any,
+): Array<{ cod: string; quantity: number; price: number; total: number }> {
+  const items: Array<{
+    cod: string;
+    quantity: number;
+    price: number;
+    total: number;
+  }> = [];
   for (let index = 1; index <= 7; index += 1) {
     const codeKey = `cod${index}`;
     const qtyKey = `qtde${index}`;
@@ -890,7 +990,10 @@ function extractSaleItems(row: any): Array<{ cod: string; quantity: number; pric
   return items;
 }
 
-function buildDeduplicatedSourceKey(baseKey: string, seen: Map<string, number>): string {
+function buildDeduplicatedSourceKey(
+  baseKey: string,
+  seen: Map<string, number>,
+): string {
   const current = (seen.get(baseKey) ?? 0) + 1;
   seen.set(baseKey, current);
   if (current === 1) {
@@ -912,17 +1015,17 @@ function buildOrderNumberVariants(value: string): string[] {
   }
 
   if (/^\d+$/.test(trimmed)) {
-    const noLeadingZeros = trimmed.replace(/^0+/, '');
+    const noLeadingZeros = trimmed.replace(/^0+/, "");
     if (noLeadingZeros) {
       variants.add(noLeadingZeros);
     }
   }
 
   if (/^[\d.,\s-]+$/.test(trimmed)) {
-    const digitsOnly = trimmed.replace(/[^0-9]/g, '');
+    const digitsOnly = trimmed.replace(/[^0-9]/g, "");
     if (digitsOnly) {
       variants.add(digitsOnly);
-      const noLeadingZeros = digitsOnly.replace(/^0+/, '');
+      const noLeadingZeros = digitsOnly.replace(/^0+/, "");
       if (noLeadingZeros) {
         variants.add(noLeadingZeros);
       }
@@ -940,7 +1043,7 @@ type SalesFallbackLookup = {
 async function buildSalesFallbackLookup(
   customerMap: Map<string, string>,
   paymentTermMap: Map<string, string>,
-  client?: PoolClient
+  client?: PoolClient,
 ): Promise<Map<string, SalesFallbackLookup>> {
   const lookup = new Map<string, SalesFallbackLookup>();
   const exactSeen = new Set<string>();
@@ -950,7 +1053,7 @@ async function buildSalesFallbackLookup(
      where pedido is not null
      order by pedido, emissao desc nulls last, ctid desc`,
     undefined,
-    client
+    client,
   );
 
   for (const row of rows) {
@@ -959,7 +1062,9 @@ async function buildSalesFallbackLookup(
       continue;
     }
 
-    const customerId = row.cod_cli ? resolveCustomerId(customerMap, row.cod_cli) : null;
+    const customerId = row.cod_cli
+      ? resolveCustomerId(customerMap, row.cod_cli)
+      : null;
     const paymentTermId = resolveLegacyId(paymentTermMap, row.cod_fpg);
     if (!exactSeen.has(sourceNumber)) {
       lookup.set(sourceNumber, { customerId, paymentTermId });
@@ -982,7 +1087,7 @@ async function buildSalesFallbackLookup(
 
 function resolveSalesFallback(
   lookup: Map<string, SalesFallbackLookup>,
-  sourceNumber: string
+  sourceNumber: string,
 ): SalesFallbackLookup | null {
   for (const variant of buildOrderNumberVariants(sourceNumber)) {
     const fallback = lookup.get(variant);
@@ -993,7 +1098,10 @@ function resolveSalesFallback(
   return null;
 }
 
-async function migrateSales(overwrite: boolean, client?: PoolClient): Promise<SaleSummary> {
+async function migrateSales(
+  overwrite: boolean,
+  client?: PoolClient,
+): Promise<SaleSummary> {
   const summary: SaleSummary = {
     sales: 0,
     saleItems: 0,
@@ -1003,14 +1111,22 @@ async function migrateSales(overwrite: boolean, client?: PoolClient): Promise<Sa
   };
 
   if (overwrite) {
-    await runDbQuery(`delete from sale where source in ('VENDAS', 'PEDIDOS')`, undefined, client);
+    await runDbQuery(
+      `delete from sale where source in ('VENDAS', 'PEDIDOS')`,
+      undefined,
+      client,
+    );
   }
 
-  const sellerMap = await buildLegacyMap('seller', client);
+  const sellerMap = await buildLegacyMap("seller", client);
   const customerMap = await buildCustomerLegacyMap(client);
-  const paymentTermMap = await buildLegacyMap('payment_term', client);
+  const paymentTermMap = await buildLegacyMap("payment_term", client);
   const productMap = await buildProductLegacyMap(client);
-  const fallbackLookup = await buildSalesFallbackLookup(customerMap, paymentTermMap, client);
+  const fallbackLookup = await buildSalesFallbackLookup(
+    customerMap,
+    paymentTermMap,
+    client,
+  );
   const salesSourceCount = new Map<string, number>();
   const ordersSourceCount = new Map<string, number>();
 
@@ -1019,7 +1135,7 @@ async function migrateSales(overwrite: boolean, client?: PoolClient): Promise<Sa
      from stg_vendas
      order by pedido nulls last, emissao nulls last, cod_vend nulls last, ctid`,
     undefined,
-    client
+    client,
   );
 
   if (overwrite) {
@@ -1031,41 +1147,51 @@ async function migrateSales(overwrite: boolean, client?: PoolClient): Promise<Sa
     const flushSales = async () => {
       if (!saleBatch.length) return;
       await batchInsertRows(
-        'sale',
+        "sale",
         [
-          'id',
-          'emission_date',
-          'order_number',
-          'seller_id',
-          'customer_id',
-          'payment_term_id',
-          'subtotal',
-          'discount',
-          'total',
-          'status',
-          'source',
-          'source_key',
+          "id",
+          "emission_date",
+          "order_number",
+          "seller_id",
+          "customer_id",
+          "payment_term_id",
+          "subtotal",
+          "discount",
+          "total",
+          "status",
+          "source",
+          "source_key",
         ],
         saleBatch,
-        client
+        client,
       );
       saleBatch.length = 0;
     };
 
     const flushItems = async () => {
       if (!itemBatch.length) return;
-      await batchInsertRows('sale_item', ['sale_id', 'product_id', 'quantity', 'unit_price', 'total'], itemBatch, client);
+      await batchInsertRows(
+        "sale_item",
+        ["sale_id", "product_id", "quantity", "unit_price", "total"],
+        itemBatch,
+        client,
+      );
       itemBatch.length = 0;
     };
 
     for (const row of sales.rows) {
       const sourceNumber = row.pedido ? String(row.pedido).trim() : null;
       if (!sourceNumber) continue;
-      const sourceKey = buildDeduplicatedSourceKey(sourceNumber, salesSourceCount);
+      const sourceKey = buildDeduplicatedSourceKey(
+        sourceNumber,
+        salesSourceCount,
+      );
 
       const emission = normalizeLegacyDate(row.emissao);
       const sellerId = resolveLegacyId(sellerMap, row.cod_vend);
-      let customerId = row.cod_cli ? resolveCustomerId(customerMap, row.cod_cli) : null;
+      let customerId = row.cod_cli
+        ? resolveCustomerId(customerMap, row.cod_cli)
+        : null;
       let paymentTermId = resolveLegacyId(paymentTermMap, row.cod_fpg);
       if ((!customerId || !paymentTermId) && sourceNumber) {
         const fallback = resolveSalesFallback(fallbackLookup, sourceNumber);
@@ -1086,8 +1212,8 @@ async function migrateSales(overwrite: boolean, client?: PoolClient): Promise<Sa
         normalizeNumber(row.sub_total),
         normalizeNumber(row.desconto),
         normalizeNumber(row.total_gera),
-        'completed',
-        'VENDAS',
+        "completed",
+        "VENDAS",
         sourceKey,
       ]);
 
@@ -1095,10 +1221,18 @@ async function migrateSales(overwrite: boolean, client?: PoolClient): Promise<Sa
       for (const item of items) {
         const productId = resolveProductId(productMap, item.cod);
         if (!productId) {
-          summary.mismatches.push(`Sale ${sourceNumber}: product ${item.cod} not found`);
+          summary.mismatches.push(
+            `Sale ${sourceNumber}: product ${item.cod} not found`,
+          );
           continue;
         }
-        itemBatch.push([saleId, productId, item.quantity, item.price, item.total]);
+        itemBatch.push([
+          saleId,
+          productId,
+          item.quantity,
+          item.price,
+          item.total,
+        ]);
         summary.saleItems += 1;
       }
       summary.sales += 1;
@@ -1119,16 +1253,21 @@ async function migrateSales(overwrite: boolean, client?: PoolClient): Promise<Sa
        from stg_pedidos
        order by pedido nulls last, emissao nulls last, cod_vend nulls last, cod_cli nulls last, ctid`,
       undefined,
-      client
+      client,
     );
     for (const row of orders.rows) {
       const sourceNumber = row.pedido ? String(row.pedido).trim() : null;
       if (!sourceNumber) continue;
-      const sourceKey = buildDeduplicatedSourceKey(sourceNumber, ordersSourceCount);
+      const sourceKey = buildDeduplicatedSourceKey(
+        sourceNumber,
+        ordersSourceCount,
+      );
 
       const emission = normalizeLegacyDate(row.emissao);
       const sellerId = resolveLegacyId(sellerMap, row.cod_vend);
-      let customerId = row.cod_cli ? resolveCustomerId(customerMap, row.cod_cli) : null;
+      let customerId = row.cod_cli
+        ? resolveCustomerId(customerMap, row.cod_cli)
+        : null;
       let paymentTermId = resolveLegacyId(paymentTermMap, row.cod_fpg);
       if ((!customerId || !paymentTermId) && sourceNumber) {
         const fallback = resolveSalesFallback(fallbackLookup, sourceNumber);
@@ -1149,8 +1288,8 @@ async function migrateSales(overwrite: boolean, client?: PoolClient): Promise<Sa
         normalizeNumber(row.sub_total),
         normalizeNumber(row.desconto),
         normalizeNumber(row.total_gera),
-        'completed',
-        'PEDIDOS',
+        "completed",
+        "PEDIDOS",
         sourceKey,
       ]);
 
@@ -1158,10 +1297,18 @@ async function migrateSales(overwrite: boolean, client?: PoolClient): Promise<Sa
       for (const item of items) {
         const productId = resolveProductId(productMap, item.cod);
         if (!productId) {
-          summary.mismatches.push(`Order ${sourceNumber}: product ${item.cod} not found`);
+          summary.mismatches.push(
+            `Order ${sourceNumber}: product ${item.cod} not found`,
+          );
           continue;
         }
-        itemBatch.push([saleId, productId, item.quantity, item.price, item.total]);
+        itemBatch.push([
+          saleId,
+          productId,
+          item.quantity,
+          item.price,
+          item.total,
+        ]);
         summary.orderItems += 1;
       }
       summary.orders += 1;
@@ -1185,11 +1332,16 @@ async function migrateSales(overwrite: boolean, client?: PoolClient): Promise<Sa
   for (const row of sales.rows) {
     const sourceNumber = row.pedido ? String(row.pedido).trim() : null;
     if (!sourceNumber) continue;
-    const sourceKey = buildDeduplicatedSourceKey(sourceNumber, salesSourceCount);
+    const sourceKey = buildDeduplicatedSourceKey(
+      sourceNumber,
+      salesSourceCount,
+    );
 
     const emission = normalizeLegacyDate(row.emissao);
     const sellerId = resolveLegacyId(sellerMap, row.cod_vend);
-    let customerId = row.cod_cli ? resolveCustomerId(customerMap, row.cod_cli) : null;
+    let customerId = row.cod_cli
+      ? resolveCustomerId(customerMap, row.cod_cli)
+      : null;
     let paymentTermId = resolveLegacyId(paymentTermMap, row.cod_fpg);
     if ((!customerId || !paymentTermId) && sourceNumber) {
       const fallback = resolveSalesFallback(fallbackLookup, sourceNumber);
@@ -1226,24 +1378,41 @@ discount, total, status, source, source_key)
         normalizeNumber(row.total_gera),
         sourceKey,
       ],
-      client
+      client,
     );
 
     const saleId = saleResult.rows[0].id;
-    await runDbQuery('delete from sale_item where sale_id = $1', [saleId], client);
+    await runDbQuery(
+      "delete from sale_item where sale_id = $1",
+      [saleId],
+      client,
+    );
 
     const items = extractSaleItems(row);
     const batchItems: unknown[][] = [];
     for (const item of items) {
       const productId = resolveProductId(productMap, item.cod);
       if (!productId) {
-        summary.mismatches.push(`Sale ${sourceNumber}: product ${item.cod} not found`);
+        summary.mismatches.push(
+          `Sale ${sourceNumber}: product ${item.cod} not found`,
+        );
         continue;
       }
-      batchItems.push([saleId, productId, item.quantity, item.price, item.total]);
+      batchItems.push([
+        saleId,
+        productId,
+        item.quantity,
+        item.price,
+        item.total,
+      ]);
       summary.saleItems += 1;
     }
-    await batchInsertRows('sale_item', ['sale_id', 'product_id', 'quantity', 'unit_price', 'total'], batchItems, client);
+    await batchInsertRows(
+      "sale_item",
+      ["sale_id", "product_id", "quantity", "unit_price", "total"],
+      batchItems,
+      client,
+    );
     summary.sales += 1;
   }
 
@@ -1252,16 +1421,21 @@ discount, total, status, source, source_key)
      from stg_pedidos
      order by pedido nulls last, emissao nulls last, cod_vend nulls last, cod_cli nulls last, ctid`,
     undefined,
-    client
+    client,
   );
   for (const row of orders.rows) {
     const sourceNumber = row.pedido ? String(row.pedido).trim() : null;
     if (!sourceNumber) continue;
-    const sourceKey = buildDeduplicatedSourceKey(sourceNumber, ordersSourceCount);
+    const sourceKey = buildDeduplicatedSourceKey(
+      sourceNumber,
+      ordersSourceCount,
+    );
 
     const emission = normalizeLegacyDate(row.emissao);
     const sellerId = resolveLegacyId(sellerMap, row.cod_vend);
-    let customerId = row.cod_cli ? resolveCustomerId(customerMap, row.cod_cli) : null;
+    let customerId = row.cod_cli
+      ? resolveCustomerId(customerMap, row.cod_cli)
+      : null;
     let paymentTermId = resolveLegacyId(paymentTermMap, row.cod_fpg);
     if ((!customerId || !paymentTermId) && sourceNumber) {
       const fallback = resolveSalesFallback(fallbackLookup, sourceNumber);
@@ -1296,24 +1470,41 @@ discount, total, status, source, source_key)
         normalizeNumber(row.total_gera),
         sourceKey,
       ],
-      client
+      client,
     );
 
     const saleId = saleResult.rows[0].id;
-    await runDbQuery('delete from sale_item where sale_id = $1', [saleId], client);
+    await runDbQuery(
+      "delete from sale_item where sale_id = $1",
+      [saleId],
+      client,
+    );
 
     const items = extractSaleItems(row);
     const batchItems: unknown[][] = [];
     for (const item of items) {
       const productId = resolveProductId(productMap, item.cod);
       if (!productId) {
-        summary.mismatches.push(`Order ${sourceNumber}: product ${item.cod} not found`);
+        summary.mismatches.push(
+          `Order ${sourceNumber}: product ${item.cod} not found`,
+        );
         continue;
       }
-      batchItems.push([saleId, productId, item.quantity, item.price, item.total]);
+      batchItems.push([
+        saleId,
+        productId,
+        item.quantity,
+        item.price,
+        item.total,
+      ]);
       summary.orderItems += 1;
     }
-    await batchInsertRows('sale_item', ['sale_id', 'product_id', 'quantity', 'unit_price', 'total'], batchItems, client);
+    await batchInsertRows(
+      "sale_item",
+      ["sale_id", "product_id", "quantity", "unit_price", "total"],
+      batchItems,
+      client,
+    );
     summary.orders += 1;
   }
 
@@ -1329,32 +1520,75 @@ async function createReconciliationReport(
   payments: number,
   stocks: number,
   balances: LegacyBalanceSummary,
-  client?: PoolClient
+  client?: PoolClient,
 ): Promise<{ csvPath: string; jsonPath: string; version: string }> {
-  const csvPath = path.join(sessionDir, 'reconciliation.v1.csv');
-  const jsonPath = path.join(sessionDir, 'reconciliation.v1.json');
+  const csvPath = path.join(sessionDir, "reconciliation.v1.csv");
+  const jsonPath = path.join(sessionDir, "reconciliation.v1.json");
   const lines: string[] = [];
-  lines.push('metric,legacy_value,imported_value,notes');
+  lines.push("metric,legacy_value,imported_value,notes");
   const productLegacy = Number(summary.productGroups ?? 0);
   const productsLegacy = Number(summary.products ?? 0);
   const customerLegacy = Number(summary.customers ?? 0);
   const paymentLegacy = Number(payments);
   const stockLegacy = Number(stocks);
 
-  const targetProducts = Number((await runDbQuery('select count(*) from product', undefined, client)).rows[0].count);
-  const targetCustomers = Number((await runDbQuery('select count(*) from customer', undefined, client)).rows[0].count);
-  const targetSales = Number((await runDbQuery("select count(*) from sale where source = 'VENDAS'", undefined, client)).rows[0].count);
+  const targetProducts = Number(
+    (await runDbQuery("select count(*) from product", undefined, client))
+      .rows[0].count,
+  );
+  const targetCustomers = Number(
+    (await runDbQuery("select count(*) from customer", undefined, client))
+      .rows[0].count,
+  );
+  const targetSales = Number(
+    (
+      await runDbQuery(
+        "select count(*) from sale where source = 'VENDAS'",
+        undefined,
+        client,
+      )
+    ).rows[0].count,
+  );
   const targetSaleItems = Number(
-    (await runDbQuery("select count(*) from sale_item si join sale s on s.id = si.sale_id where s.source = 'VENDAS'", undefined, client))
-      .rows[0].count
+    (
+      await runDbQuery(
+        "select count(*) from sale_item si join sale s on s.id = si.sale_id where s.source = 'VENDAS'",
+        undefined,
+        client,
+      )
+    ).rows[0].count,
   );
-  const targetOrders = Number((await runDbQuery("select count(*) from sale where source = 'PEDIDOS'", undefined, client)).rows[0].count);
+  const targetOrders = Number(
+    (
+      await runDbQuery(
+        "select count(*) from sale where source = 'PEDIDOS'",
+        undefined,
+        client,
+      )
+    ).rows[0].count,
+  );
   const targetOrderItems = Number(
-    (await runDbQuery("select count(*) from sale_item si join sale s on s.id = si.sale_id where s.source = 'PEDIDOS'", undefined, client))
-      .rows[0].count
+    (
+      await runDbQuery(
+        "select count(*) from sale_item si join sale s on s.id = si.sale_id where s.source = 'PEDIDOS'",
+        undefined,
+        client,
+      )
+    ).rows[0].count,
   );
-  const targetPayments = Number((await runDbQuery('select count(*) from customer_payment', undefined, client)).rows[0].count);
-  const targetStocks = Number((await runDbQuery('select count(*) from stock_movement', undefined, client)).rows[0].count);
+  const targetPayments = Number(
+    (
+      await runDbQuery(
+        "select count(*) from customer_payment",
+        undefined,
+        client,
+      )
+    ).rows[0].count,
+  );
+  const targetStocks = Number(
+    (await runDbQuery("select count(*) from stock_movement", undefined, client))
+      .rows[0].count,
+  );
 
   lines.push(`product_groups,${productLegacy},,`);
   lines.push(`products,${productsLegacy},${targetProducts},`);
@@ -1365,17 +1599,33 @@ async function createReconciliationReport(
   lines.push(`order_items,${saleSummary.orderItems},${targetOrderItems},`);
   lines.push(`customer_payments,${paymentLegacy},${targetPayments},`);
   lines.push(`stock_movements,${stockLegacy},${targetStocks},`);
-  lines.push(`customer_balances_verified,${balances.customers},${balances.verified},CLIENTES.DBF.DEBITO`);
-  lines.push(`legacy_balance_total,${balances.sourceTotal},${balances.sourceTotal},authoritative source balance`);
-  lines.push(`legacy_balance_adjustment,,${balances.adjustmentTotal},reconciliation adjustment; not a payment`);
-  const balanceDetails = (await runDbQuery<{ legacy_code: string; source_balance: string; reconstructed_balance: string; adjustment: string }>(
-    `select c.legacy_code,lb.source_balance::text,lb.reconstructed_balance::text,lb.adjustment::text
+  lines.push(
+    `customer_balances_verified,${balances.customers},${balances.verified},CLIENTES.DBF.DEBITO`,
+  );
+  lines.push(
+    `legacy_balance_total,${balances.sourceTotal},${balances.sourceTotal},authoritative source balance`,
+  );
+  lines.push(
+    `legacy_balance_adjustment,,${balances.adjustmentTotal},reconciliation adjustment; not a payment`,
+  );
+  const balanceDetails = (
+    await runDbQuery<{
+      legacy_code: string;
+      source_balance: string;
+      reconstructed_balance: string;
+      adjustment: string;
+    }>(
+      `select c.legacy_code,lb.source_balance::text,lb.reconstructed_balance::text,lb.adjustment::text
      from customer_legacy_balance lb join customer c on c.id=lb.customer_id where lb.import_id=$1 order by c.legacy_code`,
-    [importId], client
-  )).rows;
+      [importId],
+      client,
+    )
+  ).rows;
   for (const row of balanceDetails) {
     const note = `customer legacy code: ${row.legacy_code}; reconstructed: ${row.reconstructed_balance}; adjustment: ${row.adjustment}`;
-    lines.push(`customer_balance,${row.source_balance},${row.source_balance},"${note.replace(/"/g, '""')}"`);
+    lines.push(
+      `customer_balance,${row.source_balance},${row.source_balance},"${note.replace(/"/g, '""')}"`,
+    );
   }
 
   if (saleSummary.mismatches.length) {
@@ -1385,15 +1635,31 @@ async function createReconciliationReport(
   }
 
   const metrics = [
-    { metric: 'product_groups', legacy: productLegacy, imported: null as number | null },
-    { metric: 'products', legacy: productsLegacy, imported: targetProducts },
-    { metric: 'customers', legacy: customerLegacy, imported: targetCustomers },
-    { metric: 'sales', legacy: saleSummary.sales, imported: targetSales },
-    { metric: 'sale_items', legacy: saleSummary.saleItems, imported: targetSaleItems },
-    { metric: 'orders', legacy: saleSummary.orders, imported: targetOrders },
-    { metric: 'order_items', legacy: saleSummary.orderItems, imported: targetOrderItems },
-    { metric: 'customer_payments', legacy: paymentLegacy, imported: targetPayments },
-    { metric: 'stock_movements', legacy: stockLegacy, imported: targetStocks },
+    {
+      metric: "product_groups",
+      legacy: productLegacy,
+      imported: null as number | null,
+    },
+    { metric: "products", legacy: productsLegacy, imported: targetProducts },
+    { metric: "customers", legacy: customerLegacy, imported: targetCustomers },
+    { metric: "sales", legacy: saleSummary.sales, imported: targetSales },
+    {
+      metric: "sale_items",
+      legacy: saleSummary.saleItems,
+      imported: targetSaleItems,
+    },
+    { metric: "orders", legacy: saleSummary.orders, imported: targetOrders },
+    {
+      metric: "order_items",
+      legacy: saleSummary.orderItems,
+      imported: targetOrderItems,
+    },
+    {
+      metric: "customer_payments",
+      legacy: paymentLegacy,
+      imported: targetPayments,
+    },
+    { metric: "stock_movements", legacy: stockLegacy, imported: targetStocks },
   ];
 
   const reconciliationDocument = {
@@ -1406,8 +1672,12 @@ async function createReconciliationReport(
     customerBalances: { ...balances, records: balanceDetails },
   };
 
-  await fsp.writeFile(csvPath, lines.join(os.EOL), 'utf8');
-  await fsp.writeFile(jsonPath, JSON.stringify(reconciliationDocument, null, 2), 'utf8');
+  await fsp.writeFile(csvPath, lines.join(os.EOL), "utf8");
+  await fsp.writeFile(
+    jsonPath,
+    JSON.stringify(reconciliationDocument, null, 2),
+    "utf8",
+  );
 
   return {
     csvPath,
@@ -1419,23 +1689,36 @@ async function createReconciliationReport(
 async function runImportStage<T>(
   job: LegacyImportJob,
   stage: ImportStage,
-  checkpointCache: Map<string, { status: LegacyImportCheckpointStatus; summary: unknown }>,
+  checkpointCache: Map<
+    string,
+    { status: LegacyImportCheckpointStatus; summary: unknown }
+  >,
   client: PoolClient,
-  handler: (client: PoolClient) => Promise<T>
+  handler: (client: PoolClient) => Promise<T>,
 ): Promise<T> {
   const existing = checkpointCache.get(stage);
-  if (existing?.status === 'completed') {
-    await appendLog(job.id, 'info', `Skipping stage ${stage} because checkpoint is already completed`, client);
+  if (existing?.status === "completed") {
+    await appendLog(
+      job.id,
+      "info",
+      `Skipping stage ${stage} because checkpoint is already completed`,
+      client,
+    );
     return existing.summary as T;
   }
 
   const startedAt = new Date().toISOString();
-  await appendLog(job.id, 'info', `Starting stage ${stage}`, client);
-  await updateImportStatus(job.id, 'running', {
-    current_stage: stage,
-    last_heartbeat: startedAt,
-    error_message: null,
-  }, client);
+  await appendLog(job.id, "info", `Starting stage ${stage}`, client);
+  await updateImportStatus(
+    job.id,
+    "running",
+    {
+      current_stage: stage,
+      last_heartbeat: startedAt,
+      error_message: null,
+    },
+    client,
+  );
 
   let stageResult: T;
   try {
@@ -1444,13 +1727,13 @@ async function runImportStage<T>(
         job.id,
         stage,
         {
-          status: 'running',
+          status: "running",
           startedAt,
           finishedAt: null,
           summary: null,
           errorMessage: null,
         },
-        client
+        client,
       );
 
       const result = await handler(client);
@@ -1458,50 +1741,66 @@ async function runImportStage<T>(
         job.id,
         stage,
         {
-          status: 'completed',
+          status: "completed",
           startedAt,
           finishedAt: new Date().toISOString(),
           summary: result,
           errorMessage: null,
         },
-        client
+        client,
       );
       return result;
     });
-
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await upsertStageCheckpoint(job.id, stage, {
-      status: 'failed',
-      startedAt,
-      finishedAt: new Date().toISOString(),
-      summary: null,
-      errorMessage: message,
-    }, client);
-    await appendLog(job.id, 'error', `Stage ${stage} failed: ${message}`, client);
+    await upsertStageCheckpoint(
+      job.id,
+      stage,
+      {
+        status: "failed",
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        summary: null,
+        errorMessage: message,
+      },
+      client,
+    );
+    await appendLog(
+      job.id,
+      "error",
+      `Stage ${stage} failed: ${message}`,
+      client,
+    );
     throw error;
   }
 
   // Logging after commit must never turn a committed publication checkpoint
   // into a failed one: a retry could otherwise duplicate payments or stock.
-  checkpointCache.set(stage, { status: 'completed', summary: stageResult });
-  await appendLog(job.id, 'info', `Completed stage ${stage}`, client);
+  checkpointCache.set(stage, { status: "completed", summary: stageResult });
+  await appendLog(job.id, "info", `Completed stage ${stage}`, client);
   return stageResult;
 }
 
-async function runImport(job: LegacyImportJob, client: PoolClient): Promise<void> {
-  if (job.overwrite) assertDestructiveOperationEnabled('legacy-overwrite');
-  await appendLog(job.id, 'info', 'Preparing legacy files for import', client);
+async function runImport(
+  job: LegacyImportJob,
+  client: PoolClient,
+): Promise<void> {
+  if (job.overwrite) assertDestructiveOperationEnabled("legacy-overwrite");
+  await appendLog(job.id, "info", "Preparing legacy files for import", client);
   const filesMap = await prepareLegacyFiles(job.sessionDir);
 
   for (const required of REQUIRED_FILES) {
     if (!filesMap.has(required)) {
-      throw new Error(`Required legacy file ${required} missing after extraction`);
+      throw new Error(
+        `Required legacy file ${required} missing after extraction`,
+      );
     }
   }
 
   // Validate the authoritative source before any destructive reset or publication.
-  const balanceSource = await readLegacyCustomerBalances(filesMap.get('CLIENTES.DBF')!);
+  const balanceSource = await readLegacyCustomerBalances(
+    filesMap.get("CLIENTES.DBF")!,
+  );
 
   // Staging is disposable per attempt. Never trust a completed load checkpoint:
   // another import may have replaced the shared tables during retry backoff.
@@ -1510,7 +1809,8 @@ async function runImport(job: LegacyImportJob, client: PoolClient): Promise<void
     await truncateStagingTables(client);
     await runDbQuery(
       "delete from system_legacy_import_checkpoint where import_id = $1 and stage like 'load-staging:%'",
-      [job.id], client,
+      [job.id],
+      client,
     );
   });
 
@@ -1518,62 +1818,130 @@ async function runImport(job: LegacyImportJob, client: PoolClient): Promise<void
     stage: string;
     status: LegacyImportCheckpointStatus;
     summary: unknown;
-  }>(`select stage, status, summary from system_legacy_import_checkpoint where import_id = $1`, [job.id], client);
-  const checkpointCache = new Map<string, { status: LegacyImportCheckpointStatus; summary: unknown }>(
-    checkpointRows.rows.map((row) => [row.stage, { status: row.status, summary: row.summary }])
+  }>(
+    `select stage, status, summary from system_legacy_import_checkpoint where import_id = $1`,
+    [job.id],
+    client,
+  );
+  const checkpointCache = new Map<
+    string,
+    { status: LegacyImportCheckpointStatus; summary: unknown }
+  >(
+    checkpointRows.rows.map((row) => [
+      row.stage,
+      { status: row.status, summary: row.summary },
+    ]),
   );
 
-  await runImportStage(job, 'reset-target', checkpointCache, client, async (client) => {
-    if (job.overwrite) {
-      await appendLog(job.id, 'info', 'Clearing existing data before import', client);
-      await truncateCoreTables(client);
-    }
-    await truncateStagingTables(client);
-    return { overwrite: job.overwrite };
-  });
+  await runImportStage(
+    job,
+    "reset-target",
+    checkpointCache,
+    client,
+    async (client) => {
+      if (job.overwrite) {
+        await appendLog(
+          job.id,
+          "info",
+          "Clearing existing data before import",
+          client,
+        );
+        await truncateCoreTables(client);
+      }
+      await truncateStagingTables(client);
+      return { overwrite: job.overwrite };
+    },
+  );
 
   const stagingSummary: Record<string, number> = {};
   for (const config of STAGING_CONFIG) {
     const stageName = `load-staging:${config.table}` as ImportStage;
-    const count = await runImportStage(job, stageName, checkpointCache, client, async (client) => {
-      return loadDbfIntoStaging(job.id, config, filesMap, client);
-    });
+    const count = await runImportStage(
+      job,
+      stageName,
+      checkpointCache,
+      client,
+      async (client) => {
+        return loadDbfIntoStaging(job.id, config, filesMap, client);
+      },
+    );
     stagingSummary[config.table] = Number(count ?? 0);
   }
 
-  const masterSummary = await runImportStage(job, 'migrate-master', checkpointCache, client, async (client) => {
-    return migrateMasterData(job.overwrite, client);
-  });
+  const masterSummary = await runImportStage(
+    job,
+    "migrate-master",
+    checkpointCache,
+    client,
+    async (client) => {
+      return migrateMasterData(job.overwrite, client);
+    },
+  );
 
-  const salesSummary = await runImportStage(job, 'migrate-sales', checkpointCache, client, async (client) => {
-    return migrateSales(job.overwrite, client);
-  });
+  const salesSummary = await runImportStage(
+    job,
+    "migrate-sales",
+    checkpointCache,
+    client,
+    async (client) => {
+      return migrateSales(job.overwrite, client);
+    },
+  );
 
-  const paymentsCount = await runImportStage(job, 'migrate-customer-payments', checkpointCache, client, async (client) => {
-    return migrateCustomerPayments(client);
-  });
+  const paymentsCount = await runImportStage(
+    job,
+    "migrate-customer-payments",
+    checkpointCache,
+    client,
+    async (client) => {
+      return migrateCustomerPayments(client);
+    },
+  );
 
-  const stockCount = await runImportStage(job, 'migrate-stock', checkpointCache, client, async (client) => {
-    return migrateStockMovements(client);
-  });
+  const stockCount = await runImportStage(
+    job,
+    "migrate-stock",
+    checkpointCache,
+    client,
+    async (client) => {
+      return migrateStockMovements(client);
+    },
+  );
 
-  const balances = await runImportStage(job, 'reconcile-customer-balances', checkpointCache, client, async (client) => {
-    return reconcileLegacyCustomerBalances(job.id, balanceSource, client, job.userId);
-  });
+  const balances = await runImportStage(
+    job,
+    "reconcile-customer-balances",
+    checkpointCache,
+    client,
+    async (client) => {
+      return reconcileLegacyCustomerBalances(
+        job.id,
+        balanceSource,
+        client,
+        job.userId,
+      );
+    },
+  );
 
-  const reconciliation = await runImportStage(job, 'reconciliation-report', checkpointCache, client, async (client) => {
-    return createReconciliationReport(
-      job.id,
-      job.sessionId,
-      job.sessionDir,
-      masterSummary as Record<string, unknown>,
-      salesSummary as SaleSummary,
-      Number(paymentsCount ?? 0),
-      Number(stockCount ?? 0),
-      balances,
-      client
-    );
-  });
+  const reconciliation = await runImportStage(
+    job,
+    "reconciliation-report",
+    checkpointCache,
+    client,
+    async (client) => {
+      return createReconciliationReport(
+        job.id,
+        job.sessionId,
+        job.sessionDir,
+        masterSummary as Record<string, unknown>,
+        salesSummary as SaleSummary,
+        Number(paymentsCount ?? 0),
+        Number(stockCount ?? 0),
+        balances,
+        client,
+      );
+    },
+  );
 
   const overallSummary = {
     stages: IMPORT_STAGE_SEQUENCE,
@@ -1586,19 +1954,29 @@ async function runImport(job: LegacyImportJob, client: PoolClient): Promise<void
     reconciliation,
   };
 
-  await updateImportStatus(job.id, 'completed', {
-    finished_at: new Date().toISOString(),
-    current_stage: null,
-    last_error_stage: null,
-    error_message: null,
-    summary: JSON.stringify(overallSummary),
-    report_path: (reconciliation as { csvPath: string }).csvPath,
-    report_json_path: (reconciliation as { jsonPath: string }).jsonPath,
-    reconciliation_version: (reconciliation as { version: string }).version,
-    last_heartbeat: new Date().toISOString(),
-  }, client);
+  await updateImportStatus(
+    job.id,
+    "completed",
+    {
+      finished_at: new Date().toISOString(),
+      current_stage: null,
+      last_error_stage: null,
+      error_message: null,
+      summary: JSON.stringify(overallSummary),
+      report_path: (reconciliation as { csvPath: string }).csvPath,
+      report_json_path: (reconciliation as { jsonPath: string }).jsonPath,
+      reconciliation_version: (reconciliation as { version: string }).version,
+      last_heartbeat: new Date().toISOString(),
+    },
+    client,
+  );
 
-  await appendLog(job.id, 'info', 'Legacy data import completed successfully', client);
+  await appendLog(
+    job.id,
+    "info",
+    "Legacy data import completed successfully",
+    client,
+  );
 }
 
 function getQueueConnection(): IORedis {
@@ -1624,10 +2002,15 @@ async function ensureQueueInfra(): Promise<void> {
 
   const connection = getQueueConnection();
   if (!importQueue) {
-    importQueue = new Queue<LegacyImportQueuePayload>(env.LEGACY_IMPORT_QUEUE_NAME, { connection });
+    importQueue = new Queue<LegacyImportQueuePayload>(
+      env.LEGACY_IMPORT_QUEUE_NAME,
+      { connection },
+    );
   }
   if (!dlqQueue) {
-    dlqQueue = new Queue<Record<string, unknown>>(env.LEGACY_IMPORT_DLQ_NAME, { connection });
+    dlqQueue = new Queue<Record<string, unknown>>(env.LEGACY_IMPORT_DLQ_NAME, {
+      connection,
+    });
   }
   if (importWorker) {
     return;
@@ -1638,11 +2021,14 @@ async function ensureQueueInfra(): Promise<void> {
     async (job) => {
       await processLegacyImportJob(job);
     },
-    { connection, concurrency: 1 }
+    { connection, concurrency: 1 },
   );
 }
 
-async function getJobRecord(importId: string, client: PoolClient): Promise<(LegacyImportJob & { status: string }) | null> {
+async function getJobRecord(
+  importId: string,
+  client: PoolClient,
+): Promise<(LegacyImportJob & { status: string }) | null> {
   const { rows } = await runDbQuery<{
     id: string;
     session_id: string;
@@ -1654,7 +2040,8 @@ async function getJobRecord(importId: string, client: PoolClient): Promise<(Lega
     `select id, session_id, session_dir, overwrite, created_by, status
      from system_legacy_import
      where id = $1`,
-    [importId], client
+    [importId],
+    client,
   );
   const row = rows[0];
   if (!row) {
@@ -1670,7 +2057,9 @@ async function getJobRecord(importId: string, client: PoolClient): Promise<(Lega
   };
 }
 
-export async function processLegacyImportJob(job: Pick<Job<LegacyImportQueuePayload>, 'data' | 'attemptsMade' | 'opts'>): Promise<void> {
+export async function processLegacyImportJob(
+  job: Pick<Job<LegacyImportQueuePayload>, "data" | "attemptsMade" | "opts">,
+): Promise<void> {
   // Maintenance is not an import failure. Wait before entering the write
   // session so a long restore/rollback cannot exhaust BullMQ attempts.
   while (true) {
@@ -1679,47 +2068,71 @@ export async function processLegacyImportJob(job: Pick<Job<LegacyImportQueuePayl
         await processLockedImportJob(job, client);
       });
     } catch (error) {
-      if (!(error instanceof HttpError) || error.message !== 'database_restore_in_progress') throw error;
+      if (
+        !(error instanceof HttpError) ||
+        error.message !== "database_restore_in_progress"
+      )
+        throw error;
       await setTimeout(250);
     }
   }
 }
 
 async function processLockedImportJob(
-  job: Pick<Job<LegacyImportQueuePayload>, 'data' | 'attemptsMade' | 'opts'>,
+  job: Pick<Job<LegacyImportQueuePayload>, "data" | "attemptsMade" | "opts">,
   client: PoolClient,
 ): Promise<void> {
   const importId = job.data.importId;
   const attemptNumber = job.attemptsMade + 1;
   const importRecord = await getJobRecord(importId, client);
-  if (!importRecord || !['queued', 'retrying', 'running'].includes(importRecord.status ?? '')) {
+  if (
+    !importRecord ||
+    !["queued", "retrying", "running"].includes(importRecord.status ?? "")
+  ) {
     return;
   }
 
-  await updateImportStatus(importId, 'running', {
-    started_at: new Date().toISOString(),
-    finished_at: null,
-    retry_count: Math.max(0, attemptNumber - 1),
-    error_message: null,
-    current_stage: null,
-    last_heartbeat: new Date().toISOString(),
-  }, client);
-  await appendLog(importId, 'info', `Processing import attempt ${attemptNumber}`, client);
+  await updateImportStatus(
+    importId,
+    "running",
+    {
+      started_at: new Date().toISOString(),
+      finished_at: null,
+      retry_count: Math.max(0, attemptNumber - 1),
+      error_message: null,
+      current_stage: null,
+      last_heartbeat: new Date().toISOString(),
+    },
+    client,
+  );
+  await appendLog(
+    importId,
+    "info",
+    `Processing import attempt ${attemptNumber}`,
+    client,
+  );
 
   try {
     await runImport(importRecord, client);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const maxAttempts = Number(job.opts.attempts ?? env.LEGACY_IMPORT_JOB_ATTEMPTS);
+    const maxAttempts = Number(
+      job.opts.attempts ?? env.LEGACY_IMPORT_JOB_ATTEMPTS,
+    );
     const isLastAttempt = attemptNumber >= maxAttempts;
 
     if (isLastAttempt) {
-      await updateImportStatus(importId, 'failed', {
-        finished_at: new Date().toISOString(),
-        current_stage: null,
-        error_message: message,
-        last_heartbeat: new Date().toISOString(),
-      }, client);
+      await updateImportStatus(
+        importId,
+        "failed",
+        {
+          finished_at: new Date().toISOString(),
+          current_stage: null,
+          error_message: message,
+          last_heartbeat: new Date().toISOString(),
+        },
+        client,
+      );
 
       await runDbQuery(
         `insert into system_legacy_import_dead_letter (import_id, session_id, attempts, error_message, payload)
@@ -1735,12 +2148,13 @@ async function processLockedImportJob(
             attemptNumber,
             failedAt: new Date().toISOString(),
           }),
-        ], client
+        ],
+        client,
       );
 
       if (dlqQueue) {
         await dlqQueue.add(
-          'legacy-import-dlq',
+          "legacy-import-dlq",
           {
             importId,
             sessionId: importRecord.sessionId,
@@ -1752,18 +2166,28 @@ async function processLockedImportJob(
             jobId: importId,
             removeOnComplete: 1000,
             removeOnFail: 5000,
-          }
+          },
         );
       }
     } else {
-      await updateImportStatus(importId, 'retrying', {
-        current_stage: null,
-        error_message: message,
-        last_heartbeat: new Date().toISOString(),
-      }, client);
+      await updateImportStatus(
+        importId,
+        "retrying",
+        {
+          current_stage: null,
+          error_message: message,
+          last_heartbeat: new Date().toISOString(),
+        },
+        client,
+      );
     }
 
-    await appendLog(importId, 'error', `Import attempt ${attemptNumber} failed: ${message}`, client);
+    await appendLog(
+      importId,
+      "error",
+      `Import attempt ${attemptNumber} failed: ${message}`,
+      client,
+    );
     throw error;
   }
 }
@@ -1776,14 +2200,18 @@ async function enqueuePendingImportsFromDatabase(): Promise<void> {
          error_message = coalesce(error_message, 'service restarted while import was running'),
          last_heartbeat = now()
      where status = 'running'
-       and finished_at is null`, undefined, client
+       and finished_at is null`,
+      undefined,
+      client,
     );
 
     const { rows } = await runDbQuery<{ id: string }>(
       `select id
      from system_legacy_import
      where status in ('queued', 'retrying')
-     order by created_at asc`, undefined, client
+     order by created_at asc`,
+      undefined,
+      client,
     );
     return rows;
   });
@@ -1793,10 +2221,12 @@ async function enqueuePendingImportsFromDatabase(): Promise<void> {
   }
 }
 
-export async function queueLegacyImport(job: { id: string } & Partial<Omit<LegacyImportJob, 'id'>>): Promise<void> {
+export async function queueLegacyImport(
+  job: { id: string } & Partial<Omit<LegacyImportJob, "id">>,
+): Promise<void> {
   await ensureQueueInfra();
   if (!importQueue) {
-    throw new Error('legacy import queue not initialized');
+    throw new Error("legacy import queue not initialized");
   }
 
   const existing = await importQueue.getJob(job.id);
@@ -1805,18 +2235,18 @@ export async function queueLegacyImport(job: { id: string } & Partial<Omit<Legac
   }
 
   await importQueue.add(
-    'legacy-import',
+    "legacy-import",
     { importId: job.id },
     {
       jobId: job.id,
       attempts: env.LEGACY_IMPORT_JOB_ATTEMPTS,
       backoff: {
-        type: 'fixed',
+        type: "fixed",
         delay: env.LEGACY_IMPORT_JOB_BACKOFF_MS,
       },
       removeOnComplete: 1000,
       removeOnFail: 5000,
-    }
+    },
   );
 }
 
@@ -1829,7 +2259,10 @@ export async function initializeLegacyImportWorker(): Promise<void> {
   await enqueuePendingImportsFromDatabase();
 }
 
-export async function getLegacyImportStatus(sessionId: string): Promise<LegacyImportStatus | null> {
+export async function getLegacyImportStatus(
+  sessionId: string,
+  compact = false,
+): Promise<LegacyImportStatus | null> {
   const { rows } = await runDbQuery<{
     id: string;
     overwrite: boolean;
@@ -1842,22 +2275,29 @@ export async function getLegacyImportStatus(sessionId: string): Promise<LegacyIm
     last_error_stage: string | null;
     reconciliation_version: string | null;
     summary: unknown;
+    log_count: number;
+    mismatch_count: number;
     error_message: string | null;
     report_path: string | null;
     report_json_path: string | null;
   }>(
     `select id, overwrite, status, created_at, started_at, finished_at, retry_count, current_stage, last_error_stage,
-            reconciliation_version, summary, error_message, report_path, report_json_path
+            reconciliation_version, case when $2::boolean then summary #- '{sales,mismatches}' else summary end as summary,
+            (select count(*)::int from system_legacy_import_log l where l.import_id=system_legacy_import.id) as log_count,
+            jsonb_array_length(coalesce(summary->'sales'->'mismatches','[]'::jsonb)) as mismatch_count,
+            error_message, report_path, report_json_path
      from system_legacy_import where session_id = $1`,
-    [sessionId]
+    [sessionId, compact],
   );
   const record = rows[0];
   if (!record) return null;
 
-  const logRows = await runDbQuery<{ level: string; message: string; created_at: string }>(
-    `select level, message, created_at from system_legacy_import_log where import_id = $1 order by id`,
-    [record.id]
-  );
+  const logRows = compact
+    ? { rows: [] }
+    : await runDbQuery<{ level: string; message: string; created_at: string }>(
+        `select level, message, created_at from system_legacy_import_log where import_id = $1 order by id`,
+        [record.id],
+      );
   const checkpointRows = await runDbQuery<{
     stage: string;
     status: LegacyImportCheckpointStatus;
@@ -1866,16 +2306,16 @@ export async function getLegacyImportStatus(sessionId: string): Promise<LegacyIm
     summary: unknown;
     error_message: string | null;
   }>(
-    `select stage, status, started_at, finished_at, summary, error_message
+    `select stage, status, started_at, finished_at, case when $2::boolean then null else summary end as summary, error_message
      from system_legacy_import_checkpoint
      where import_id = $1
      order by created_at asc`,
-    [record.id]
+    [record.id, compact],
   );
 
   let summary: unknown = null;
   if (record.summary != null) {
-    if (typeof record.summary === 'string') {
+    if (typeof record.summary === "string") {
       try {
         summary = JSON.parse(record.summary);
       } catch (error) {
@@ -1887,6 +2327,8 @@ export async function getLegacyImportStatus(sessionId: string): Promise<LegacyIm
   }
 
   return {
+    logCount: record.log_count,
+    mismatchCount: record.mismatch_count,
     status: record.status,
     stages: IMPORT_STAGE_SEQUENCE,
     overwrite: record.overwrite,
@@ -1917,28 +2359,36 @@ export async function getLegacyImportStatus(sessionId: string): Promise<LegacyIm
   };
 }
 
-export async function getLegacyImportReport(sessionId: string): Promise<{ path: string; filename: string } | null> {
-  const { rows } = await runDbQuery<{ report_path: string | null }>(`select report_path from system_legacy_import where session_id = $1`, [
-    sessionId,
-  ]);
+export async function getLegacyImportReport(
+  sessionId: string,
+): Promise<{ path: string; filename: string } | null> {
+  const { rows } = await runDbQuery<{ report_path: string | null }>(
+    `select report_path from system_legacy_import where session_id = $1`,
+    [sessionId],
+  );
   const record = rows[0];
   if (!record || !record.report_path) {
     return null;
   }
-  return { path: record.report_path, filename: path.basename(record.report_path) };
+  return {
+    path: record.report_path,
+    filename: path.basename(record.report_path),
+  };
 }
 
-export async function getLegacyImportReportJson(sessionId: string): Promise<{ path: string; filename: string } | null> {
+export async function getLegacyImportReportJson(
+  sessionId: string,
+): Promise<{ path: string; filename: string } | null> {
   const { rows } = await runDbQuery<{ report_json_path: string | null }>(
     `select report_json_path from system_legacy_import where session_id = $1`,
-    [sessionId]
+    [sessionId],
   );
   const record = rows[0];
   if (!record || !record.report_json_path) {
     return null;
   }
-  return { path: record.report_json_path, filename: path.basename(record.report_json_path) };
+  return {
+    path: record.report_json_path,
+    filename: path.basename(record.report_json_path),
+  };
 }
-
-
-

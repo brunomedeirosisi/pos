@@ -19,18 +19,210 @@ security:
   - bearerAuth: []
   - cookieAuth: []
 paths:
+  /api/v1/lists/{resource}:
+    get:
+      tags: [Catalog, Sales, Administration]
+      summary: Read a bounded, filtered page using the module's existing permissions
+      description: >
+        New opt-in read contract; existing array/snake_case endpoints remain unchanged. See docs/pagination.md for the
+        resource inventory, permission matrix, filters and sort whitelists. Unknown sorts or invalid ranges return 400.
+        Out-of-range pages are clamped against the same SQL snapshot used for the count and rows. Customer payment pages
+        include a complete financial summary; customer activity is paginated as one combined sale/payment timeline.
+        Required scopes are customer_id for customer-sales/customer-payments/customer-activity, roleId for role-users,
+        saleId for print-jobs and sessionId for legacy-logs/legacy-warnings. No password hashes, printer credentials,
+        execution tokens or receipt content are returned.
+      parameters:
+        - in: path
+          name: resource
+          required: true
+          schema:
+            type: string
+            enum:
+              [
+                products,
+                product-groups,
+                customers,
+                sellers,
+                payment-terms,
+                sales,
+                payments,
+                customer-sales,
+                customer-payments,
+                customer-activity,
+                users,
+                roles,
+                role-users,
+                receivers,
+                backups,
+                printers,
+                print-jobs,
+                legacy-logs,
+                legacy-warnings,
+                dashboard-sellers,
+                dashboard-categories,
+                dashboard-payment-terms,
+                dashboard-stores,
+              ]
+        - { $ref: "#/components/parameters/ListPage" }
+        - { $ref: "#/components/parameters/ListPageSize" }
+        - { $ref: "#/components/parameters/ListSortBy" }
+        - { $ref: "#/components/parameters/ListSortOrder" }
+        - { in: query, name: search, schema: { type: string, maxLength: 200 } }
+        - { in: query, name: id, schema: { type: string, format: uuid } }
+        - {
+            in: query,
+            name: optionId,
+            description: Exact identity lookup including text printer IDs.,
+            schema: { type: string, maxLength: 200 },
+          }
+        - {
+            in: query,
+            name: customer_id,
+            schema: { type: string, format: uuid },
+          }
+        - { in: query, name: seller_id, schema: { type: string, format: uuid } }
+        - {
+            in: query,
+            name: payment_term_id,
+            schema: { type: string, format: uuid },
+          }
+        - {
+            in: query,
+            name: received_by,
+            schema: { type: string, format: uuid },
+          }
+        - { in: query, name: roleId, schema: { type: string, format: uuid } }
+        - { in: query, name: saleId, schema: { type: string, format: uuid } }
+        - {
+            in: query,
+            name: sessionId,
+            schema: { type: string, minLength: 1, maxLength: 200 },
+          }
+        - { in: query, name: from, schema: { type: string, format: date } }
+        - { in: query, name: to, schema: { type: string, format: date } }
+        - {
+            in: query,
+            name: start_date,
+            schema: { type: string, format: date },
+          }
+        - { in: query, name: end_date, schema: { type: string, format: date } }
+        - {
+            in: query,
+            name: method,
+            schema: { type: string, enum: [cash, card, bank, other, legacy] },
+          }
+        - {
+            in: query,
+            name: sort,
+            description: Legacy customer payment direction alias.,
+            schema: { type: string, enum: [asc, desc] },
+          }
+        - { in: query, name: enabled, schema: { type: boolean } }
+      responses:
+        "200":
+          description: Bounded page; filtered count and valid current page.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListPageResponse" }
+        "400":
+          {
+            description: Invalid page,
+            size,
+            sort,
+            date,
+            filter or missing required scope.,
+          }
+        "401": { description: Authentication required. }
+        "403": { description: Missing the module's read permission. }
+        "404": { description: Scoped role or customer not found. }
+  /api/v1/dashboard/lists/{resource}:
+    get:
+      summary: Paged dashboard tables with complete aggregate calculations (sales:read or reports:view)
+      description: >
+        Uses the same dashboard startDate/endDate/timezone/storeId/sellerId/categoryId/channel/paymentTermId filters
+        and 366-day range validation as existing widgets. Ranking positions, participation and ABC accumulation are
+        computed before paging. Sort whitelists are documented in docs/pagination.md. Critical stock uses categoryId;
+        sales-period filters do not change physical stock. Existing dashboard endpoints remain available.
+      parameters:
+        - in: path
+          name: resource
+          required: true
+          schema:
+            {
+              type: string,
+              enum: [seller-ranking, product-abc, critical-stock],
+            }
+        - { $ref: "#/components/parameters/ListPage" }
+        - { $ref: "#/components/parameters/ListPageSize" }
+        - { $ref: "#/components/parameters/ListSortBy" }
+        - { $ref: "#/components/parameters/ListSortOrder" }
+        - {
+            in: query,
+            name: metric,
+            schema:
+              {
+                type: string,
+                enum: [revenue, quantity, margin],
+                default: revenue,
+              },
+          }
+        - { in: query, name: startDate, schema: { type: string, format: date } }
+        - { in: query, name: endDate, schema: { type: string, format: date } }
+        - { in: query, name: timezone, schema: { type: string, maxLength: 80 } }
+        - { in: query, name: storeId, schema: { type: string, maxLength: 120 } }
+        - { in: query, name: sellerId, schema: { type: string, format: uuid } }
+        - {
+            in: query,
+            name: categoryId,
+            schema: { type: string, format: uuid },
+          }
+        - {
+            in: query,
+            name: paymentTermId,
+            schema: { type: string, format: uuid },
+          }
+        - {
+            in: query,
+            name: channel,
+            schema:
+              { type: string, enum: [pos, ecommerce, whatsapp, marketplace] },
+          }
+      responses:
+        "200":
+          description: Bounded dashboard rows and full filtered count.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListPageResponse" }
+        "400": { description: Invalid filters, sort or pagination. }
+        "401": { description: Authentication required. }
+        "403": { description: Missing dashboard permission. }
+  /api/v1/print-printers/info:
+    get:
+      summary: Read printer mode and store identity without loading printer rows (sales:read or printers:manage)
+      responses:
+        "200":
+          description: Mode and store identity; no credentials.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mode, store_id]
+                properties:
+                  mode: { type: string, enum: [direct, queue] }
+                  store_id: { type: string, nullable: true }
   /api/v1/store-info:
     get:
       security: []
       summary: Public store identity for installer pairing
       responses:
-        '200': { description: Store UUID and print mode; no secrets. }
-        '503': { description: Store is not configured. }
+        "200": { description: Store UUID and print mode; no secrets. }
+        "503": { description: Store is not configured. }
   /api/v1/print-agent/enroll:
     post:
       security: []
       summary: Redeem an administrator-issued print enrollment capability
-      description: Code expires in 15 minutes and binds one printer to one unique agent credential. A lost response may be
+      description:
+        Code expires in 15 minutes and binds one printer to one unique agent credential. A lost response may be
         retried with the same code and credential after consumption. Revoked credentials cannot be revived.
       requestBody:
         required: true
@@ -40,20 +232,28 @@ paths:
               type: object
               additionalProperties: false
               properties:
-                code: { type: string, pattern: '^[a-f0-9]{48}$' }
-                token: { type: string, pattern: '^[a-f0-9]{64}$', writeOnly: true }
-              required: [ code, token ]
+                code: { type: string, pattern: "^[a-f0-9]{48}$" }
+                token:
+                  { type: string, pattern: "^[a-f0-9]{64}$", writeOnly: true }
+              required: [code, token]
       responses:
-        '200': { description: 'printer_id, display_name and store_id; never echoes the credential.' }
-        '403': { description: Invalid/expired enrollment or consumed by another credential or revoked. }
+        "200":
+          {
+            description: "printer_id, display_name and store_id; never echoes the credential.",
+          }
+        "403":
+          {
+            description: Invalid/expired enrollment or consumed by another credential or revoked.,
+          }
   /api/v1/print-printers:
     get:
       summary: List printer identities and heartbeats (sales:read or printers:manage)
       responses:
-        '200':
+        "200":
           {
-            description: 'mode, store_id and printers with id/display_name/enabled/online/last_seen_at; never returns tokens or
-              hashes or enrollment codes.'
+            description:
+              "mode, store_id and printers with id/display_name/enabled/online/last_seen_at; never returns tokens or
+              hashes or enrollment codes.",
           }
   /api/v1/print-printers/enrollments:
     post:
@@ -64,36 +264,66 @@ paths:
           application/json:
             schema:
               type: object
-              properties: { display_name: { type: string, minLength: 1, maxLength: 100 } }
-              required: [ display_name ]
+              properties:
+                { display_name: { type: string, minLength: 1, maxLength: 100 } }
+              required: [display_name]
       responses:
-        '201': { description: 'code, printer_id, expires_at and store_id. No-store response; the server stores only a hash.' }
-        '403': { description: Missing management permission. }
-        '409': { description: Too many pending enrollments (maximum twenty). }
+        "201":
+          {
+            description: "code, printer_id, expires_at and store_id. No-store response; the server stores only a hash.",
+          }
+        "403": { description: Missing management permission. }
+        "409": { description: Too many pending enrollments (maximum twenty). }
   /api/v1/print-printers/{id}/revoke:
     post:
       summary: Revoke a Terminal credential without moving jobs (printers:manage)
-      parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ]
+      parameters:
+        [
+          {
+            in: path,
+            name: id,
+            required: true,
+            schema: { type: string, format: uuid },
+          },
+        ]
       responses:
-        '204': { description: 'Access revoked. Jobs stay at the original destination; an output already started may complete.' }
-        '400': { description: Unknown printer or attempt to revoke the principal printer. }
-        '403': { description: Missing management permission. }
+        "204":
+          {
+            description: "Access revoked. Jobs stay at the original destination; an output already started may complete.",
+          }
+        "400":
+          {
+            description: Unknown printer or attempt to revoke the principal printer.,
+          }
+        "403": { description: Missing management permission. }
   /api/v1/print-agent/claim:
     post:
-      security: [ { printAgentToken: [] } ]
+      security: [{ printAgentToken: [] }]
       summary: Claim the next job exclusively for the authenticated printer
-      description: Queue mode only. One live reservation per printer. x-print-printer-id selects the credential scope
+      description:
+        Queue mode only. One live reservation per printer. x-print-printer-id selects the credential scope
         (principal if omitted for legacy compatibility). Response contains job metadata plus content, locale and
         claim_token, or job=null. Content is bounded to 1 MiB.
       responses:
-        '200': { description: Claimed job or null; poll every two seconds while idle. }
-        '403': { description: Invalid agent token. }
-        '503': { description: Queue disabled. }
+        "200":
+          {
+            description: Claimed job or null; poll every two seconds while idle.,
+          }
+        "403": { description: Invalid agent token. }
+        "503": { description: Queue disabled. }
   /api/v1/print-agent/jobs/{id}/start:
     post:
-      security: [ { printAgentToken: [] } ]
+      security: [{ printAgentToken: [] }]
       summary: Acknowledge start BEFORE invoking the spooler
-      parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ]
+      parameters:
+        [
+          {
+            in: path,
+            name: id,
+            required: true,
+            schema: { type: string, format: uuid },
+          },
+        ]
       requestBody:
         required: true
         content:
@@ -101,15 +331,23 @@ paths:
             schema:
               type: object
               properties: { claim_token: { type: string, format: uuid } }
-              required: [ claim_token ]
+              required: [claim_token]
       responses:
-        '204': { description: Current claim is now spooling. }
-        '409': { description: Claim expired or invalid; do not print. }
+        "204": { description: Current claim is now spooling. }
+        "409": { description: Claim expired or invalid; do not print. }
   /api/v1/print-agent/jobs/{id}/finish:
     post:
-      security: [ { printAgentToken: [] } ]
+      security: [{ printAgentToken: [] }]
       summary: Acknowledge submitted/uncertain output or rejection before output
-      parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ]
+      parameters:
+        [
+          {
+            in: path,
+            name: id,
+            required: true,
+            schema: { type: string, format: uuid },
+          },
+        ]
       requestBody:
         required: true
         content:
@@ -118,47 +356,79 @@ paths:
               type: object
               properties:
                 claim_token: { type: string, format: uuid }
-                outcome: { type: string, enum: [ submitted, uncertain, failed ] }
-              required: [ claim_token, outcome ]
+                outcome: { type: string, enum: [submitted, uncertain, failed] }
+              required: [claim_token, outcome]
       responses:
-        '204': { description: Idempotent acknowledgement; submitted means spooler accepted, not paper output. }
-        '409': { description: Completion incompatible with claim/state. }
+        "204":
+          {
+            description: Idempotent acknowledgement; submitted means spooler accepted,
+            not paper output.,
+          }
+        "409": { description: Completion incompatible with claim/state. }
   /api/v1/print-agent/jobs/{id}:
     get:
-      security: [ { printAgentToken: [] } ]
+      security: [{ printAgentToken: [] }]
       summary: Inspect metadata during agent crash recovery
-      parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ]
+      parameters:
+        [
+          {
+            in: path,
+            name: id,
+            required: true,
+            schema: { type: string, format: uuid },
+          },
+        ]
       responses:
-        '200': { description: Job metadata. }
-        '404': { description: Job not found. }
+        "200": { description: Job metadata. }
+        "404": { description: Job not found. }
   /api/v1/print-agent/status:
     get:
-      security: [ { printAgentToken: [] } ]
+      security: [{ printAgentToken: [] }]
       summary: Agent heartbeat and queue counts for local diagnostics
       responses:
-        '200': { description: Last poll time, online flag (30 seconds) and counts by state. }
+        "200":
+          {
+            description: Last poll time,
+            online flag (30 seconds) and counts by state.,
+          }
   /api/v1/print-jobs/{id}:
     get:
       summary: Job metadata for authenticated sales readers
-      parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ]
+      parameters:
+        [
+          {
+            in: path,
+            name: id,
+            required: true,
+            schema: { type: string, format: uuid },
+          },
+        ]
       responses:
-        '200':
+        "200":
           description: Job status; no receipt content or claim secret.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/PrintJob' }
-        '404': { description: Job not found. }
+              schema: { $ref: "#/components/schemas/PrintJob" }
+        "404": { description: Job not found. }
   /api/v1/print-jobs/sale/{id}:
     get:
       summary: Last twenty jobs for this sale (sales:read)
-      parameters: [ { in: path, name: id, required: true, schema: { type: string, format: uuid } } ]
+      parameters:
+        [
+          {
+            in: path,
+            name: id,
+            required: true,
+            schema: { type: string, format: uuid },
+          },
+        ]
       responses:
-        '200': { description: List of PrintJob metadata. }
+        "200": { description: List of PrintJob metadata. }
   /api/v1/print-jobs/agent-status:
     get:
       summary: Agent heartbeat/counts for authenticated sales readers
       responses:
-        '200': { description: Online flag, last poll and queue counts. }
+        "200": { description: Online flag, last poll and queue counts. }
   /api/v1/health:
     get:
       tags:
@@ -167,7 +437,7 @@ paths:
       summary: Health probe
       description: Returns basic service availability metadata.
       responses:
-        '200':
+        "200":
           description: Service is healthy.
           content:
             application/json:
@@ -198,14 +468,14 @@ paths:
           schema:
             type: string
       responses:
-        '200':
+        "200":
           description: Prometheus metrics payload.
           content:
             text/plain:
               schema:
                 type: string
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
   /api/v1/auth/login:
     post:
       tags:
@@ -221,9 +491,9 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LoginRequest'
+              $ref: "#/components/schemas/LoginRequest"
       responses:
-        '200':
+        "200":
           description: Authentication succeeded.
           headers:
             Set-Cookie:
@@ -233,11 +503,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LoginResponse'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
   /api/v1/auth/logout:
     post:
       tags:
@@ -246,7 +516,7 @@ paths:
       description: Clears the HttpOnly authentication cookie used by browser clients.
       security: []
       responses:
-        '204':
+        "204":
           description: Session cookie cleared.
           headers:
             Set-Cookie:
@@ -260,7 +530,7 @@ paths:
       summary: Return authenticated user
       description: Returns details about the currently authenticated user resolved from a bearer token or auth cookie.
       responses:
-        '200':
+        "200":
           description: Authenticated user details.
           content:
             application/json:
@@ -268,32 +538,32 @@ paths:
                 type: object
                 properties:
                   user:
-                    $ref: '#/components/schemas/AuthenticatedUser'
+                    $ref: "#/components/schemas/AuthenticatedUser"
                 required:
                   - user
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
   /api/v1/product-groups:
     get:
       tags:
         - Catalog
       summary: List product groups
       parameters:
-        - $ref: '#/components/parameters/SearchQuery'
-        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: "#/components/parameters/SearchQuery"
+        - $ref: "#/components/parameters/LimitQuery"
       responses:
-        '200':
+        "200":
           description: Product groups ordered by name.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/ProductGroup'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                  $ref: "#/components/schemas/ProductGroup"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
     post:
       tags:
         - Catalog
@@ -303,92 +573,92 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProductGroupWrite'
+              $ref: "#/components/schemas/ProductGroupWrite"
       responses:
-        '201':
+        "201":
           description: Product group created.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductGroup'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '409':
-          $ref: '#/components/responses/ConflictError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                $ref: "#/components/schemas/ProductGroup"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/product-groups/{id}:
     get:
       tags:
         - Catalog
       summary: Get product group
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       responses:
-        '200':
+        "200":
           description: Product group.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductGroup'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                $ref: "#/components/schemas/ProductGroup"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
     patch:
       tags:
         - Catalog
       summary: Update product group
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProductGroupPatch'
+              $ref: "#/components/schemas/ProductGroupPatch"
       responses:
-        '200':
+        "200":
           description: Product group updated.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ProductGroup'
-        '204':
+                $ref: "#/components/schemas/ProductGroup"
+        "204":
           description: No fields changed.
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/products:
     get:
       tags:
         - Catalog
       summary: List products
       parameters:
-        - $ref: '#/components/parameters/SearchQuery'
-        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: "#/components/parameters/SearchQuery"
+        - $ref: "#/components/parameters/LimitQuery"
       responses:
-        '200':
+        "200":
           description: Products ordered by name.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Product'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                  $ref: "#/components/schemas/Product"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
     post:
       tags:
         - Catalog
@@ -398,92 +668,92 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProductWrite'
+              $ref: "#/components/schemas/ProductWrite"
       responses:
-        '201':
+        "201":
           description: Product created.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Product'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '409':
-          $ref: '#/components/responses/ConflictError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                $ref: "#/components/schemas/Product"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/products/{id}:
     get:
       tags:
         - Catalog
       summary: Get product
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       responses:
-        '200':
+        "200":
           description: Product.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Product'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                $ref: "#/components/schemas/Product"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
     patch:
       tags:
         - Catalog
       summary: Update product
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ProductPatch'
+              $ref: "#/components/schemas/ProductPatch"
       responses:
-        '200':
+        "200":
           description: Product updated.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Product'
-        '204':
+                $ref: "#/components/schemas/Product"
+        "204":
           description: No fields changed.
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/customers:
     get:
       tags:
         - Customers
       summary: List customers
       parameters:
-        - $ref: '#/components/parameters/SearchQuery'
-        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: "#/components/parameters/SearchQuery"
+        - $ref: "#/components/parameters/LimitQuery"
       responses:
-        '200':
+        "200":
           description: Customers ordered by name.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Customer'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                  $ref: "#/components/schemas/Customer"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
     post:
       tags:
         - Customers
@@ -493,78 +763,78 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CustomerWrite'
+              $ref: "#/components/schemas/CustomerWrite"
       responses:
-        '201':
+        "201":
           description: Customer created.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Customer'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '409':
-          $ref: '#/components/responses/ConflictError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                $ref: "#/components/schemas/Customer"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/customers/{id}:
     get:
       tags:
         - Customers
       summary: Get customer
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       responses:
-        '200':
+        "200":
           description: Customer.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CustomerDetails'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                $ref: "#/components/schemas/CustomerDetails"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
     patch:
       tags:
         - Customers
       summary: Update customer
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CustomerPatch'
+              $ref: "#/components/schemas/CustomerPatch"
       responses:
-        '200':
+        "200":
           description: Customer updated.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Customer'
-        '204':
+                $ref: "#/components/schemas/Customer"
+        "204":
           description: No fields changed.
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/customers/{id}/payments:
     get:
       tags:
         - Customers
       summary: List customer payments
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
         - in: query
           name: start_date
           required: false
@@ -601,45 +871,45 @@ paths:
               - asc
               - desc
       responses:
-        '200':
+        "200":
           description: Payment history ordered by date with summary totals.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CustomerPaymentsResponse'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
+                $ref: "#/components/schemas/CustomerPaymentsResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
     post:
       tags:
         - Customers
       summary: Register customer payment
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CustomerPaymentWrite'
+              $ref: "#/components/schemas/CustomerPaymentWrite"
       responses:
-        '201':
+        "201":
           description: Payment recorded with updated balances.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CustomerPaymentCreatedResponse'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
+                $ref: "#/components/schemas/CustomerPaymentCreatedResponse"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
   /api/v1/customers/{id}/payments/report:
     get:
       tags:
@@ -651,7 +921,7 @@ paths:
         filters if the selection exceeds the report limit. Counts, unique identities and decimal sums are checked before
         returning.
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
         - in: query
           name: start_date
           required: false
@@ -684,34 +954,36 @@ paths:
               - asc
               - desc
       responses:
-        '200':
+        "200":
           description: Payment history, totals and company header ready for printing.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CustomerPaymentHistoryReport'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '413':
-          description: Selection exceeds 5000 payments; message payment_report_limit_exceeded, details.limit and details.count. No
+                $ref: "#/components/schemas/CustomerPaymentHistoryReport"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "413":
+          description:
+            Selection exceeds 5000 payments; message payment_report_limit_exceeded, details.limit and details.count. No
             partial report is returned.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '422':
-          description: Counts, identities or exact decimal sums cannot be reconciled; message payment_report_inconsistent. No
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description:
+            Counts, identities or exact decimal sums cannot be reconciled; message payment_report_inconsistent. No
             partial report is returned.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/customers/{customerId}/payments/{paymentId}/receipt:
     get:
       tags:
@@ -731,57 +1003,57 @@ paths:
             type: string
             format: uuid
       responses:
-        '200':
+        "200":
           description: Receipt payload including balances.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CustomerPaymentReceipt'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
+                $ref: "#/components/schemas/CustomerPaymentReceipt"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
   /api/v1/customers/{id}/sales:
     get:
       tags:
         - Customers
       summary: List customer sales history
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       responses:
-        '200':
+        "200":
           description: Recent sales for the customer.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/CustomerSale'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
+                  $ref: "#/components/schemas/CustomerSale"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
   /api/v1/sellers:
     get:
       tags:
         - Catalog
       summary: List sellers
       parameters:
-        - $ref: '#/components/parameters/SearchQuery'
-        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: "#/components/parameters/SearchQuery"
+        - $ref: "#/components/parameters/LimitQuery"
       responses:
-        '200':
+        "200":
           description: Sellers ordered by name.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Seller'
+                  $ref: "#/components/schemas/Seller"
     post:
       tags:
         - Catalog
@@ -791,88 +1063,88 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SellerWrite'
+              $ref: "#/components/schemas/SellerWrite"
       responses:
-        '201':
+        "201":
           description: Seller created.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Seller'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '409':
-          $ref: '#/components/responses/ConflictError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                $ref: "#/components/schemas/Seller"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/sellers/{id}:
     get:
       tags:
         - Catalog
       summary: Get seller
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       responses:
-        '200':
+        "200":
           description: Seller.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Seller'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                $ref: "#/components/schemas/Seller"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
     patch:
       tags:
         - Catalog
       summary: Update seller
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SellerPatch'
+              $ref: "#/components/schemas/SellerPatch"
       responses:
-        '200':
+        "200":
           description: Seller updated.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Seller'
-        '204':
+                $ref: "#/components/schemas/Seller"
+        "204":
           description: No fields changed.
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/payment-terms:
     get:
       tags:
         - Catalog
       summary: List payment terms
       parameters:
-        - $ref: '#/components/parameters/SearchQuery'
-        - $ref: '#/components/parameters/LimitQuery'
+        - $ref: "#/components/parameters/SearchQuery"
+        - $ref: "#/components/parameters/LimitQuery"
       responses:
-        '200':
+        "200":
           description: Payment terms ordered by name.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/PaymentTerm'
+                  $ref: "#/components/schemas/PaymentTerm"
     post:
       tags:
         - Catalog
@@ -882,74 +1154,74 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PaymentTermWrite'
+              $ref: "#/components/schemas/PaymentTermWrite"
       responses:
-        '201':
+        "201":
           description: Payment term created.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaymentTerm'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '409':
-          $ref: '#/components/responses/ConflictError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                $ref: "#/components/schemas/PaymentTerm"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/payment-terms/{id}:
     get:
       tags:
         - Catalog
       summary: Get payment term
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       responses:
-        '200':
+        "200":
           description: Payment term.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaymentTerm'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                $ref: "#/components/schemas/PaymentTerm"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
     patch:
       tags:
         - Catalog
       summary: Update payment term
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PaymentTermPatch'
+              $ref: "#/components/schemas/PaymentTermPatch"
       responses:
-        '200':
+        "200":
           description: Payment term updated.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PaymentTerm'
-        '204':
+                $ref: "#/components/schemas/PaymentTerm"
+        "204":
           description: No fields changed.
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/payments:
     get:
-      tags: [ Payments ]
+      tags: [Payments]
       summary: List customer payment history, including cancelled and legacy receipts
       description: Requires catalog:read. Checkout amounts recorded directly on sales are not separate customer receipts.
       parameters:
@@ -975,38 +1247,38 @@ paths:
           name: page_size
           schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
       responses:
-        '200':
+        "200":
           description: Ordered by payment date, creation time and ID descending.
           content:
             application/json:
               schema:
                 type: object
-                required: [ payments, pagination ]
+                required: [payments, pagination]
                 properties:
                   payments:
                     type: array
                     items:
-                      $ref: '#/components/schemas/PaymentHistoryEntry'
+                      $ref: "#/components/schemas/PaymentHistoryEntry"
                   pagination:
                     type: object
-                    required: [ page, page_size, total_items, total_pages ]
+                    required: [page, page_size, total_items, total_pages]
                     properties:
                       page: { type: integer }
                       page_size: { type: integer }
                       total_items: { type: integer }
                       total_pages: { type: integer }
-        '400':
-          $ref: '#/components/responses/BadRequestError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+        "400":
+          $ref: "#/components/responses/BadRequestError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/payments/receivers:
     get:
-      tags: [ Payments ]
+      tags: [Payments]
       summary: List IDs and names of receiving users represented in payment history
       responses:
-        '200':
+        "200":
           description: Requires catalog:read.
           content:
             application/json:
@@ -1014,17 +1286,17 @@ paths:
                 type: array
                 items:
                   type: object
-                  required: [ id, full_name ]
+                  required: [id, full_name]
                   properties:
                     id: { type: string, format: uuid }
                     full_name: { type: string }
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/payments/{id}:
     get:
-      tags: [ Payments ]
+      tags: [Payments]
       summary: View a payment using the existing customer receipt contract
       parameters:
         - in: path
@@ -1032,26 +1304,28 @@ paths:
           required: true
           schema: { type: string, format: uuid }
       responses:
-        '200':
-          description: Requires catalog:read. Cancelled receipts retain their amount and cancellation metadata; their new balance
+        "200":
+          description:
+            Requires catalog:read. Cancelled receipts retain their amount and cancellation metadata; their new balance
             equals their previous balance.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CustomerPaymentReceipt'
-        '400':
-          $ref: '#/components/responses/BadRequestError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
+                $ref: "#/components/schemas/CustomerPaymentReceipt"
+        "400":
+          $ref: "#/components/responses/BadRequestError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
   /api/v1/payments/{id}/cancel:
     post:
-      tags: [ Payments ]
+      tags: [Payments]
       summary: Cancel a customer payment and restore its outstanding amount
-      description: Requires catalog:read and the admin or manager role. Wildcard permissions do not bypass this role
+      description:
+        Requires catalog:read and the admin or manager role. Wildcard permissions do not bypass this role
         restriction. The original receipt is preserved; cancellation metadata and audit are committed atomically. No
         bank refund is initiated.
       parameters:
@@ -1068,26 +1342,26 @@ paths:
               properties:
                 reason: { type: string, maxLength: 500 }
       responses:
-        '200':
+        "200":
           description: Payment cancelled exactly once.
           content:
             application/json:
               schema:
                 type: object
-                required: [ payment, current_balance ]
+                required: [payment, current_balance]
                 properties:
                   payment:
-                    $ref: '#/components/schemas/PaymentHistoryEntry'
+                    $ref: "#/components/schemas/PaymentHistoryEntry"
                   current_balance: { type: number }
-        '400':
-          $ref: '#/components/responses/BadRequestError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '409':
+        "400":
+          $ref: "#/components/responses/BadRequestError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "409":
           description: Payment already cancelled; no second balance change or audit is recorded.
   /api/v1/sales:
     get:
@@ -1133,14 +1407,14 @@ paths:
             minimum: 1
             maximum: 200
       responses:
-        '200':
+        "200":
           description: Most recent sales first.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Sale'
+                  $ref: "#/components/schemas/Sale"
     post:
       tags:
         - Sales
@@ -1155,49 +1429,49 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SaleCreate'
+              $ref: "#/components/schemas/SaleCreate"
       responses:
-        '201':
+        "201":
           description: Sale created.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Sale'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '409':
-          $ref: '#/components/responses/ConflictError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                $ref: "#/components/schemas/Sale"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/sales/{id}:
     get:
       tags:
         - Sales
       summary: Get sale
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       responses:
-        '200':
+        "200":
           description: Sale with items.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Sale'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                $ref: "#/components/schemas/Sale"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/sales/{id}/receipt:
     get:
       tags:
         - Sales
       summary: Get sale receipt
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
         - name: locale
           in: query
           description: Receipt language.
@@ -1207,50 +1481,50 @@ paths:
               - pt-BR
               - en
       responses:
-        '200':
+        "200":
           description: Sale receipt payload and plain-text matrix layout.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SaleReceipt'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                $ref: "#/components/schemas/SaleReceipt"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/sales/{id}/receipt/print:
     post:
       tags:
         - Sales
       summary: Print sale receipt
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       requestBody:
         required: false
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SaleReceiptPrintRequest'
+              $ref: "#/components/schemas/SaleReceiptPrintRequest"
       responses:
-        '202':
+        "202":
           description: Durable print request accepted; inspect job status.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SaleReceiptPrintResult'
-        '200':
+                $ref: "#/components/schemas/SaleReceiptPrintResult"
+        "200":
           description: Receipt sent to the configured printer agent.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SaleReceiptPrintResult'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
+                $ref: "#/components/schemas/SaleReceiptPrintResult"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
   /api/v1/sales/{id}/cancel:
     post:
       tags:
@@ -1262,48 +1536,48 @@ paths:
         cancellation would create a customer credit balance because prior customer payments are already registered, the
         API blocks the operation.
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       requestBody:
         required: false
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SaleCancel'
+              $ref: "#/components/schemas/SaleCancel"
       responses:
-        '200':
+        "200":
           description: Sale cancelled.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Sale'
-        '409':
-          $ref: '#/components/responses/ConflictError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                $ref: "#/components/schemas/Sale"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/users:
     get:
       tags:
         - Administration
       summary: List users
       parameters:
-        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: "#/components/parameters/SearchQuery"
       responses:
-        '200':
+        "200":
           description: Application users ordered by full name.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/User'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                  $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
     post:
       tags:
         - Administration
@@ -1313,104 +1587,104 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UserCreate'
+              $ref: "#/components/schemas/UserCreate"
       responses:
-        '201':
+        "201":
           description: Created user.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '409':
-          $ref: '#/components/responses/ConflictError'
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "409":
+          $ref: "#/components/responses/ConflictError"
   /api/v1/users/{id}:
     get:
       tags:
         - Administration
       summary: Get user
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       responses:
-        '200':
+        "200":
           description: User details.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
     patch:
       tags:
         - Administration
       summary: Update user
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UserUpdate'
+              $ref: "#/components/schemas/UserUpdate"
       responses:
-        '200':
+        "200":
           description: Updated user.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '409':
-          $ref: '#/components/responses/ConflictError'
+                $ref: "#/components/schemas/User"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "409":
+          $ref: "#/components/responses/ConflictError"
     delete:
       tags:
         - Administration
       summary: Disable user
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       responses:
-        '204':
+        "204":
           description: User disabled.
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
   /api/v1/roles:
     get:
       tags:
         - Administration
       summary: List roles
       responses:
-        '200':
+        "200":
           description: Available roles ordered by name.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Role'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                  $ref: "#/components/schemas/Role"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
     post:
       tags:
         - Administration
@@ -1420,78 +1694,168 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RoleCreate'
+              $ref: "#/components/schemas/RoleCreate"
       responses:
-        '201':
+        "201":
           description: Created role.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Role'
-        '400':
-          $ref: '#/components/responses/ValidationError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '409':
-          $ref: '#/components/responses/ConflictError'
+                $ref: "#/components/schemas/Role"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "409":
+          $ref: "#/components/responses/ConflictError"
+  /api/v1/roles/{id}/users:
+    get:
+      tags: [Administration]
+      summary: List individual user-to-seller links in a permission role
+      description: Requires users:read or users:write. Role membership only groups the view; links belong to each user.
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+        - {
+            in: query,
+            name: search,
+            schema: { type: string },
+            description: User name or email.,
+          }
+        - {
+            in: query,
+            name: page,
+            schema: { type: integer, minimum: 1, default: 1 },
+          }
+        - {
+            in: query,
+            name: limit,
+            schema: { type: integer, minimum: 1, maximum: 100, default: 25 },
+          }
+      responses:
+        "200":
+          description: Paged members, current links and automatic-assignment status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoleUserSellersPage"
+        "400":
+          $ref: "#/components/responses/ValidationError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+  /api/v1/roles/{id}/users/{userId}/seller:
+    patch:
+      tags: [Administration]
+      summary: Set or clear an individual user's seller link
+      description:
+        Requires users:write. Verifies current role membership and audits the change in the same transaction.
+        A seller can be linked to one account; automatic identities are reserved to their owner. Existing sales are preserved.
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+        - {
+            in: path,
+            name: userId,
+            required: true,
+            schema: { type: string, format: uuid },
+          }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [sellerId]
+              properties:
+                sellerId:
+                  type: string
+                  format: uuid
+                  nullable: true
+                  description: Null clears the link; the next automatic sale reuses or creates the account's own seller.
+      responses:
+        "200":
+          description: Saved sellerId (UUID or null).
+        "400":
+          description: Invalid body/UUID or seller_not_found.
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "409":
+          description: seller_link_in_use or user_role_changed. Refresh the membership or choose another seller.
   /api/v1/roles/{id}:
     get:
       tags:
         - Administration
       summary: Get role
       parameters:
-        - $ref: '#/components/parameters/ResourceId'
+        - $ref: "#/components/parameters/ResourceId"
       responses:
-        '200':
+        "200":
           description: Role details.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Role'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
+                $ref: "#/components/schemas/Role"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
   /api/v1/admin/backups:
     get:
       tags:
         - Administration
       summary: List backups
       responses:
-        '200':
+        "200":
           description: Available system backups.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/SystemBackup'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                  $ref: "#/components/schemas/SystemBackup"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/admin/backups/preflight:
     get:
-      tags: [ Administration ]
+      tags: [Administration]
       summary: Check backup tooling and storage readiness
-      description: Checks PostgreSQL 16 clients, writable storage, atomic publication support, free-space reserve and
+      description:
+        Checks PostgreSQL 16 clients, writable storage, atomic publication support, free-space reserve and
         configured replica. Requires system:backup:read. A configured replica does not prove that its physical storage
         is off-host.
       responses:
-        '200':
+        "200":
           description: Backup tooling and configured storage are ready.
           content:
             application/json:
               schema:
                 type: object
-                required: [ ready, serverMajor, pgDumpVersion, psqlVersion, primary, replica, retentionCount ]
+                required:
+                  [
+                    ready,
+                    serverMajor,
+                    pgDumpVersion,
+                    psqlVersion,
+                    primary,
+                    replica,
+                    retentionCount,
+                  ]
                 properties:
-                  ready: { type: boolean, enum: [ true ] }
-                  serverMajor: { type: integer, enum: [ 16 ] }
+                  ready: { type: boolean, enum: [true] }
+                  serverMajor: { type: integer, enum: [16] }
                   pgDumpVersion: { type: string }
                   psqlVersion: { type: string }
                   primary:
@@ -1506,19 +1870,19 @@ paths:
                       required: { type: boolean }
                       storage: { type: object, nullable: true }
                   retentionCount: { type: integer }
-        '503':
+        "503":
           description: Tooling, PostgreSQL compatibility or storage check failed. No readiness guarantee is issued.
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  ready: { type: boolean, enum: [ false ] }
+                  ready: { type: boolean, enum: [false] }
                   message: { type: string }
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/admin/backup:
     post:
       tags:
@@ -1526,18 +1890,18 @@ paths:
       summary: Create backup
       description: Triggers a full database backup and registers the archive.
       responses:
-        '409':
-          $ref: '#/components/responses/ConflictError'
-        '201':
+        "409":
+          $ref: "#/components/responses/ConflictError"
+        "201":
           description: Backup created.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SystemBackup'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                $ref: "#/components/schemas/SystemBackup"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/admin/backup/upload:
     post:
       tags:
@@ -1557,84 +1921,85 @@ paths:
               required:
                 - file
       responses:
-        '409':
-          $ref: '#/components/responses/ConflictError'
-        '201':
+        "409":
+          $ref: "#/components/responses/ConflictError"
+        "201":
           description: Backup uploaded.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SystemBackup'
-        '400':
-          $ref: '#/components/responses/BadRequestError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                $ref: "#/components/schemas/SystemBackup"
+        "400":
+          $ref: "#/components/responses/BadRequestError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/admin/backup/{filename}:
     delete:
       tags:
         - Administration
       summary: Delete backup
       parameters:
-        - $ref: '#/components/parameters/BackupFilename'
+        - $ref: "#/components/parameters/BackupFilename"
       responses:
-        '409':
-          $ref: '#/components/responses/ConflictError'
-        '204':
+        "409":
+          $ref: "#/components/responses/ConflictError"
+        "204":
           description: Backup removed.
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
   /api/v1/admin/backup/{filename}/download:
     get:
       tags:
         - Administration
       summary: Download backup archive
       parameters:
-        - $ref: '#/components/parameters/BackupFilename'
+        - $ref: "#/components/parameters/BackupFilename"
       responses:
-        '200':
+        "200":
           description: Backup archive.
           content:
             application/zip:
               schema:
                 type: string
                 format: binary
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
   /api/v1/admin/restore/options:
     get:
-      tags: [ Administration ]
+      tags: [Administration]
       summary: Read database restoration availability
       description: Requires system:backup:restore. Uses the same server flag checked by POST restore.
       responses:
-        '200':
+        "200":
           description: Availability for the running API configuration.
           content:
             application/json:
               schema:
                 type: object
-                required: [ restoreEnabled ]
+                required: [restoreEnabled]
                 properties:
                   restoreEnabled: { type: boolean }
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/admin/restore:
     post:
       tags:
         - Administration
       summary: Restore backup
-      description: Requires system:backup:restore, current password, explicit confirmation and ENABLE_DATABASE_RESTORE.
+      description:
+        Requires system:backup:restore, current password, explicit confirmation and ENABLE_DATABASE_RESTORE.
         Only unchanged copies of backups generated by this installation are accepted. Active requests/imports
         prevent cutover (409); new requests are refused during recovery (503). Validates in a temporary database,
         preserves a pinned snapshot and atomically restores public, applies migrations and revokes sessions.
@@ -1644,51 +2009,53 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/RestoreRequest'
+              $ref: "#/components/schemas/RestoreRequest"
       responses:
-        '200':
-          description: Completed restoration or automatic rollback. Check restored, rollbackApplied and status;
+        "200":
+          description:
+            Completed restoration or automatic rollback. Check restored, rollbackApplied and status;
             HTTP 200 alone does not mean that the requested backup was restored.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RestoreResponse'
-        '400':
-          $ref: '#/components/responses/BadRequestError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
-        '409':
+                $ref: "#/components/schemas/RestoreResponse"
+        "400":
+          $ref: "#/components/responses/BadRequestError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
+        "409":
           description: Active database operations or another backup operation; wait and retry.
-        '422':
+        "422":
           description: Unverified backup source or checksum mismatch; no SQL is executed.
-        '503':
+        "503":
           description: Restoration in progress or recovery required; application remains in maintenance.
-        '500':
-          $ref: '#/components/responses/InternalError'
+        "500":
+          $ref: "#/components/responses/InternalError"
   /api/v1/admin/import/legacy/options:
     get:
-      tags: [ Administration ]
+      tags: [Administration]
       summary: Read import mode availability
-      description: Requires system:import:legacy. The overwrite checkbox requests a mode; it does not enable the server gate.
+      description:
+        Requires system:import:legacy. The overwrite checkbox requests a mode; it does not enable the server gate.
         The returned flag is the same configuration checked when accepting and executing overwrite jobs.
       responses:
-        '200':
+        "200":
           description: Availability for the running API configuration.
           content:
             application/json:
               schema:
                 type: object
-                required: [ overwriteEnabled ]
+                required: [overwriteEnabled]
                 properties:
                   overwriteEnabled: { type: boolean }
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/admin/import/legacy:
     post:
       tags:
@@ -1705,63 +2072,86 @@ paths:
         content:
           multipart/form-data:
             schema:
-              $ref: '#/components/schemas/LegacyImportRequest'
+              $ref: "#/components/schemas/LegacyImportRequest"
       responses:
-        '202':
+        "202":
           description: Import accepted.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LegacyImportResponse'
-        '400':
-          $ref: '#/components/responses/BadRequestError'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
+                $ref: "#/components/schemas/LegacyImportResponse"
+        "400":
+          $ref: "#/components/responses/BadRequestError"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
   /api/v1/admin/import/legacy/{sessionId}/status:
     get:
       tags:
         - Administration
       summary: Get legacy import status
       parameters:
-        - $ref: '#/components/parameters/ImportSessionId'
+        - $ref: "#/components/parameters/ImportSessionId"
+        - {
+            in: query,
+            name: compact,
+            description: Omit bulky logs and warning arrays; include logCount and mismatchCount.,
+            schema: { type: boolean, default: false },
+          }
       responses:
-        '200':
+        "200":
           description: Current status for the legacy import.
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LegacyImportStatus'
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
+                $ref: "#/components/schemas/LegacyImportStatus"
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
   /api/v1/admin/import/legacy/{sessionId}/report:
     get:
       tags:
         - Administration
       summary: Download legacy import reconciliation report
       parameters:
-        - $ref: '#/components/parameters/ImportSessionId'
+        - $ref: "#/components/parameters/ImportSessionId"
       responses:
-        '200':
+        "200":
           description: CSV reconciliation report.
           content:
             text/csv:
               schema:
                 type: string
                 format: binary
-        '401':
-          $ref: '#/components/responses/UnauthorizedError'
-        '403':
-          $ref: '#/components/responses/ForbiddenError'
-        '404':
-          $ref: '#/components/responses/NotFoundError'
+        "401":
+          $ref: "#/components/responses/UnauthorizedError"
+        "403":
+          $ref: "#/components/responses/ForbiddenError"
+        "404":
+          $ref: "#/components/responses/NotFoundError"
 components:
   parameters:
+    ListPage:
+      in: query
+      name: page
+      schema: { type: integer, minimum: 1, maximum: 2147483647, default: 1 }
+    ListPageSize:
+      in: query
+      name: pageSize
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+    ListSortBy:
+      in: query
+      name: sortBy
+      description: Resource-specific whitelisted field; see docs/pagination.md.
+      schema: { type: string, maxLength: 64 }
+    ListSortOrder:
+      in: query
+      name: sortOrder
+      schema: { type: string, enum: [asc, desc] }
     ResourceId:
       name: id
       in: path
@@ -1803,13 +2193,13 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ValidationError'
+            $ref: "#/components/schemas/ValidationError"
     BadRequestError:
       description: Request is syntactically valid but semantically invalid.
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: "#/components/schemas/ErrorResponse"
           examples:
             default:
               value:
@@ -1819,7 +2209,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: "#/components/schemas/ErrorResponse"
           examples:
             default:
               value:
@@ -1829,7 +2219,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: "#/components/schemas/ErrorResponse"
           examples:
             default:
               value:
@@ -1839,7 +2229,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: "#/components/schemas/ErrorResponse"
           examples:
             default:
               value:
@@ -1849,7 +2239,7 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: "#/components/schemas/ErrorResponse"
           examples:
             default:
               value:
@@ -1859,12 +2249,32 @@ components:
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ErrorResponse'
+            $ref: "#/components/schemas/ErrorResponse"
           examples:
             default:
               value:
                 message: internal_error
   schemas:
+    ListPageResponse:
+      type: object
+      required: [items, pagination]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items: { type: object, additionalProperties: true }
+        pagination:
+          type: object
+          required: [page, pageSize, totalItems, totalPages]
+          properties:
+            page: { type: integer, minimum: 1 }
+            pageSize: { type: integer, minimum: 1, maximum: 100 }
+            totalItems: { type: integer, minimum: 0 }
+            totalPages: { type: integer, minimum: 1 }
+        summary:
+          type: object
+          description: Customer payments only; complete financial and filtered totals, independent of page.
+          additionalProperties: true
     ProductGroup:
       type: object
       properties:
@@ -1891,7 +2301,7 @@ components:
         - name
     ProductGroupPatch:
       allOf:
-        - $ref: '#/components/schemas/ProductGroupWrite'
+        - $ref: "#/components/schemas/ProductGroupWrite"
     Product:
       type: object
       properties:
@@ -1959,7 +2369,7 @@ components:
         - name
     ProductPatch:
       allOf:
-        - $ref: '#/components/schemas/ProductWrite'
+        - $ref: "#/components/schemas/ProductWrite"
     Customer:
       type: object
       properties:
@@ -2049,15 +2459,16 @@ components:
         - name
     CustomerPatch:
       allOf:
-        - $ref: '#/components/schemas/CustomerWrite'
+        - $ref: "#/components/schemas/CustomerWrite"
     LegacyBalanceReconciliation:
       type: object
-      description: Auditable reconciliation of historical transactions to CLIENTES.DBF.DEBITO. The adjustment is not a
+      description:
+        Auditable reconciliation of historical transactions to CLIENTES.DBF.DEBITO. The adjustment is not a
         customer payment and preserves subsequent operational transactions.
       properties:
         source_field:
           type: string
-          enum: [ CLIENTES.DBF.DEBITO ]
+          enum: [CLIENTES.DBF.DEBITO]
         source_balance:
           type: number
         reconstructed_balance:
@@ -2079,18 +2490,18 @@ components:
           adjustment,
           source_sha256,
           import_session_id,
-          reconciled_at
+          reconciled_at,
         ]
     CustomerDetails:
       allOf:
-        - $ref: '#/components/schemas/Customer'
+        - $ref: "#/components/schemas/Customer"
         - type: object
           properties:
             totals:
               type: object
               properties:
                 legacy_balance:
-                  $ref: '#/components/schemas/LegacyBalanceReconciliation'
+                  $ref: "#/components/schemas/LegacyBalanceReconciliation"
                 total_charges:
                   type: number
                   format: float
@@ -2174,9 +2585,9 @@ components:
         - source
     PaymentHistoryEntry:
       allOf:
-        - $ref: '#/components/schemas/CustomerPayment'
+        - $ref: "#/components/schemas/CustomerPayment"
         - type: object
-          required: [ customer_id, customer_name ]
+          required: [customer_id, customer_name]
           properties:
             customer_id: { type: string, format: uuid }
             customer_name: { type: string }
@@ -2212,7 +2623,7 @@ components:
       type: object
       properties:
         legacy_balance:
-          $ref: '#/components/schemas/LegacyBalanceReconciliation'
+          $ref: "#/components/schemas/LegacyBalanceReconciliation"
         total_debt:
           type: number
           format: float
@@ -2267,9 +2678,9 @@ components:
         payments:
           type: array
           items:
-            $ref: '#/components/schemas/CustomerPayment'
+            $ref: "#/components/schemas/CustomerPayment"
         summary:
-          $ref: '#/components/schemas/CustomerPaymentsSummary'
+          $ref: "#/components/schemas/CustomerPaymentsSummary"
       required:
         - payments
         - summary
@@ -2277,12 +2688,12 @@ components:
       type: object
       properties:
         payment:
-          $ref: '#/components/schemas/CustomerPayment'
+          $ref: "#/components/schemas/CustomerPayment"
         summary:
           type: object
           properties:
             legacy_balance:
-              $ref: '#/components/schemas/LegacyBalanceReconciliation'
+              $ref: "#/components/schemas/LegacyBalanceReconciliation"
             total_debt:
               type: number
               format: float
@@ -2355,12 +2766,12 @@ components:
       type: object
       properties:
         company:
-          $ref: '#/components/schemas/CompanyInfo'
+          $ref: "#/components/schemas/CompanyInfo"
         customer:
-          $ref: '#/components/schemas/CustomerSummary'
+          $ref: "#/components/schemas/CustomerSummary"
         payment:
           allOf:
-            - $ref: '#/components/schemas/CustomerPayment'
+            - $ref: "#/components/schemas/CustomerPayment"
             - type: object
               properties:
                 code:
@@ -2369,7 +2780,7 @@ components:
           type: object
           properties:
             legacy_balance:
-              $ref: '#/components/schemas/LegacyBalanceReconciliation'
+              $ref: "#/components/schemas/LegacyBalanceReconciliation"
             historical_balance_unavailable:
               type: boolean
               description: True for reconciled legacy receipts whose historical before/after balances cannot be reconstructed safely.
@@ -2412,30 +2823,30 @@ components:
           type: string
           format: date-time
         company:
-          $ref: '#/components/schemas/CompanyInfo'
+          $ref: "#/components/schemas/CompanyInfo"
         customer:
-          $ref: '#/components/schemas/CustomerSummary'
+          $ref: "#/components/schemas/CustomerSummary"
         payments:
           type: array
           maxItems: 5000
           items:
-            $ref: '#/components/schemas/CustomerPayment'
+            $ref: "#/components/schemas/CustomerPayment"
         coverage:
           type: object
           properties:
             complete:
               type: boolean
-              enum: [ true ]
+              enum: [true]
             row_count:
               type: integer
               minimum: 0
               maximum: 5000
             row_limit:
               type: integer
-              enum: [ 5000 ]
-          required: [ complete, row_count, row_limit ]
+              enum: [5000]
+          required: [complete, row_count, row_limit]
         summary:
-          $ref: '#/components/schemas/CustomerPaymentsSummary'
+          $ref: "#/components/schemas/CustomerPaymentsSummary"
       required:
         - coverage
         - generated_at
@@ -2487,6 +2898,7 @@ components:
           type: string
           format: uuid
           nullable: true
+          description: Seller associated with the sale. Older or imported sales can have an unknown seller.
         seller_name:
           type: string
           nullable: true
@@ -2507,7 +2919,7 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/CustomerSaleItem'
+            $ref: "#/components/schemas/CustomerSaleItem"
       required:
         - id
         - status
@@ -2538,7 +2950,7 @@ components:
         - name
     SellerPatch:
       allOf:
-        - $ref: '#/components/schemas/SellerWrite'
+        - $ref: "#/components/schemas/SellerWrite"
     PaymentTerm:
       type: object
       properties:
@@ -2565,7 +2977,7 @@ components:
         - name
     PaymentTermPatch:
       allOf:
-        - $ref: '#/components/schemas/PaymentTermWrite'
+        - $ref: "#/components/schemas/PaymentTermWrite"
     SaleItem:
       type: object
       properties:
@@ -2651,6 +3063,11 @@ components:
           type: number
           format: float
           nullable: true
+        customer_balance_after_sale:
+          type: number
+          nullable: true
+          readOnly: true
+          description: Immutable signed account balance immediately after checkout. Null for anonymous or historical sales without a snapshot; negative values are account credit. The receipt displays outstanding debt as max(0, balance).
         status:
           type: string
           enum:
@@ -2673,7 +3090,7 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/SaleItem'
+            $ref: "#/components/schemas/SaleItem"
       required:
         - id
         - emission_date
@@ -2689,11 +3106,10 @@ components:
           type: string
           format: uuid
         quantity:
-          type: number
-          format: float
-          minimum: 0.001
-          maximum: 99999999999.999
-          multipleOf: 0.001
+          type: integer
+          minimum: 1
+          maximum: 99999999999
+          description: Positive whole units for new sales; fractional quantities are rejected.
         unit_price:
           type: number
           format: float
@@ -2722,10 +3138,16 @@ components:
         and numeric(14,scale) overflow receive HTTP 400. payment_method and amount_paid are required and cannot be null.
         Cash/card/bank/other require full settlement. Credit requires customer_id and zero payment; credit_with_entry
         requires customer_id and a positive payment no greater than the total.
+        emission_date is a real calendar day in YYYY-MM-DD (years 0001-9999), without time or timezone.
+        Empty/null dates, impossible dates, timestamps and future dates receive HTTP 400 before any writes.
+        For compatibility, omitting emission_date uses CURRENT_DATE in the database/store timezone.
+        paid_at retains the actual transaction timestamp and does not replace the selected sale date.
       properties:
         emission_date:
           type: string
           format: date
+          pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Sale calendar day, on or before the store's current day. Defaults to the database current day when omitted.
         paid_at:
           type: string
           format: date-time
@@ -2736,6 +3158,9 @@ components:
           type: string
           format: uuid
           nullable: true
+          description:
+            Optional manual seller; omitted/null uses the authenticated user's individual seller link.
+            If absent, a personal seller is created and linked atomically with the sale. Never inferred by matching names.
         customer_id:
           type: string
           format: uuid
@@ -2802,7 +3227,7 @@ components:
           type: array
           minItems: 1
           items:
-            $ref: '#/components/schemas/SaleItemWrite'
+            $ref: "#/components/schemas/SaleItemWrite"
       required:
         - items
         - payment_method
@@ -2880,6 +3305,11 @@ components:
           type: number
           format: float
           nullable: true
+        customer_balance_after_sale:
+          type: number
+          nullable: true
+          readOnly: true
+          description: Immutable signed account balance immediately after checkout. Null for anonymous or historical sales without a snapshot; negative values are account credit. The receipt displays outstanding debt as max(0, balance).
         payment_method:
           type: string
           enum:
@@ -2913,21 +3343,21 @@ components:
       type: object
       properties:
         company:
-          $ref: '#/components/schemas/CompanyInfo'
+          $ref: "#/components/schemas/CompanyInfo"
         sale:
-          $ref: '#/components/schemas/SaleReceiptMeta'
+          $ref: "#/components/schemas/SaleReceiptMeta"
         customer:
           allOf:
-            - $ref: '#/components/schemas/SaleReceiptCustomer'
+            - $ref: "#/components/schemas/SaleReceiptCustomer"
           nullable: true
         seller:
           allOf:
-            - $ref: '#/components/schemas/SaleReceiptSeller'
+            - $ref: "#/components/schemas/SaleReceiptSeller"
           nullable: true
         items:
           type: array
           items:
-            $ref: '#/components/schemas/SaleItem'
+            $ref: "#/components/schemas/SaleItem"
         generated_at:
           type: string
           format: date-time
@@ -2941,26 +3371,32 @@ components:
         - plain_text
     SaleReceiptPrintRequest:
       type: object
-      description: Queue mode requires request_id. printer_id defaults to principal for existing clients; changing destination
+      description:
+        Queue mode requires request_id. printer_id defaults to principal for existing clients; changing destination
         on the same request UUID is rejected. Retry the same UUID for the same logical request; use a new UUID only for
         an explicit additional copy.
       properties:
         request_id: { type: string, format: uuid }
-        locale: { type: string, enum: [ pt-BR, en ] }
+        locale: { type: string, enum: [pt-BR, en] }
         copies: { type: integer, minimum: 1, maximum: 10 }
     SaleReceiptPrintResult:
       type: object
-      description: Queue mode returns job_id/status/requested_at and never asserts physical printing. Legacy direct mode
+      description:
+        Queue mode returns job_id/status/requested_at and never asserts physical printing. Legacy direct mode
         returns printed_at as its acknowledgement time.
       properties:
         receipt_code: { type: string }
         printer_model: { type: string }
         printed_at: { type: string, format: date-time }
         job_id: { type: string, format: uuid }
-        status: { type: string, enum: [ queued, claimed, spooling, submitted, failed, uncertain ] }
+        status:
+          {
+            type: string,
+            enum: [queued, claimed, spooling, submitted, failed, uncertain],
+          }
         requested_at: { type: string, format: date-time }
         copies: { type: integer }
-      required: [ receipt_code, printer_model, copies ]
+      required: [receipt_code, printer_model, copies]
     PrintJob:
       type: object
       description: Operator metadata only; content and claim_token are never included.
@@ -2969,7 +3405,11 @@ components:
         printer_name: { type: string }
         job_id: { type: string, format: uuid }
         sale_id: { type: string, format: uuid }
-        status: { type: string, enum: [ queued, claimed, spooling, submitted, failed, uncertain ] }
+        status:
+          {
+            type: string,
+            enum: [queued, claimed, spooling, submitted, failed, uncertain],
+          }
         copies: { type: integer }
         receipt_code: { type: string }
         requested_at: { type: string, format: date-time }
@@ -2986,6 +3426,31 @@ components:
       required:
         - email
         - password
+    RoleUserSellersPage:
+      type: object
+      required: [items, limit, offset, hasMore]
+      properties:
+        limit: { type: integer }
+        offset: { type: integer }
+        hasMore: { type: boolean }
+        items:
+          type: array
+          items:
+            type: object
+            required: [id, fullName, email, status, seller, automatic]
+            properties:
+              id: { type: string, format: uuid }
+              fullName: { type: string }
+              email: { type: string, format: email }
+              status: { type: string }
+              automatic: { type: boolean }
+              seller:
+                type: object
+                nullable: true
+                properties:
+                  id: { type: string, format: uuid }
+                  name: { type: string }
+                  legacy_code: { type: string, nullable: true }
     Role:
       type: object
       properties:
@@ -3092,7 +3557,7 @@ components:
           type: string
           format: date-time
         role:
-          $ref: '#/components/schemas/UserRoleSummary'
+          $ref: "#/components/schemas/UserRoleSummary"
           nullable: true
         permissions:
           type: array
@@ -3287,9 +3752,11 @@ components:
     LegacyImportStatus:
       type: object
       properties:
+        logCount: { type: integer, minimum: 0 }
+        mismatchCount: { type: integer, minimum: 0 }
         status:
           type: string
-          enum: [ queued, running, retrying, completed, failed ]
+          enum: [queued, running, retrying, completed, failed]
         stages:
           type: array
           description: Ordered worker stages. Progress counts completed checkpoints from this list, not rows or time remaining.
@@ -3324,7 +3791,8 @@ components:
         summary:
           type: object
           nullable: true
-          description: Processed counts grouped by master, sales, customerPayments and stockMovements, plus customerBalances
+          description:
+            Processed counts grouped by master, sales, customerPayments and stockMovements, plus customerBalances
             certification against CLIENTES.DBF.DEBITO (customers, verified, adjusted, changed, sourceTotal,
             adjustmentTotal and sourceSha256). Sales may include missing-product warnings; these do not change document
             totals. Master counts can include updates.
@@ -3338,11 +3806,11 @@ components:
         checkpoints:
           type: array
           items:
-            $ref: '#/components/schemas/LegacyImportCheckpoint'
+            $ref: "#/components/schemas/LegacyImportCheckpoint"
         logs:
           type: array
           items:
-            $ref: '#/components/schemas/LegacyImportLogEntry'
+            $ref: "#/components/schemas/LegacyImportLogEntry"
       required:
         - status
         - stages
@@ -3360,7 +3828,7 @@ components:
           type: string
         status:
           type: string
-          enum: [ pending, running, completed, failed ]
+          enum: [pending, running, completed, failed]
         startedAt:
           type: string
           format: date-time
@@ -3412,7 +3880,7 @@ components:
       type: object
       properties:
         user:
-          $ref: '#/components/schemas/AuthenticatedUser'
+          $ref: "#/components/schemas/AuthenticatedUser"
       required:
         - user
     ErrorResponse:

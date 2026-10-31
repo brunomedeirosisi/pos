@@ -12,20 +12,26 @@ import { prepareDatabase } from '../support/database.js';
 const token = 'synthetic_print_agent_token_for_disposable_tests_2026';
 const hash = createHash('sha256').update(token).digest('hex');
 const productId = randomUUID();
+const actorId = randomUUID();
 const sales: string[] = [];
 const app = express(); app.use(express.json());
 app.use('/agent', printAgentRouter);
-app.use((req, _res, next) => { req.user = { id: randomUUID(), email: 'print@example.test', fullName: 'Synthetic', role: 'test', permissions: ['sales:read','pos:checkout'], discountLimit: 0 }; next(); });
+app.use((req, _res, next) => { req.user = { id: actorId, email: 'print@example.test', fullName: 'Synthetic', role: 'test', permissions: ['sales:read','pos:checkout'], discountLimit: 0 }; next(); });
 app.use('/sales', salesRouter); app.use('/jobs', printJobsRouter); app.use(errorHandler);
 const agent = (route: string) => request(app).post('/agent' + route).set('x-print-agent-token', token);
 beforeAll(async () => {
   process.env.PRINT_MODE = 'queue'; process.env.PRINT_AGENT_TOKEN_SHA256 = hash; resetEnvForTests();
   await prepareDatabase();
+  await query("insert into app_user(id,email,password_hash,full_name) values($1,$2,'synthetic','Synthetic print user')", [actorId, `print-${actorId}@example.test`]);
   await query("insert into product(id,name,price_cash,price_base) values($1,'Synthetic Print',10,10)", [productId]);
 });
 afterAll(async () => {
+  const sellers = (await query('select distinct seller_id from sale where id=any($1::uuid[]) and seller_id is not null', [sales])).rows.map((row) => row.seller_id);
   await query('delete from sale where id=any($1::uuid[])', [sales]);
   await query('delete from product where id=$1', [productId]);
+  await query('delete from audit_log where user_id=$1', [actorId]);
+  await query('delete from app_user where id=$1', [actorId]);
+  await query('delete from seller where id=any($1::uuid[])', [sellers]);
   delete process.env.PRINT_MODE; delete process.env.PRINT_AGENT_TOKEN_SHA256; delete process.env.PRINT_QUEUE_MAX_PENDING; resetEnvForTests();
   await closeDatabase();
 });
