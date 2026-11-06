@@ -22,6 +22,7 @@ const STAGE_KEYS: Record<string, string> = {
   "migrate-sales": "legacyImport.stages.sales",
   "migrate-customer-payments": "legacyImport.stages.payments",
   "migrate-stock": "legacyImport.stages.stock",
+  "reconcile-product-stock": "legacyImport.stages.productStock",
   "reconcile-customer-balances": "legacyImport.stages.balances",
   "reconciliation-report": "legacyImport.stages.reconciliation",
 };
@@ -530,6 +531,11 @@ export function LegacyImportPage(): JSX.Element {
                 {t("legacyImport.balancesVerified", {
                   count: summary.customerBalances.verified,
                 })}
+              </p>
+            )}
+            {summary.productStock && (
+              <p role="status">
+                {t("legacyImport.stockVerified", { count: summary.productStock.verified })}
               </p>
             )}
             <table className="table">

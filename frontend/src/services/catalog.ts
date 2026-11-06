@@ -2,6 +2,7 @@ import { http } from '../api';
 import type {
   Product,
   ProductInput,
+  ProductCreateInput,
   ProductGroup,
   ProductGroupInput,
   Customer,
@@ -22,7 +23,7 @@ import type {
 
 export const productsService = {
   list: (search?: string) => http.get<Product[]>('/products', search ? { search } : undefined),
-  create: (data: ProductInput) => http.post<Product>('/products', data),
+  create: (data: ProductCreateInput) => http.post<Product>('/products', data),
   update: (id: string, data: Partial<ProductInput>) => http.patch<Product>(`/products/${id}`, data),
 };
 

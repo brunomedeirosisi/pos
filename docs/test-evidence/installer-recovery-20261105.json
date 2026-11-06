@@ -1,0 +1,20 @@
+{
+  "version": "1.0.0-store.4",
+  "image": "sha256:8c917168c000fd3f5e4ce4cc6045443e83170b49cf9a4afe7c4e95930ced7d31",
+  "atUtc": "2026-11-05T14:52:21.396Z",
+  "checks": [
+    "daily scheduler creates one real pg_dump archive and replica across simultaneous workers",
+    "password and confirmation remain mandatory",
+    "active application writes prevent cutover",
+    "foreign uploaded SQL is rejected before execution",
+    "SQL failure rolls back schema replacement atomically",
+    "real HTTP restore retains durable journal, target and recovery snapshot; revokes sessions",
+    "native backup restores individual seller links and stable account identities",
+    "restore preserves installation schedule and durable automatic execution history",
+    "native backup restores immutable after-sale customer balance and effective selling price",
+    "post-cutover fault recovers the pre-restore database and reports rollback",
+    "interrupted recovery keeps maintenance and pins until exclusive startup rollback"
+  ],
+  "fixture": null,
+  "passed": true
+}

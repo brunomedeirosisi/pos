@@ -1,25 +1,45 @@
-import type { ErrorRequestHandler } from 'express';
-import { MulterError } from 'multer';
-import { ZodError } from 'zod';
-import { DomainError, HttpError } from '../errors.js';
-import { logger } from '../observability/logger.js';
+import type { ErrorRequestHandler } from "express";
+import { MulterError } from "multer";
+import { ZodError } from "zod";
+import { DomainError, HttpError } from "../errors.js";
+import { logger } from "../observability/logger.js";
+
+// Only fixed, actionable service codes are public; diagnostic details stay in logs.
+const publicServiceErrorCodes = new Set([
+  "database_restore_in_progress",
+  "database_restore_recovery_required",
+  "restore_failed_rollback_failed",
+  "receipt_printer_not_configured",
+  "receipt_printer_unavailable",
+  "receipt_printer_timeout",
+  "receipt_printer_rejected",
+  "print_queue_full",
+]);
 
 export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
   const requestId = req.requestId ?? null;
 
   if (err instanceof ZodError) {
     return res.status(400).json({
-      message: 'validation_failed',
+      message: "validation_failed",
       issues: err.issues,
       request_id: requestId,
     });
   }
 
   if (err instanceof MulterError) {
-    if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(413).json({ message: 'file_too_large', request_id: requestId });
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return res
+        .status(413)
+        .json({ message: "file_too_large", request_id: requestId });
     }
-    return res.status(400).json({ message: 'invalid_upload', details: err.message, request_id: requestId });
+    return res
+      .status(400)
+      .json({
+        message: "invalid_upload",
+        details: err.message,
+        request_id: requestId,
+      });
   }
 
   if (err instanceof DomainError) {
@@ -35,7 +55,7 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     if (err.statusCode >= 500) {
       logger.error(
         {
-          event: 'handled_internal_error',
+          event: "handled_internal_error",
           requestId,
           method: req.method,
           path: req.originalUrl,
@@ -43,11 +63,18 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
           details: err.details,
           message: err.message,
         },
-        'Handled internal error'
+        "Handled internal error",
       );
       return res.status(err.statusCode).json({
-        message: ['database_restore_in_progress', 'database_restore_recovery_required', 'restore_failed_rollback_failed'].includes(err.message) ? err.message : 'internal_error',
-        ...(['database_restore_recovery_required', 'restore_failed_rollback_failed'].includes(err.message) ? { details: err.details } : {}),
+        message: publicServiceErrorCodes.has(err.message)
+          ? err.message
+          : "internal_error",
+        ...([
+          "database_restore_recovery_required",
+          "restore_failed_rollback_failed",
+        ].includes(err.message)
+          ? { details: err.details }
+          : {}),
         request_id: requestId,
       });
     }
@@ -59,10 +86,10 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
     });
   }
 
-  if (typeof (err as any)?.code === 'string') {
-    if ((err as any).code === '23505') {
+  if (typeof (err as any)?.code === "string") {
+    if ((err as any).code === "23505") {
       return res.status(409).json({
-        message: 'conflict',
+        message: "conflict",
         detail: (err as any).detail,
         request_id: requestId,
       });
@@ -71,17 +98,20 @@ export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
 
   logger.error(
     {
-      event: 'unhandled_error',
+      event: "unhandled_error",
       requestId,
       method: req.method,
       path: req.originalUrl,
-      error: err instanceof Error ? { name: err.name, message: err.message, stack: err.stack } : err,
+      error:
+        err instanceof Error
+          ? { name: err.name, message: err.message, stack: err.stack }
+          : err,
     },
-    'Unhandled exception'
+    "Unhandled exception",
   );
 
   return res.status(500).json({
-    message: 'internal_error',
+    message: "internal_error",
     request_id: requestId,
   });
 };

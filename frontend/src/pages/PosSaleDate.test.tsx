@@ -1,4 +1,5 @@
 import { formatDateDdMmYyyy } from "../utils/date";
+import { formatCurrencyBrl } from "../utils/number";
 import { parseApiErrorMessage } from "../api";
 import { mockListPages } from "../test/page-fixtures";
 // @vitest-environment jsdom
@@ -18,7 +19,7 @@ import {
 import { salesService } from "../services/sales";
 import i18n from "../lib/i18n";
 import type { CustomerDetails, Product } from "../types/catalog";
-import type { Sale } from "../types/sales";
+import type { Sale, SalePaymentMethod } from "../types/sales";
 
 const { showToast } = vi.hoisted(() => ({ showToast: vi.fn() }));
 vi.mock("../components/ui/ToastProvider", () => ({
@@ -44,6 +45,7 @@ const product: Product = {
   group_id: null,
   reference: null,
   min_stock: null,
+  current_stock: 0,
   price_cash: 100,
   price_base: 125,
 };
@@ -116,9 +118,28 @@ function button(key: string) {
     document.querySelectorAll<HTMLButtonElement>("button"),
   ).find((item) => item.textContent === i18n.t(key))!;
 }
+function priceFallbackSelector() {
+  return `[role="status"][aria-label="${i18n.t("sales.priceFallbackTitle")}"]`;
+}
 async function click(element: HTMLButtonElement) {
   await act(async () => element.click());
   await flush();
+}
+async function chooseMethod(value: SalePaymentMethod) {
+  const method = document.getElementById("payment-method") as HTMLSelectElement;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(
+      HTMLSelectElement.prototype,
+      "value",
+    )!.set!.call(method, value);
+    method.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await flush();
+}
+async function openCheckout(method: SalePaymentMethod | null = "cash") {
+  await click(button("sales.checkout"));
+  if (method && document.getElementById("payment-method"))
+    await chooseMethod(method);
 }
 async function chooseDate(value: string) {
   await act(async () => {
@@ -136,6 +157,212 @@ async function chooseDate(value: string) {
 }
 
 describe.each(["pt-BR", "en"])("sale date picker in %s", (locale) => {
+  it("notifies about fallback prices in the cart and non-cash checkout and clears the notice when no longer used", async () => {
+    usePosStore.getState().reset();
+    usePosStore.getState().addProduct({ ...product, price_base: null });
+    usePosStore.getState().addProduct({ ...product, price_base: null });
+    usePosStore.getState().addProduct({
+      ...product,
+      id: "regular-product",
+      name: "Regular product",
+    });
+    await render(locale);
+    const expected = i18n.t("sales.priceFallbackNotice", {
+      name: product.name,
+      missingPrice: i18n.t("products.priceBase"),
+      usedPrice: i18n.t("products.priceCash"),
+      amount: formatCurrencyBrl(100),
+    });
+    const notice = () => document.querySelector(priceFallbackSelector());
+    expect(notice()?.textContent).toContain(expected);
+    expect(notice()?.textContent).toContain(
+      locale === "en" ? "Alternative price in use" : "Preço alternativo em uso",
+    );
+    expect(notice()?.textContent).not.toContain("Regular product");
+    expect(notice()?.querySelectorAll("li")).toHaveLength(1);
+    await openCheckout(null);
+    expect(notice()?.closest('[role="dialog"]')).not.toBeNull();
+    expect(notice()?.textContent).toContain(expected);
+    for (const method of [
+      "card",
+      "bank",
+      "other",
+      "credit",
+      "credit_with_entry",
+    ] as const) {
+      await chooseMethod(method);
+      expect(notice()?.textContent).toContain(expected);
+      expect(document.querySelectorAll(priceFallbackSelector())).toHaveLength(
+        1,
+      );
+    }
+    await chooseMethod("cash");
+    expect(notice()).toBeNull();
+    await click(button("common.cancel"));
+    expect(notice()?.textContent).toContain(expected);
+    const row = Array.from(container.querySelectorAll("tbody tr")).find(
+      (item) => item.firstElementChild?.textContent === product.name,
+    )!;
+    await click(row.querySelector<HTMLButtonElement>("button")!);
+    expect(notice()).toBeNull();
+    expect(usePosStore.getState().items).toHaveLength(1);
+  });
+
+  it("notifies when cash checkout uses the base price and still allows finalization", async () => {
+    usePosStore.getState().reset();
+    usePosStore.getState().addProduct({ ...product, price_cash: null });
+    await render(locale);
+    expect(document.querySelector(priceFallbackSelector())).toBeNull();
+    await openCheckout(null);
+    expect(document.querySelector(priceFallbackSelector())).toBeNull();
+    await chooseMethod("cash");
+    const expected = i18n.t("sales.priceFallbackNotice", {
+      name: product.name,
+      missingPrice: i18n.t("products.priceCash"),
+      usedPrice: i18n.t("products.priceBase"),
+      amount: formatCurrencyBrl(125),
+    });
+    expect(
+      document.querySelector(priceFallbackSelector())?.textContent,
+    ).toContain(expected);
+    expect(button("sales.confirmCheckout").disabled).toBe(false);
+    await chooseMethod("card");
+    expect(document.querySelector(priceFallbackSelector())).toBeNull();
+    await chooseMethod("cash");
+    expect(
+      document.querySelector(priceFallbackSelector())?.textContent,
+    ).toContain(expected);
+    await click(button("sales.confirmCheckout"));
+    expect(salesService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payment_method: "cash",
+        total: 125,
+        amount_paid: 125,
+        items: [expect.objectContaining({ unit_price: 125, total: 125 })],
+      }),
+    );
+    expect(document.querySelector(priceFallbackSelector())).toBeNull();
+  });
+
+  it.each([
+    { price_cash: 0, price_base: 125, method: "cash" },
+    { price_cash: 100, price_base: 0, method: "card" },
+  ] as const)(
+    "does not warn when the selected price is configured as zero: %j",
+    async ({ method, ...prices }) => {
+      usePosStore.getState().reset();
+      usePosStore.getState().addProduct({ ...product, ...prices });
+      await render(locale);
+      expect(document.querySelector(priceFallbackSelector())).toBeNull();
+      await openCheckout(method);
+      expect(document.querySelector(priceFallbackSelector())).toBeNull();
+      expect(button("sales.confirmCheckout").disabled).toBe(false);
+    },
+  );
+
+  it("notifies when the alternative price is zero", async () => {
+    usePosStore.getState().reset();
+    usePosStore
+      .getState()
+      .addProduct({ ...product, price_cash: null, price_base: 0 });
+    await render(locale);
+    await openCheckout("cash");
+    expect(
+      document.querySelector(priceFallbackSelector())?.textContent,
+    ).toContain(
+      i18n.t("sales.priceFallbackNotice", {
+        name: product.name,
+        missingPrice: i18n.t("products.priceCash"),
+        usedPrice: i18n.t("products.priceBase"),
+        amount: formatCurrencyBrl(0),
+      }),
+    );
+    expect(button("sales.confirmCheckout").disabled).toBe(false);
+  });
+
+  it("shows base prices on product cards and in the cart", async () => {
+    mockListPages(async (resource) =>
+      resource === "products" ? [product] : [],
+    );
+    await render(locale);
+    const card =
+      document.querySelector<HTMLButtonElement>(".pos-product-card")!;
+    expect(card.textContent).toContain("125,00");
+    expect(card.textContent).not.toContain("100,00");
+    expect(container.querySelector("thead")?.textContent).toContain(
+      i18n.t("products.priceBase"),
+    );
+    await click(card);
+    expect(usePosStore.getState().items[0]).toMatchObject({
+      quantity: 2,
+      unitPrice: 125,
+      total: 250,
+    });
+  });
+
+  it("recalculates discounts, amounts paid and change when switching methods and resets on reopen", async () => {
+    usePosStore.getState().updateQuantity(product.id, 2);
+    usePosStore.getState().setDiscount(10);
+    await render(locale);
+    await openCheckout("card");
+    const paid = () =>
+      document.getElementById("amount-paid") as HTMLInputElement;
+    expect(paid().value).toContain("240,00");
+    await chooseMethod("cash");
+    expect(paid().value).toContain("190,00");
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        "value",
+      )!.set!.call(paid(), "220,00");
+      paid().dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await flush();
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+      "30,00",
+    );
+    await click(button("common.cancel"));
+    expect(usePosStore.getState().getTotal()).toBe(240);
+    await openCheckout(null);
+    expect(
+      (document.getElementById("payment-method") as HTMLSelectElement).value,
+    ).toBe("");
+    expect(button("sales.confirmCheckout").disabled).toBe(true);
+    await chooseMethod("cash");
+    await click(button("sales.confirmCheckout"));
+    expect(salesService.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        subtotal: 200,
+        discount: 10,
+        total: 190,
+        amount_paid: 190,
+        change_amount: 0,
+        items: [
+          expect.objectContaining({ quantity: 2, unit_price: 100, total: 200 }),
+        ],
+      }),
+    );
+  });
+
+  it("blocks a discount exceeding the cash subtotal and recovers when returning to base pricing", async () => {
+    usePosStore.getState().setDiscount(110);
+    await render(locale);
+    await openCheckout("card");
+    expect(button("sales.confirmCheckout").disabled).toBe(false);
+    await chooseMethod("cash");
+    expect(button("sales.confirmCheckout").disabled).toBe(true);
+    expect(document.querySelector('[role="alert"]')?.textContent).toBe(
+      i18n.t("sales.invalidCheckoutValue"),
+    );
+    expect(usePosStore.getState().discount).toBe(110);
+    expect(salesService.create).not.toHaveBeenCalled();
+    await chooseMethod("bank");
+    expect(button("sales.confirmCheckout").disabled).toBe(false);
+    expect(
+      (document.getElementById("amount-paid") as HTMLInputElement).value,
+    ).toContain("15,00");
+  });
+
   it("accepts only whole positive quantities, steps by one and preserves totals on invalid edits", async () => {
     await render(locale);
     const quantity = document.querySelector<HTMLInputElement>(
@@ -178,7 +405,7 @@ describe.each(["pt-BR", "en"])("sale date picker in %s", (locale) => {
       await flush();
       expect(quantity.value).toBe("1");
       expect(usePosStore.getState().items[0].quantity).toBe(1);
-      expect(usePosStore.getState().getTotal()).toBe(100);
+      expect(usePosStore.getState().getTotal()).toBe(125);
       expect(showToast).toHaveBeenLastCalledWith(
         i18n.t("sales.invalidQuantity"),
         "error",
@@ -190,7 +417,7 @@ describe.each(["pt-BR", "en"])("sale date picker in %s", (locale) => {
     });
     await flush();
     expect(quantity.value).toBe("2");
-    expect(usePosStore.getState().getTotal()).toBe(200);
+    expect(usePosStore.getState().getTotal()).toBe(250);
     await act(async () => {
       quantity.stepDown();
       quantity.dispatchEvent(new Event("input", { bubbles: true }));
@@ -201,29 +428,31 @@ describe.each(["pt-BR", "en"])("sale date picker in %s", (locale) => {
     expect(usePosStore.getState().items).toHaveLength(0);
   });
 
-  it("keeps product prices stable for every method and shows the customer's final debt", async () => {
+  it("uses the base price until a method is selected and recalculates prices and customer debt", async () => {
     usePosStore.getState().setCustomer("synthetic-customer");
     await render(locale);
-    await click(button("sales.checkout"));
+    await openCheckout(null);
     const method = document.getElementById(
       "payment-method",
     ) as HTMLSelectElement;
-    for (const [paymentMethod, debt] of [
-      ["cash", 500],
-      ["card", 500],
-      ["bank", 500],
-      ["other", 500],
-      ["credit", 600],
-      ["credit_with_entry", 500],
+    expect(method.value).toBe("");
+    expect(button("sales.confirmCheckout").disabled).toBe(true);
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
+      "125,00",
+    );
+    expect(method.querySelector('option[value="cash"]')?.textContent).toBe(
+      locale === "en" ? "Cash" : "À vista",
+    );
+    for (const [paymentMethod, debt, total] of [
+      ["cash", 500, 100],
+      ["card", 500, 125],
+      ["bank", 500, 125],
+      ["other", 500, 125],
+      ["credit", 625, 125],
+      ["cash", 500, 100],
+      ["credit_with_entry", 500, 125],
     ] as const) {
-      await act(async () => {
-        Object.getOwnPropertyDescriptor(
-          HTMLSelectElement.prototype,
-          "value",
-        )!.set!.call(method, paymentMethod);
-        method.dispatchEvent(new Event("change", { bubbles: true }));
-      });
-      await flush();
+      await chooseMethod(paymentMethod);
       const dialog = document.querySelector('[role="dialog"]')!;
       expect(dialog.textContent).toContain(
         i18n.t("sales.customerDebtAfterSale"),
@@ -231,12 +460,11 @@ describe.each(["pt-BR", "en"])("sale date picker in %s", (locale) => {
       const debtRow = Array.from(dialog.querySelectorAll(".row")).find((row) =>
         row.textContent?.includes(i18n.t("sales.customerDebtAfterSale")),
       )!;
-      expect(debtRow.textContent).toContain(debt === 600 ? "600,00" : "500,00");
+      expect(debtRow.textContent).toContain(`${debt},00`);
       const totalRow = Array.from(dialog.querySelectorAll(".row")).find(
         (row) => row.firstElementChild?.textContent === i18n.t("sales.total"),
       )!;
-      expect(totalRow.textContent).toContain("100,00");
-      expect(dialog.textContent).not.toContain("125,00");
+      expect(totalRow.textContent).toContain(`${total},00`);
     }
     await act(async () => {
       const entry = document.getElementById("entry-amount") as HTMLInputElement;
@@ -252,7 +480,7 @@ describe.each(["pt-BR", "en"])("sale date picker in %s", (locale) => {
     ).find((row) =>
       row.textContent?.includes(i18n.t("sales.customerDebtAfterSale")),
     )!;
-    expect(debtRow.textContent).toContain("580,00");
+    expect(debtRow.textContent).toContain("605,00");
     vi.mocked(salesService.create).mockResolvedValue({
       ...sale,
       customer_id: "synthetic-customer",
@@ -263,7 +491,9 @@ describe.each(["pt-BR", "en"])("sale date picker in %s", (locale) => {
       expect.objectContaining({
         payment_method: "credit_with_entry",
         amount_paid: 20,
-        total: 100,
+        total: 125,
+        subtotal: 125,
+        items: [expect.objectContaining({ unit_price: 125, total: 125 })],
       }),
     );
     // The confirmed server snapshot can differ if another register changed the balance.
@@ -272,7 +502,7 @@ describe.each(["pt-BR", "en"])("sale date picker in %s", (locale) => {
     );
     expect(
       document.querySelector('[role="dialog"]')?.textContent,
-    ).not.toContain("580,00");
+    ).not.toContain("605,00");
   });
   it("blocks finalization when the customer's balance cannot be loaded and retries", async () => {
     usePosStore.getState().setCustomer("synthetic-customer");
@@ -280,7 +510,7 @@ describe.each(["pt-BR", "en"])("sale date picker in %s", (locale) => {
       new Error("Synthetic balance failure"),
     );
     await render(locale);
-    await click(button("sales.checkout"));
+    await openCheckout();
     expect(document.querySelector('[role="alert"]')?.textContent).toContain(
       i18n.t("sales.customerBalanceLoadError"),
     );
@@ -298,7 +528,7 @@ describe.each(["pt-BR", "en"])("sale date picker in %s", (locale) => {
     const seller = document.getElementById("seller-select") as HTMLInputElement;
     expect(seller.required).toBe(false);
     expect(seller.placeholder).toBe(i18n.t("sales.loggedUserSeller"));
-    await click(button("sales.checkout"));
+    await openCheckout();
     await click(button("sales.confirmCheckout"));
     expect(salesService.create).toHaveBeenCalledWith(
       expect.objectContaining({ seller_id: null }),
@@ -321,7 +551,7 @@ describe.each(["pt-BR", "en"])("sale date picker in %s", (locale) => {
       ).click();
     });
     await flush();
-    await click(button("sales.checkout"));
+    await openCheckout();
     await click(button("sales.confirmCheckout"));
     expect(salesService.create).toHaveBeenCalledWith(
       expect.objectContaining({ seller_id: "manual-seller" }),
@@ -342,7 +572,7 @@ describe.each(["pt-BR", "en"])("sale date picker in %s", (locale) => {
   it("confirms and submits the selected day unchanged, then suggests today for the next sale", async () => {
     await render(locale);
     await chooseDate("2024-02-29");
-    await click(button("sales.checkout"));
+    await openCheckout();
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain(
       "29/02/2024",
     );
@@ -358,7 +588,7 @@ describe.each(["pt-BR", "en"])("sale date picker in %s", (locale) => {
     async (day) => {
       await render(locale);
       await chooseDate(day);
-      await click(button("sales.checkout"));
+      await openCheckout();
       expect(salesService.create).not.toHaveBeenCalled();
       expect(input().getAttribute("aria-invalid")).toBe("true");
       expect(document.querySelector('[role="alert"]')?.textContent).toBe(
@@ -378,7 +608,7 @@ describe.each(["pt-BR", "en"])("sale date picker in %s", (locale) => {
     vi.mocked(salesService.create).mockRejectedValueOnce(new Error("offline"));
     await render(locale);
     await chooseDate("2018-11-04");
-    await click(button("sales.checkout"));
+    await openCheckout();
     await click(button("sales.confirmCheckout"));
     expect(input().value).toBe("04/11/2018");
     expect(usePosStore.getState().items).toHaveLength(1);
@@ -409,7 +639,7 @@ describe.each(["pt-BR", "en"])("sale date picker in %s", (locale) => {
     );
     await render(locale);
     await chooseDate("2024-02-29");
-    await click(button("sales.checkout"));
+    await openCheckout();
     await click(button("sales.confirmCheckout"));
     expect(input().disabled).toBe(true);
     await act(async () => complete(sale));

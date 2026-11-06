@@ -9,8 +9,8 @@ const base = process.env.POS_SMOKE_URL;
 const directory = process.env.POS_SMOKE_DIRECTORY;
 const journal = path.join(directory, 'journal');
 const api = createApi(base, process.env.POS_SMOKE_AGENT_TOKEN);
-async function request(route, { cookie, body, status = 200 } = {}) {
-  const response = await fetch(base + '/api/v1' + route, { method: body === undefined ? 'GET' : 'POST', headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(10000) });
+async function request(route, { cookie, body, status = 200, method = body === undefined ? 'GET' : 'POST' } = {}) {
+  const response = await fetch(base + '/api/v1' + route, { method, headers: { 'content-type': 'application/json', ...(cookie ? { cookie } : {}) }, body: body === undefined ? undefined : JSON.stringify(body), signal: AbortSignal.timeout(10000) });
   assert.equal(response.status, status, route + ' unexpected HTTP status');
   return response;
 }
@@ -34,6 +34,14 @@ const stateFile = path.join(directory, 'smoke-state.json');
 if (process.argv.includes('--verify')) {
   const state = JSON.parse(await readFile(stateFile, 'utf8'));
   const cookie = await login();
+  const schedule = await (await request('/admin/backup/schedule',{cookie})).json();
+  assert.equal(schedule.enabled,true);assert.equal(schedule.time,state.schedule.time);assert.equal(schedule.timezone,state.schedule.timezone);
+  assert.equal(schedule.lastRun.status,'completed');assert.equal(schedule.lastRun.type,'automatic');
+  const disabled = await (await request('/admin/backup/schedule',{cookie,method:'PATCH',body:{enabled:false,time:state.schedule.time}})).json();
+  assert.equal(disabled.enabled,false);assert.equal(disabled.nextRunAt,null);
+  const history = await (await request('/lists/backup-executions',{cookie})).json();
+  assert.ok(history.items.some(run=>run.type==='automatic' && run.status==='completed'));
+  assert.ok(history.items.some(run=>run.type==='system' && run.status==='completed'));
   for (const job of state.jobs) {
     const metadata = await (await request('/print-jobs/' + job.job_id, { cookie })).json();
     assert.equal(metadata.status, job.status);
@@ -53,12 +61,18 @@ if (process.argv.includes('--verify')) {
   await assert.rejects(terminalApi('/claim',{}),error=>error.status===403);
   const waiting=await (await request('/print-jobs/'+state.offlineJob.job_id,{cookie})).json();
   assert.equal(waiting.status,'queued');assert.equal(waiting.printer_id,state.terminal.printer_id);
-  console.log(JSON.stringify({ persistedAfterApiRecreation: true, noJournalReprint: true, credentialRevocationVerified: true, revokedQueueNotRerouted: true }));
+  console.log(JSON.stringify({ persistedAfterApiRecreation: true, backupSchedulePersisted: true, automaticBackupHistoryVerified: true, backupScheduleDisabled: true, noJournalReprint: true, credentialRevocationVerified: true, revokedQueueNotRerouted: true }));
 } else {
   const cookies = await Promise.all([login(), login()]);
   assert.notEqual(cookies[0], cookies[1]);
+  const initialSchedule = await (await request('/admin/backup/schedule',{cookie:cookies[0]})).json();
+  assert.equal(initialSchedule.enabled,false);assert.equal(initialSchedule.time,'03:00');assert.equal(initialSchedule.timezone,'America/Sao_Paulo');
+  const schedule = await (await request('/admin/backup/schedule',{cookie:cookies[0],method:'PATCH',body:{enabled:true,time:'04:15'}})).json();
+  assert.equal(schedule.enabled,true);assert.equal(schedule.time,'04:15');
   const initialCatalog=await (await request('/products', { cookie: cookies[0] })).json();
   if(!process.env.POS_SMOKE_UPGRADED)assert.deepEqual(initialCatalog,[]);
+  const page = await (await request('/lists/products?pageSize=1',{cookie:cookies[0]})).json();
+  assert.ok(Array.isArray(page.items));assert.equal(page.pagination.pageSize,1);
   const product = await (await request('/products', { cookie: cookies[0], status: 201, body: { name: 'Synthetic installer product', price_cash: 10, price_base: 10 } })).json();
   const sales = await Promise.all(cookies.map(async cookie => (await (await request('/sales', { cookie, status: 201, body: { payment_method: 'cash', amount_paid: 10, items: [{ product_id: product.id, quantity: 1 }] } })).json()).id));
   assert.notEqual(sales[0], sales[1]);
@@ -93,6 +107,6 @@ if (process.argv.includes('--verify')) {
   const offlineJob=await (await request('/sales/'+sales[1]+'/receipt/print',{cookie:cookies[1],status:202,body:{request_id:randomUUID(),printer_id:terminal.printer_id}})).json();
   assert.equal((await api('/claim',{})).job,null);
   jobs.push({...offlineJob,status:'queued'});
-  await writeFile(stateFile,JSON.stringify({sales,jobs,terminal,offlineJob}));
-  console.log(JSON.stringify({httpsIdentityVerified:true,independentSessions:2,emptyInitialCatalog:initialCatalog.length===0,sales:sales.length,submittedJobs:printed.length,separatePrinterDestinations:true,agentCrossAccessDenied:true,requestDeduplicated:true,uncertainJobNotReprinted:true,offlineQueueNotRerouted:true,openApiLoaded:true}));
+  await writeFile(stateFile,JSON.stringify({sales,jobs,terminal,offlineJob,schedule}));
+  console.log(JSON.stringify({httpsIdentityVerified:true,independentSessions:2,emptyInitialCatalog:initialCatalog.length===0,backupScheduleInitiallyDisabled:true,paginatedCatalogLoaded:true,sales:sales.length,submittedJobs:printed.length,separatePrinterDestinations:true,agentCrossAccessDenied:true,requestDeduplicated:true,uncertainJobNotReprinted:true,offlineQueueNotRerouted:true,openApiLoaded:true}));
 }

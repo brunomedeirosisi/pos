@@ -17,13 +17,18 @@ import { CurrencyInput } from "../../components/ui/CurrencyInput";
 import { formatCurrencyBrl } from "../../utils/number";
 import {
   buildProductPayload,
+  buildProductCreatePayload,
   productFormDefaults,
   productFormSchema,
   type ProductFormValues,
 } from "./products/product-form";
 
 export function ProductsPage(): JSX.Element {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const stockFormatter = useMemo(
+    () => new Intl.NumberFormat(i18n.resolvedLanguage, { maximumFractionDigits: 3 }),
+    [i18n.resolvedLanguage],
+  );
   const toast = useToast();
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
@@ -55,7 +60,7 @@ export function ProductsPage(): JSX.Element {
 
   const createMutation = useMutation({
     mutationFn: (values: ProductFormValues) =>
-      productsService.create(buildProductPayload(values)),
+      productsService.create(buildProductCreatePayload(values)),
     onSuccess: () => {
       toast.show(t("common.saved"), "success");
       // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
@@ -100,6 +105,7 @@ export function ProductsPage(): JSX.Element {
       barcode: product.barcode ?? "",
       group_id: product.group_id ?? "",
       reference: product.reference ?? "",
+      initial_stock: 0,
       min_stock: product.min_stock,
       price_cash: product.price_cash,
       price_base: product.price_base,
@@ -147,7 +153,7 @@ export function ProductsPage(): JSX.Element {
     if (!canReadCatalog) {
       return (
         <tr>
-          <td colSpan={6}>
+          <td colSpan={8}>
             <div className="empty-state">{t("common.noPermission")}</div>
           </td>
         </tr>
@@ -157,7 +163,7 @@ export function ProductsPage(): JSX.Element {
     if (productsQuery.isLoading) {
       return (
         <tr>
-          <td colSpan={6}>
+          <td colSpan={8}>
             <div className="empty-state">{t("common.loading")}</div>
           </td>
         </tr>
@@ -167,7 +173,7 @@ export function ProductsPage(): JSX.Element {
     if (productsQuery.isError) {
       return (
         <tr>
-          <td colSpan={6}>
+          <td colSpan={8}>
             <div className="empty-state">
               {(productsQuery.error as Error)?.message ?? t("common.error")}
             </div>
@@ -179,7 +185,7 @@ export function ProductsPage(): JSX.Element {
     if (products.length === 0) {
       return (
         <tr>
-          <td colSpan={6}>
+          <td colSpan={8}>
             <div className="empty-state">{t("common.empty")}</div>
           </td>
         </tr>
@@ -196,6 +202,14 @@ export function ProductsPage(): JSX.Element {
         <td>{product.legacy_code ?? "-"}</td>
         <td>{product.barcode ?? "-"}</td>
         <td>{product.group_name ?? "-"}</td>
+        <td>
+          {product.current_stock == null ? "-" : stockFormatter.format(product.current_stock)}
+        </td>
+        <td>
+          {product.price_base != null
+            ? formatCurrencyBrl(product.price_base)
+            : "-"}
+        </td>
         <td>
           {product.price_cash != null
             ? formatCurrencyBrl(product.price_cash)
@@ -222,6 +236,7 @@ export function ProductsPage(): JSX.Element {
     t,
     canWriteCatalog,
     focusProductId,
+    stockFormatter,
   ]);
 
   if (!canReadCatalog) {
@@ -268,6 +283,8 @@ export function ProductsPage(): JSX.Element {
               <th>{t("products.code")}</th>
               <th>{t("products.barcode")}</th>
               <th>{t("products.group")}</th>
+              <th>{t("products.currentStock")}</th>
+              <th>{t("products.priceBase")}</th>
               <th>{t("products.priceCash")}</th>
               <th>{t("common.actions")}</th>
             </tr>
@@ -322,6 +339,41 @@ export function ProductsPage(): JSX.Element {
               <label htmlFor="reference">{t("products.reference")}</label>
               <input id="reference" {...form.register("reference")} />
             </div>
+            {editing ? (
+              <div className="form-group">
+                <label htmlFor="current_stock">{t("products.currentStock")}</label>
+                <input
+                  id="current_stock"
+                  readOnly
+                  value={
+                    editing.current_stock == null
+                      ? "-"
+                      : stockFormatter.format(editing.current_stock)
+                  }
+                />
+              </div>
+            ) : (
+              <div className="form-group">
+                <label htmlFor="current_stock">{t("products.currentStock")}</label>
+                <input
+                  id="current_stock"
+                  inputMode="decimal"
+                  aria-invalid={Boolean(form.formState.errors.initial_stock)}
+                  aria-describedby={
+                    form.formState.errors.initial_stock
+                      ? "current_stock-hint current_stock-error"
+                      : "current_stock-hint"
+                  }
+                  {...form.register("initial_stock")}
+                />
+                <small id="current_stock-hint">{t("products.initialStockHint")}</small>
+                {form.formState.errors.initial_stock && (
+                  <small id="current_stock-error" role="alert" style={{ color: "#dc2626" }}>
+                    {t("products.invalidInitialStock")}
+                  </small>
+                )}
+              </div>
+            )}
             <div className="form-group">
               <label htmlFor="min_stock">{t("products.minStock")}</label>
               <input

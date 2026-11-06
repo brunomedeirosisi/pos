@@ -30,6 +30,8 @@ import {
 import { restoreSchema } from '../contracts/backup-contracts.js';
 import { PgBackupRepository } from '../repository/backup-repository.js';
 import { buildClearedAuthCookie } from '../../auth/http/auth-cookie.js';
+import { backupScheduleSchema } from '../contracts/backup-schedule-contracts.js';
+import { getBackupSchedule, saveBackupSchedule } from '../repository/backup-schedule-repository.js';
 
 const router = Router();
 const env = getEnv();
@@ -47,6 +49,14 @@ const registerUploadedBackupUseCase = createRegisterUploadedBackupUseCase(backup
 const deleteBackupUseCase = createDeleteBackupUseCase(backupRepository);
 const restoreBackupUseCase = createRestoreBackupUseCase(backupRepository);
 const listBackupsQuerySchema = paginationQuerySchema;
+
+router.get('/backup/schedule', requirePermission('system:backup:read'), asyncHandler(async (_req,res) => {
+  res.json(await getBackupSchedule());
+}));
+router.patch('/backup/schedule', requirePermission('system:backup:schedule'), asyncHandler(async (req,res) => {
+  const input = backupScheduleSchema.parse(req.body);
+  res.json(await saveBackupSchedule(input,{userId:req.user!.id,ipAddress:req.ip}));
+}));
 
 router.get(
   '/backups',

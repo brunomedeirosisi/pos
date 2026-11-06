@@ -43,7 +43,7 @@ beforeAll(async () => {
     [actorId, actorId + "@example.test"],
   );
   await query(
-    "insert into product(id,name,price_cash,price_base) values($1,'Synthetic Fixed Price',100,120)",
+    "insert into product(id,name,price_cash,price_base) values($1,'Synthetic Payment Price',100,120)",
     [productId],
   );
   await query(
@@ -121,23 +121,24 @@ async function pay(amount: number) {
   expect(r.status, JSON.stringify(r.body)).toBe(201);
   return r;
 }
-describe("fixed checkout prices and immutable customer balances", () => {
+describe("payment-specific checkout prices and immutable customer balances", () => {
   it.each([
     ["cash", 110, 500],
-    ["card", 110, 500],
-    ["bank", 110, 500],
-    ["other", 110, 500],
-    ["credit", 0, 600],
-    ["credit_with_entry", 20, 580],
-    ["credit_with_entry", 100, 500],
+    ["card", 130, 500],
+    ["bank", 130, 500],
+    ["other", 130, 500],
+    ["credit", 0, 620],
+    ["credit_with_entry", 20, 600],
+    ["credit_with_entry", 120, 500],
   ])(
     "%s adds only unpaid credit to the authoritative legacy balance",
     async (method, paid, expected) => {
       expect(await balance()).toBe(500);
       const r = await checkout(method as string, paid as number);
       expect(r.status, JSON.stringify(r.body)).toBe(201);
-      expect(r.body.total).toBe(100);
-      expect(r.body.items[0].unit_price).toBe(100);
+      const price = method === "cash" ? 100 : 120;
+      expect(r.body.total).toBe(price);
+      expect(r.body.items[0].unit_price).toBe(price);
       expect(r.body.customer_balance_after_sale).toBe(expected);
       expect(await balance()).toBe(expected);
       expect(
@@ -177,10 +178,10 @@ describe("fixed checkout prices and immutable customer balances", () => {
       emission_date: "2024-02-29",
     });
     expect(later.status).toBe(201);
-    expect(later.body.customer_balance_after_sale).toBe(630);
+    expect(later.body.customer_balance_after_sale).toBe(670);
     const receipt = await request(app).get("/sales/" + r.body.id + "/receipt");
-    expect(receipt.body.sale.customer_balance_after_sale).toBe(600);
-    expect(await balance()).toBe(630);
+    expect(receipt.body.sale.customer_balance_after_sale).toBe(620);
+    expect(await balance()).toBe(670);
   });
   it("serializes simultaneous credit sales and payments without lost balances", async () => {
     const sales = await Promise.all([
@@ -192,11 +193,11 @@ describe("fixed checkout prices and immutable customer balances", () => {
       sales
         .map((s) => s.body.customer_balance_after_sale)
         .sort((a, b) => a - b),
-    ).toEqual([600, 700]);
+    ).toEqual([620, 740]);
     const [sale] = await Promise.all([checkout("credit", 0), pay(50)]);
     expect(sale.status).toBe(201);
-    expect([750, 800]).toContain(sale.body.customer_balance_after_sale);
-    expect(await balance()).toBe(750);
+    expect([810, 860]).toContain(sale.body.customer_balance_after_sale);
+    expect(await balance()).toBe(810);
   });
   it("preserves the original receipt balance after cancelling the sale", async () => {
     const r = await checkout("credit", 0);
@@ -207,7 +208,7 @@ describe("fixed checkout prices and immutable customer balances", () => {
     expect(await balance()).toBe(500);
     const receipt = await request(app).get("/sales/" + r.body.id + "/receipt");
     expect(receipt.body.sale.status).toBe("cancelled");
-    expect(receipt.body.sale.customer_balance_after_sale).toBe(600);
+    expect(receipt.body.sale.customer_balance_after_sale).toBe(620);
   });
   it("offsets existing customer credit before showing a debt", async () => {
     await query(
@@ -216,8 +217,8 @@ describe("fixed checkout prices and immutable customer balances", () => {
     );
     const r = await checkout("credit", 0);
     expect(r.status).toBe(201);
-    expect(r.body.customer_balance_after_sale).toBe(50);
-    expect(await balance()).toBe(50);
+    expect(r.body.customer_balance_after_sale).toBe(70);
+    expect(await balance()).toBe(70);
   });
   it("keeps an unavailable historical balance rather than inventing one from the current account", async () => {
     const id = (

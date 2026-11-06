@@ -19,6 +19,7 @@ O estado fica no QueryClient da sessão: retornar de detalhes ou edição preser
 | Cliente: linha do tempo | Servidor: `lists/customer-activity?customer_id=...`; uma UNION de vendas e pagamentos é ordenada e paginada antes de carregar os detalhes da página. Usuários sem `sales:read` veem somente pagamentos. Os filtros de pagamento continuam afetando os pagamentos, como antes. |
 | Usuários e perfis | Servidor: `lists/users`, `lists/roles`; ações e formulários preservados. |
 | Perfis: vendedores dos usuários | Servidor: `lists/role-users?roleId=...`; busca, vínculo individual, permissões de administração e bloqueio durante salvamento preservados. |
+| Execuções de backup | Servidor: `lists/backup-executions`; histórico manual, automático e do sistema, com `system:backup:read`. |
 | Backups | Servidor: `lists/backups`; download, exclusão e restauração usam o registro selecionado. As confirmações e proteções da restauração permanecem obrigatórias. |
 | Impressoras | Servidor: `lists/printers`; a identidade da loja/modo é consultada separadamente. Credenciais e hashes nunca são retornados. |
 | Histórico de impressões da venda | Servidor: `lists/print-jobs?saleId=...`; substitui os cortes anteriores de 5/20 itens. Atualização periódica da página, sem conteúdo do recibo ou tokens de execução. |
@@ -66,6 +67,7 @@ GET /api/v1/lists/products?search=camisa&page=2&pageSize=25&sortBy=name&sortOrde
 | Pagamentos do cliente | `payment_date` (desc), `amount`, `created_at` | `customer_id` obrigatório, `start_date`, `end_date`, `method`, `sort` (alias da direção existente) |
 | Linha do tempo | `date` (desc) | `customer_id` obrigatório; filtros de pagamento acima |
 | Backups | `created_at` (desc), `filename` | `search` |
+| Execuções de backup | `started_at` (desc) | `search` |
 | Impressoras | `created_at` (asc), `name` | `search`, `enabled` |
 | Impressões | `requested_at` (desc) | `saleId` obrigatório |
 | Logs/advertências | `created_at` (asc) / `id` (asc) | `sessionId` obrigatório; advertências aceitam `search` |

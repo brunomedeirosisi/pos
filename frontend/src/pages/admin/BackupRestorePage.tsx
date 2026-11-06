@@ -1,3 +1,4 @@
+import { BackupScheduleSection } from "./BackupScheduleSection";
 import { useListQuery } from "../../hooks/useListQuery";
 import { ListPagination } from "../../components/ui/Pagination";
 import React, { useMemo, useRef, useState } from "react";
@@ -74,6 +75,7 @@ export function BackupRestorePage(): JSX.Element {
     queryKey: ["admin", "backups"],
     resource: "backups",
     stateKey: "backups",
+    refetchInterval: 15000,
     enabled: canReadBackups,
   });
 
@@ -240,6 +242,7 @@ export function BackupRestorePage(): JSX.Element {
 
   return (
     <>
+      <BackupScheduleSection restoring={restoring} />
       {canRestoreBackup && !restoreEnabled && (
         <div className="card" role="status">
           {optionsQuery.isError
@@ -419,27 +422,28 @@ export function BackupRestorePage(): JSX.Element {
             <h4 style={{ marginBottom: "0.75rem" }}>
               {t("backups.listTitle")}
             </h4>
-            <table className="table">
+            <table className="table" aria-label={t("backups.listTitle")}>
               <thead>
                 <tr>
                   <th>{t("backups.heading")}</th>
                   <th>{t("backups.createdAt")}</th>
                   <th>{t("backups.size")}</th>
                   <th>{t("backups.createdBy")}</th>
+                  <th>{t("backupSchedule.type")}</th>
                   <th>{t("common.actions")}</th>
                 </tr>
               </thead>
               <tbody>
                 {backupsQuery.isLoading && (
                   <tr>
-                    <td colSpan={5}>
+                    <td colSpan={6}>
                       <div className="empty-state">{t("common.loading")}</div>
                     </td>
                   </tr>
                 )}
                 {backupsQuery.isError && (
                   <tr>
-                    <td colSpan={5}>
+                    <td colSpan={6}>
                       <div className="empty-state">
                         {(backupsQuery.error as Error).message}
                       </div>
@@ -448,7 +452,7 @@ export function BackupRestorePage(): JSX.Element {
                 )}
                 {!backupsQuery.isLoading && sortedBackups.length === 0 && (
                   <tr>
-                    <td colSpan={5}>
+                    <td colSpan={6}>
                       <div className="empty-state">{t("common.empty")}</div>
                     </td>
                   </tr>
@@ -459,6 +463,18 @@ export function BackupRestorePage(): JSX.Element {
                     <td>{formatDateTimeDdMmYyyy(backup.createdAt)}</td>
                     <td>{formatBytes(backup.sizeBytes)}</td>
                     <td>{backup.createdBy?.fullName ?? t("common.none")}</td>
+                    <td>
+                      {t(
+                        "backupSchedule.types." +
+                          (backup.metadata?.trigger === "automatic"
+                            ? "automatic"
+                            : backup.metadata?.source === "upload"
+                              ? "upload"
+                              : backup.createdBy
+                                ? "manual"
+                                : "system"),
+                      )}
+                    </td>
                     <td>
                       <div
                         style={{

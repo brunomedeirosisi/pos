@@ -50,6 +50,18 @@ const apiValidationFieldKeys: Record<string, string> = {
 };
 
 const apiMessageTranslationKeys: Record<string, string> = {
+  browser_printing_uses_receipt_page: "sales.browserPrintingRequired",
+  internal_error: "apiErrors.internalError",
+  receipt_printer_not_configured: "sales.printerNotConfigured",
+  receipt_printer_unavailable: "sales.printerUnavailable",
+  receipt_printer_timeout: "sales.printerTimeout",
+  receipt_printer_rejected: "sales.printerRejected",
+  print_queue_full: "sales.printQueueFull",
+  print_printer_disabled_or_unknown: "printers.chooseAnother",
+  printer_selection_requires_queue_mode: "printers.chooseAnother",
+  print_receipt_size_invalid: "sales.printReceiptSizeInvalid",
+  print_request_id_reused_with_different_parameters:
+    "sales.printRequestConflict",
   invalid_sale_quantity: "sales.invalidQuantity",
   invalid_date_range: "paymentHistory.invalidDates",
   invalid_sort_field: "pagination.invalidSort",

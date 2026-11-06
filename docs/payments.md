@@ -38,10 +38,14 @@ Behavior:
 The sale total that feeds customer debt is now protected on the API side:
 
 - the browser can still send preview values, but the API recalculates the official item prices from the catalog before persisting the sale;
-- `cash` prefers `product.price_cash`;
+- product cards and the cart prefer `product.price_base` before payment selection;
+- **À vista / Cash** (`cash`) prefers `product.price_cash`, falling back to `price_base` when missing;
 - `card`, `bank`, `other`, `credit`, and `credit_with_entry` prefer `product.price_base`, with fallback to `price_cash`;
+- the cart and checkout notify the operator whenever the other price is used, identifying each product, the missing price and the registered price/amount used per unit in PT-BR/EN; the notice stays visible while applicable and does not block the sale;
 - subtotal, total, pending balance, and change are normalized from those catalog prices;
 - role discount limits are validated as percentages of the recalculated subtotal.
+
+Switching the checkout payment method recalculates prices and totals, preserving the absolute discount. Immediate payment is filled with the new total; an existing down payment is capped at the new total. A discount greater than the selected subtotal blocks confirmation. Zero is a configured price, not a missing value. Neither price configured returns HTTP 400. Later customer-account payments do not reprice past purchases; stored sales, receipt reprints and cancellation stock reversals retain their finalized prices.
 
 ## Backend endpoints
 
@@ -64,7 +68,7 @@ The sale total that feeds customer debt is now protected on the API side:
 ## Frontend flows
 
 - Customer detail page: shows current balance, total charges/paid, and a filtered payment history (date range, method, sort).
-- POS checkout: supports immediate payment, full credit sale, and credit sale with down payment.
+- POS checkout: supports immediate payment, full credit sale, and credit sale with down payment. It starts without a selected method, showing base prices, and requires the operator to choose a method before confirmation. Cancelling and reopening clears the selection.
 - Register payment: opens from customer detail or quick entry and returns the new balance after saving.
 - Printable views: `/catalog/customers/:customerId/payments/:paymentId/receipt` and `/catalog/customers/:id/payments/history`.
 

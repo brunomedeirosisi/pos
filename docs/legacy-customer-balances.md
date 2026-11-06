@@ -14,7 +14,7 @@ O ajuste é separado dos documentos: **não é um pagamento recebido**. Nenhuma 
 
 Zeros e valores negativos são válidos; saldos credores são preservados. Antes de limpar ou publicar dados, o importador exige `DEBITO`, valores finitos representáveis em centavos e códigos de clientes preenchidos e únicos. Valores ausentes ou inválidos interrompem a operação em vez de assumir um saldo.
 
-Depois de publicar documentos e estoque, a nova etapa `reconcile-customer-balances` concilia os clientes. O progresso passa a ter 16 etapas. O resumo e os relatórios CSV/JSON existentes passam a incluir clientes conferidos, SHA-256 do DBF, valores originais, histórico reconstruído e ajustes. A conferência exige coincidência com o saldo oficial; não exige que o ajuste seja zero.
+Depois de publicar documentos e estoque, a etapa `reconcile-customer-balances` concilia os clientes. O progresso tem 17 etapas, incluindo a [conferência do estoque inicial dos produtos](product-stock.md). O resumo e os relatórios CSV/JSON existentes incluem clientes conferidos, SHA-256 do DBF, valores originais, histórico reconstruído e ajustes. A conferência exige coincidência com o saldo oficial; não exige que o ajuste seja zero.
 
 ## Persistência e interface
 

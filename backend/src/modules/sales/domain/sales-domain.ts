@@ -85,9 +85,8 @@ export function resolveCatalogUnitPrice(
   product: SaleProductPricingRecord,
   paymentMethod: SalePaymentMethod | null,
 ): number {
-  // The catalog cash price is the selling price for every payment method.
-  const primaryField = "price_cash";
-  const fallbackField = "price_base";
+  const primaryField = paymentMethod === "cash" ? "price_cash" : "price_base";
+  const fallbackField = paymentMethod === "cash" ? "price_base" : "price_cash";
   const primaryValue = toNumeric(product[primaryField]);
   const fallbackValue = toNumeric(product[fallbackField]);
   const resolved = primaryValue ?? fallbackValue;

@@ -22,6 +22,7 @@ import request from 'supertest';
 import { salesRouter } from '../../src/modules/sales/http/sales-router.js';
 import { paymentHistoryRouter } from '../../src/modules/customer-payments/http/payment-history-router.js';
 import { errorHandler } from '../../src/middleware/error-handler.js';
+import { router as productsRouter } from '../../src/routes/products.js';
 
 const app = express();
 app.use((req, _res, next) => {
@@ -37,6 +38,7 @@ app.use((req, _res, next) => {
 });
 app.use('/sales', salesRouter);
 app.use('/payments', paymentHistoryRouter);
+app.use('/products', productsRouter);
 app.use(errorHandler);
 
 const children = new Set<ChildProcess>();
@@ -123,7 +125,7 @@ async function fixture(code: string, withStock = true, archiveExtension?: 'arj' 
     ['GRUPO', ['COD_GRUP', 'NOME_GRUP'], [{ COD_GRUP: code, NOME_GRUP: 'Synthetic group ' + code }]],
     [
       'PRODUTO',
-      ['COD_PROD', 'NOME_PROD', 'COD_GRUP', 'AVISTA', 'VLR_UN_PRO'],
+      ['COD_PROD', 'NOME_PROD', 'COD_GRUP', 'AVISTA', 'VLR_UN_PRO', 'ESTO_PROD'],
       [
         {
           COD_PROD: code,
@@ -131,6 +133,7 @@ async function fixture(code: string, withStock = true, archiveExtension?: 'arj' 
           COD_GRUP: code,
           AVISTA: '10',
           VLR_UN_PRO: '5',
+          ESTO_PROD: 20,
         },
       ],
     ],
@@ -160,7 +163,7 @@ async function fixture(code: string, withStock = true, archiveExtension?: 'arj' 
     const file = await DBFFile.create(
       path.join(directory, name + '.DBF'),
       fields.map((name) =>
-        name === 'DEBITO' ? { name, type: 'N', size: 14, decimalPlaces: 2 } : { name, type: 'C', size: 40 }
+        name === 'DEBITO' || name === 'ESTO_PROD' ? { name, type: 'N', size: 14, decimalPlaces: 3 } : { name, type: 'C', size: 40 }
       )
     );
     if (records.length) await file.appendRecords(records);
@@ -193,8 +196,8 @@ async function replaceDbf(
   const dbf = await DBFFile.create(
     filename,
     fields.map((name) =>
-      name === 'DEBITO'
-        ? { name, type: 'N', size: 14, decimalPlaces: 2 }
+      name === 'DEBITO' || name === 'ESTO_PROD'
+        ? { name, type: 'N', size: 14, decimalPlaces: 3 }
         : dateFields.includes(name)
           ? { name, type: 'D', size: 8 }
           : { name, type: 'C', size: 40 }
@@ -271,6 +274,34 @@ async function blockedImportPid() {
 }
 
 describe('isolated legacy import attempts with real PostgreSQL and DBFs', () => {
+  it.each([true, false])('imports ESTO_PROD as the stock base with movement history=%s', async (withStock) => {
+    const code = withStock ? '1921' : '1922';
+    const id = await fixture(code, withStock);
+    const result = await startImport(id).result;
+    expect(result.code, result.output).toBe(0);
+    const productId = (await query('select id from product where legacy_code=$1', [code])).rows[0].id;
+    const detail = await request(app).get(`/products/${productId}`);
+    expect(detail.status).toBe(200);
+    expect(detail.body.current_stock).toBe(20);
+    const status = await getLegacyImportStatus('synthetic-' + id);
+    expect(status).toMatchObject({ status: 'completed', summary: { productStock: { products: 1, verified: 1 } } });
+    const report = JSON.parse(await readFile(path.join(directories.at(-1)!, 'reconciliation.v1.json'), 'utf8'));
+    expect(report.productStock).toMatchObject({ source: 'PRODUTO.DBF.ESTO_PROD', products: 1, verified: 1 });
+    expect((await query('select distinct origin from stock_movement where product_id=$1', [productId])).rows)
+      .toEqual(withStock ? [{ origin: 'legacy' }] : []);
+  });
+
+  it('rejects a missing stock source before publishing or clearing any data', async () => {
+    const id = await fixture('1923');
+    await replaceDbf('PRODUTO', ['COD_PROD','NOME_PROD'], [{ COD_PROD: '1923', NOME_PROD: 'Invalid stock source' }]);
+    const before = (await query('select count(*)::int as n from product')).rows[0].n;
+    const result = await startImport(id, 2).result;
+    expect(result.code).toBe(1);
+    expect(result.output).toContain('legacy_stock_source_missing_PRODUTO_ESTO_PROD');
+    expect((await query('select count(*)::int as n from product')).rows[0].n).toBe(before);
+    expect((await query('select count(*)::int as n from system_legacy_import_checkpoint where import_id=$1', [id])).rows[0].n).toBe(0);
+  });
+
   it('certifies the source debit despite overlapping document sources and a missing historical product', async () => {
     const code = '1901';
     const id = await fixture(code);
@@ -436,7 +467,7 @@ describe('isolated legacy import attempts with real PostgreSQL and DBFs', () => 
     const id = await fixture(code);
     const dbf = await replaceDbf(
       'PRODUTO',
-      ['COD_PROD', 'NOME_PROD', 'COD_GRUP', 'AVISTA', 'VLR_UN_PRO', 'COD_BARRA', 'REFERENCIA'],
+      ['COD_PROD', 'NOME_PROD', 'COD_GRUP', 'AVISTA', 'VLR_UN_PRO', 'COD_BARRA', 'REFERENCIA', 'ESTO_PROD'],
       [
         {
           COD_PROD: '\u0000' + code + '\u0000',
@@ -446,6 +477,7 @@ describe('isolated legacy import attempts with real PostgreSQL and DBFs', () => 
           VLR_UN_PRO: '5\u0000',
           COD_BARRA: '\u0000\u0000',
           REFERENCIA: 'REF-ação',
+          ESTO_PROD: 20,
         },
       ]
     );
@@ -538,7 +570,7 @@ describe('isolated legacy import attempts with real PostgreSQL and DBFs', () => 
         },
       });
       expect(completed!.finishedAt).toBeTruthy();
-      expect(completed!.stages).toHaveLength(16);
+      expect(completed!.stages).toHaveLength(17);
       expect(completed!.checkpoints).toHaveLength(completed!.stages.length);
       expect(completed!.checkpoints.every((checkpoint) => checkpoint.status === 'completed')).toBe(true);
       expect(await totals('1101')).toEqual({ payments: 1, stocks: 1, amount: '7.50' });
@@ -606,7 +638,7 @@ describe('isolated legacy import attempts with real PostgreSQL and DBFs', () => 
   it('exposes retry and final failure with the real failed checkpoint and no report', async () => {
     const id = await fixture('1501');
     const directory = directories.at(-1)!;
-    await writeFile(path.join(directory, 'PRODUTO.DBF'), 'synthetic invalid DBF');
+    await writeFile(path.join(directory, 'GRUPO.DBF'), 'synthetic invalid DBF');
     expect((await startImport(id).result).code).toBe(1);
     const retry = await getLegacyImportStatus('synthetic-' + id);
     expect(retry).toMatchObject({
@@ -619,7 +651,7 @@ describe('isolated legacy import attempts with real PostgreSQL and DBFs', () => 
     expect(retry!.checkpoints).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          stage: 'load-staging:stg_produto',
+          stage: 'load-staging:stg_grupo',
           status: 'failed',
         }),
       ])

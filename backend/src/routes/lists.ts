@@ -1,4 +1,5 @@
 import { mapBackupRow } from "../modules/backup/application/backup-use-cases.js";
+import { backupExecutionSql, mapBackupExecution } from '../modules/backup/repository/backup-schedule-repository.js';
 import type { BackupRow } from "../modules/backup/repository/backup-repository.js";
 import { Router, type Request } from "express";
 import { z } from "zod";
@@ -19,6 +20,7 @@ import {
 } from "../modules/customer-payments/domain/customer-balance.js";
 import type { PaymentHistoryRecord } from "../modules/customer-payments/repository/payment-history-repository.js";
 import { getEnv } from "../config/env.js";
+import { productCurrentStockSql } from "../utils/stock-sql.js";
 
 // Separate read contracts preserve existing array endpoints and all mutation routes.
 export const listsRouter = Router();
@@ -133,7 +135,7 @@ const payments: Config = {
 const configs: Record<string, Config> = {
   products: catalog(
     "product",
-    "id,legacy_code,name,barcode,group_id,reference,min_stock,price_cash,price_base,(select pg.name from product_group pg where pg.id=product.group_id) as group_name",
+    `id,legacy_code,name,barcode,group_id,reference,min_stock,price_cash,price_base,${productCurrentStockSql} as current_stock,(select pg.name from product_group pg where pg.id=product.group_id) as group_name`,
     ["name", "legacy_code", "barcode"],
   ),
   "product-groups": catalog("product_group", "id,legacy_code,name"),
@@ -231,6 +233,12 @@ const configs: Record<string, Config> = {
     sorts: { created_at: "created_at", filename: "filename" },
     defaultSort: "created_at",
     defaultOrder: "desc",
+  },
+  'backup-executions': {
+    permissions: ['system:backup:read'], sql: backupExecutionSql,
+    map: row => mapBackupExecution(row as Parameters<typeof mapBackupExecution>[0]),
+    searches: ['backup_filename'],
+    sorts: {started_at:'started_at'}, defaultSort:'started_at', defaultOrder:'desc',
   },
   printers: {
     permissions: ["sales:read", "printers:manage"],

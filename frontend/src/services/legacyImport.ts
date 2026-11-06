@@ -43,6 +43,13 @@ export type LegacyImportSummary = {
   > & { mismatches?: string[] };
   customerPayments?: number;
   stockMovements?: number;
+  productStock?: {
+    products: number;
+    verified: number;
+    adjusted: number;
+    changed: number;
+    sourceSha256: string;
+  };
   customerBalances?: {
     customers: number;
     verified: number;

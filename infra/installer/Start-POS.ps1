@@ -12,7 +12,6 @@ try {
   if($settings.status -ne 'ready'){throw 'Instalacao/atualizacao pendente. Use o instalador para reparar ou o diagnostico.'}
   Prepare-PosDocker $false
   $null=Invoke-PosCompose $Root @('up','-d','--wait','--wait-timeout','180','--pull','never')
-  $lastAttempt=[DateTime]::MinValue
   while(-not (Test-Path -LiteralPath $stopFile)) {
     if($null -eq $agent -or $agent.HasExited) {
       if($null -ne $agent){$agent.Dispose();Start-Sleep -Seconds 5}
@@ -29,16 +28,8 @@ try {
       $agent=New-Object Diagnostics.Process;$agent.StartInfo=$info;$null=$agent.Start()
       Write-PosJson (Join-Path $Root 'runtime-status.json') @{state='running';atUtc=[DateTime]::UtcNow.ToString('o');supervisorPid=$PID;agentPid=$agent.Id}
     }
-    $lastSuccess=[DateTime]::MinValue
-    $backupFile=Join-Path $Root 'backup-status.json'
-    if(Test-Path -LiteralPath $backupFile){$backup=Read-PosJson $backupFile;if($backup.lastSuccessUtc){$lastSuccess=[DateTime]::Parse($backup.lastSuccessUtc).ToUniversalTime()}}
-    if(([DateTime]::UtcNow-$lastSuccess).TotalHours -ge 24 -and ([DateTime]::UtcNow-$lastAttempt).TotalHours -ge 1){
-      $lastAttempt=[DateTime]::UtcNow
-      try {
-        $null=Invoke-PosCompose $Root @('exec','-T','api','node','dist/scripts/store-backup.js')
-        Write-PosJson $backupFile @{ok=$true;lastSuccessUtc=[DateTime]::UtcNow.ToString('o');message='Backup e replica conferidos'}
-      }catch{Write-PosJson $backupFile @{ok=$false;lastSuccessUtc=($lastSuccess.ToString('o'));message='Falha no backup. Abra Diagnosticar-POS e confira destino, espaco e Docker.'}}
-    }
+    # Daily automatic backups are owned by the backend schedule.
+    # The supervisor must not bypass its enabled flag or selected time.
     Start-Sleep -Seconds 2
   }
 } catch {

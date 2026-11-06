@@ -43,9 +43,9 @@ O instalador oferece **Nuvem**, com ou sem impressora Windows, para conectar os 
 Para gerar o pacote no Windows com Docker Linux/amd64:
 
 ```powershell
-./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.3' -CompatibleFrom '1.0.0-store.2'
+./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.4' -CompatibleFrom '1.0.0-store.3'
 # Cliente Nuvem: Windows, sem Docker no build ou nos caixas
-./infra/installer/Build-CloudInstaller.ps1 -Version '1.0.0-store.3'
+./infra/installer/Build-CloudInstaller.ps1 -Version '1.0.0-store.4'
 ```
 
 Distribua o ZIP inteiro de `artifacts/POS-Loja-<versão>.zip` por canal confiável com seu SHA256. Extraia e abra `Instalar-POS.exe` no Caixa 1. O instalador gera `Terminal-POS` para o Caixa 2. A inicialização automática ocorre após login na conta Windows da instalação. Consulte os guias para os pré-requisitos de rede, Docker, impressora e backup externo e os gates de produto ainda pendentes antes de vendas reais.
@@ -148,13 +148,26 @@ powershell -ExecutionPolicy Bypass -File .\infra\remove-dev-certificate.ps1
   - `GET /api/v1/customers/{customerId}/payments/{paymentId}/receipt` – receipt payload with previous/new balance
 - Configure company header on receipts/reports via `COMPANY_NAME`, `COMPANY_ADDRESS`, `COMPANY_TAX_ID` in your environment.
 
+### Product Stock
+
+The product catalog list and its existing modal display **Estoque atual / Current stock** in PT-BR and EN, with localized separators and up to three decimal places. Product creation accepts an initial quantity, defaulting to zero, and atomically saves its operational stock entry with the product; existing-product editing shows the computed quantity as read-only. Imported products start from `PRODUTO.DBF.ESTO_PROD`; historical movements are reconciled to avoid counting them twice, and subsequent operational movements retain their effect. The quantity uses the same calculation as the critical-stock dashboard. Native products without movements show zero. See [product stock](docs/product-stock.md) for creation, the import migration, repair of existing imports and tests. No seed change is required.
+
+### Automatic Backup Scheduling
+
+Backup & Restore supports a persisted daily schedule, a fixed 24-hour picker, the store database time zone, and paginated manual/automatic execution history in PT-BR/EN. Scheduling starts disabled; configuration requires `system:backup:schedule` or `*`. The backend catches up once after downtime and reuses managed backup locks, integrity, replica and retention controls across instances. Installation preferences and automatic execution receipts survive business-data restore. See [backup scheduling](docs/backup-scheduling.md).
+
 ### Sales Receipt Printing
 
+- `PRINT_MODE=browser` opens the existing receipt page and native browser print dialog, without a local agent or queue job. `direct` and `queue` remain available for their existing integrations.
+
 - POS checkout now collects payment method, amount paid, and change before saving the sale.
+- Checkout starts without a payment method selected and keeps base prices until the operator chooses one. Confirmation requires a selection. The UI and receipts support PT-BR and EN.
 - Sale persistence no longer trusts browser-submitted item prices or totals:
   - the API recalculates each item price from the product catalog before saving;
-  - every payment method uses `product.price_cash`, falling back to `price_base` only when the cash price is unavailable;
-  - changing the payment method never changes item prices;
+  - product cards and the cart use `product.price_base`; selecting **À vista / Cash** (`cash`) at checkout uses `product.price_cash`;
+  - card, bank transfer, other, credit, and credit with down payment use `price_base`; when the preferred price is missing, the other configured price is used (zero remains a valid price);
+  - whenever the other price is used, the cart/checkout shows a persistent PT-BR/EN notice with the product, missing price, price used and amount per unit;
+  - changing the payment method recalculates item prices, subtotal, total, amount paid, change, and outstanding balance while preserving the entered discount;
   - subtotal, total, pending amount, and change are normalized on the server.
 - Completed sales now write aggregated `stock_movement` rows per product with `type = 'venda'`.
 - Cancelling a sale writes the inverse `stock_movement` entries with `type = 'entrada'`, keeping operational stock and the critical-stock dashboard consistent.

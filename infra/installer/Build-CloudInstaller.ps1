@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$Version='1.0.0-store.3',[string]$SigningThumbprint='')
+param([string]$Version='1.0.0-store.4',[string]$SigningThumbprint='')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Pos.Common.ps1')
 . (Join-Path $PSScriptRoot 'Pos.Build.ps1')

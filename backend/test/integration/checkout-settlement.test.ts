@@ -210,7 +210,7 @@ describe("operational checkout settlement over HTTP and real PostgreSQL", () => 
   it.each(["cash", "card", "bank", "other"])(
     "persists full settlement and returns the correct change for %s",
     async (method) => {
-      const total = 100;
+      const total = method === "cash" ? 100 : 120;
       const response = await request(app)
         .post("/sales")
         .send(payload({ payment_method: method, amount_paid: total + 10 }));
@@ -235,8 +235,8 @@ describe("operational checkout settlement over HTTP and real PostgreSQL", () => 
     },
   );
   it.each([
-    { payment_method: "credit", amount_paid: 0, pending: 100 },
-    { payment_method: "credit_with_entry", amount_paid: 20, pending: 80 },
+    { payment_method: "credit", amount_paid: 0, pending: 120 },
+    { payment_method: "credit_with_entry", amount_paid: 20, pending: 100 },
   ])(
     "allows explicit customer debt for $payment_method",
     async ({ pending, ...payment }) => {
@@ -245,7 +245,7 @@ describe("operational checkout settlement over HTTP and real PostgreSQL", () => 
         .send(payload({ customer_id: customerId, ...payment }));
       expect(response.status).toBe(201);
       expect(response.body).toMatchObject({
-        total: 100,
+        total: 120,
         amount_paid: payment.amount_paid,
         pending_amount: pending,
         change_amount: 0,
@@ -284,5 +284,143 @@ describe("operational checkout settlement over HTTP and real PostgreSQL", () => 
       pending_amount: 0,
       change_amount: 0,
     });
+  });
+
+  it("preserves base prices in details, receipts and stock reversals after catalog changes", async () => {
+    const response = await request(app)
+      .post("/sales")
+      .send(
+        payload({
+          payment_method: "card",
+          amount_paid: 250,
+          discount: 5,
+          subtotal: 1,
+          total: 1,
+          change_amount: 999,
+          items: [
+            {
+              product_id: productId,
+              quantity: 2,
+              unit_price: 0.01,
+              total: 0.02,
+            },
+          ],
+        }),
+      );
+    expect(response.status, JSON.stringify(response.body)).toBe(201);
+    expect(response.body).toMatchObject({
+      subtotal: 240,
+      discount: 5,
+      total: 235,
+      change_amount: 15,
+    });
+    expect(response.body.items[0]).toMatchObject({
+      unit_price: 120,
+      quantity: 2,
+      total: 240,
+    });
+    try {
+      await query(
+        "update product set price_base=999,price_cash=777 where id=$1",
+        [productId],
+      );
+      const detail = await request(app).get(`/sales/${response.body.id}`);
+      expect(detail.body.total).toBe(235);
+      expect(detail.body.items[0].unit_price).toBe(120);
+      for (const locale of ["pt-BR", "en"]) {
+        const receipt = await request(app)
+          .get(`/sales/${response.body.id}/receipt`)
+          .query({ locale });
+        expect(receipt.status).toBe(200);
+        expect(receipt.body.sale).toMatchObject({
+          subtotal: 240,
+          discount: 5,
+          total: 235,
+          change_amount: 15,
+        });
+        expect(receipt.body.items[0]).toMatchObject({
+          unit_price: 120,
+          total: 240,
+        });
+        expect(receipt.body.plain_text).toContain(
+          locale === "en" ? "BRL 235.00" : "R$ 235,00",
+        );
+      }
+      const cancelled = await request(app)
+        .post(`/sales/${response.body.id}/cancel`)
+        .send({ reason: "Synthetic catalog price change" });
+      expect(cancelled.status).toBe(200);
+      const movements = (
+        await query(
+          "select type, quantity::text, unit_value::text, total::text from stock_movement where sale_id=$1 order by type",
+          [response.body.id],
+        )
+      ).rows;
+      expect(movements).toEqual([
+        {
+          type: "entrada",
+          quantity: "2.000",
+          unit_value: "120.00",
+          total: "240.00",
+        },
+        {
+          type: "venda",
+          quantity: "2.000",
+          unit_value: "120.00",
+          total: "240.00",
+        },
+      ]);
+    } finally {
+      await query(
+        "update product set price_base=120,price_cash=100 where id=$1",
+        [productId],
+      );
+    }
+  });
+
+  it.each([
+    { method: "cash", cash: null, base: 120, expected: 120 },
+    { method: "card", cash: 100, base: null, expected: 100 },
+    { method: "cash", cash: 0, base: 120, expected: 0 },
+    { method: "card", cash: 100, base: 0, expected: 0 },
+  ])(
+    "accepts the available catalog price including zero: %j",
+    async ({ method, cash, base, expected }) => {
+      try {
+        await query(
+          "update product set price_cash=$2,price_base=$3 where id=$1",
+          [productId, cash, base],
+        );
+        const response = await request(app)
+          .post("/sales")
+          .send(payload({ payment_method: method, amount_paid: expected }));
+        expect(response.status, JSON.stringify(response.body)).toBe(201);
+        expect(response.body.total).toBe(expected);
+        expect(response.body.items[0].unit_price).toBe(expected);
+      } finally {
+        await query(
+          "update product set price_base=120,price_cash=100 where id=$1",
+          [productId],
+        );
+      }
+    },
+  );
+
+  it("rejects a product without either price before writing anything", async () => {
+    const before = await writeCounts();
+    try {
+      await query(
+        "update product set price_cash=null,price_base=null where id=$1",
+        [productId],
+      );
+      const response = await request(app).post("/sales").send(payload());
+      expect(response.status).toBe(400);
+      expect(await writeCounts()).toEqual(before);
+    } finally {
+      await query(
+        "update product set price_base=120,price_cash=100 where id=$1",
+        [productId],
+      );
+    }
   });
 });

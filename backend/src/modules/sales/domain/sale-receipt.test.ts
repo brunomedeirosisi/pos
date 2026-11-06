@@ -96,6 +96,7 @@ describe("mapSaleReceipt", () => {
     expect(receipt.plain_text).toContain("Maria Silva");
     expect(receipt.plain_text).toContain("Troco");
     expect(receipt.plain_text).toContain("Total compra");
+    expect(receipt.plain_text).toContain("A vista");
   });
 
   it("builds an english receipt with translated headings", () => {

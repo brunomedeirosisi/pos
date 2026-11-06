@@ -9,16 +9,20 @@ function Probe() {
   const value = usePrinterDestination();
   return (
     <output>
-      {JSON.stringify({ id: value.printerId, canPrint: value.canPrint })}
+      {JSON.stringify({
+        id: value.printerId,
+        canPrint: value.canPrint,
+        visible: value.selection.visible,
+      })}
     </output>
   );
 }
-function render(enabled: boolean, binding = printer) {
+function render(enabled: boolean, binding = printer, mode = "queue") {
   vi.stubGlobal("window", { localStorage: { getItem: () => binding } });
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
-  client.setQueryData(["print-info"], { mode: "queue", store_id: store });
+  client.setQueryData(["print-info"], { mode, store_id: store });
   client.setQueryData(["print-printer-binding", store, binding], {
     items: [{ id: printer, enabled, online: false, display_name: "Terminal" }],
   });
@@ -34,6 +38,15 @@ function render(enabled: boolean, binding = printer) {
 }
 afterEach(() => vi.unstubAllGlobals());
 describe("checkout destination before the first print", () => {
+  it.each(["choose", printer])(
+    "prints through the browser without an agent or a valid saved destination: %s",
+    (binding) => {
+      const html = render(false, binding, "browser");
+      expect(html).toContain("&quot;canPrint&quot;:true");
+      expect(html).toContain("&quot;visible&quot;:false");
+      expect(html).not.toContain("&quot;id&quot;");
+    },
+  );
   it("uses the Terminal binding on the first render and permits its offline queue", () => {
     const html = render(true);
     expect(html).toContain(printer);

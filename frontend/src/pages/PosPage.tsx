@@ -28,6 +28,8 @@ import { buildSaleInput } from "./pos/buildSaleInput";
 import {
   tryCheckoutPricingPreview,
   projectCustomerDebtAfterSale,
+  resolveCheckoutPrice,
+  resolveCheckoutUnitPrice,
 } from "./pos/pricing";
 import { CurrencyInput } from "../components/ui/CurrencyInput";
 import { formatCurrencyBrl } from "../utils/number";
@@ -54,6 +56,7 @@ export function PosPage(): JSX.Element {
   const navigate = useNavigate();
   const {
     isPrinting,
+    printError,
     canPrint,
     printerSelection,
     printReceipt,
@@ -67,7 +70,9 @@ export function PosPage(): JSX.Element {
   const saleDate = chosenSaleDate ?? suggestedSaleDate;
   const saleDateInput = useRef<HTMLInputElement>(null);
   const [isCheckoutModalOpen, setCheckoutModalOpen] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<SalePaymentMethod>("cash");
+  const [paymentMethod, setPaymentMethod] = useState<SalePaymentMethod | null>(
+    null,
+  );
   const [amountPaid, setAmountPaid] = useState<number>(0);
   const [entryAmount, setEntryAmount] = useState<number | null>(null);
   const [completedSale, setCompletedSale] = useState<{
@@ -172,6 +177,54 @@ export function PosPage(): JSX.Element {
   const isCreditSale =
     paymentMethod === "credit" || paymentMethod === "credit_with_entry";
   const isCreditWithEntry = paymentMethod === "credit_with_entry";
+  const activePricingMethod = isCheckoutModalOpen ? paymentMethod : null;
+  const priceFallbackItems = useMemo(
+    () =>
+      items.flatMap((item) => {
+        const price = resolveCheckoutPrice(item, activePricingMethod);
+        return price.usesFallback
+          ? [
+              {
+                productId: item.productId,
+                name: item.name,
+                unitPrice: price.unitPrice,
+              },
+            ]
+          : [];
+      }),
+    [items, activePricingMethod],
+  );
+  const priceFallbackNotice = priceFallbackItems.length > 0 && (
+    <div
+      className="receipt-summary-box"
+      role="status"
+      aria-label={t("sales.priceFallbackTitle")}
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <strong>{t("sales.priceFallbackTitle")}</strong>
+      <ul>
+        {priceFallbackItems.map((item) => (
+          <li key={item.productId}>
+            {t("sales.priceFallbackNotice", {
+              name: item.name,
+              missingPrice: t(
+                activePricingMethod === "cash"
+                  ? "products.priceCash"
+                  : "products.priceBase",
+              ),
+              usedPrice: t(
+                activePricingMethod === "cash"
+                  ? "products.priceBase"
+                  : "products.priceCash",
+              ),
+              amount: formatCurrencyBrl(item.unitPrice),
+            })}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
   const validCheckoutPreview = useMemo(
     () => tryCheckoutPricingPreview(items, discount, paymentMethod),
     [items, discount, paymentMethod],
@@ -204,7 +257,7 @@ export function PosPage(): JSX.Element {
     : decimalNumber(paidCents > totalCents ? paidCents - totalCents : 0n, 2);
   const paymentMethodLabels: Record<SalePaymentMethod, string> = useMemo(
     () => ({
-      cash: t("customers.paymentMethods.cash"),
+      cash: t("sales.cashPaymentMethod"),
       card: t("customers.paymentMethods.card"),
       bank: t("customers.paymentMethods.bank"),
       other: t("customers.paymentMethods.other"),
@@ -218,7 +271,7 @@ export function PosPage(): JSX.Element {
     if (!isCheckoutModalOpen) {
       return;
     }
-    setPaymentMethod("cash");
+    setPaymentMethod(null);
     setAmountPaid(cartTotal);
     setEntryAmount(null);
   }, [cartTotal, isCheckoutModalOpen]);
@@ -251,7 +304,7 @@ export function PosPage(): JSX.Element {
 
   function handleAddProduct(product: Product) {
     try {
-      addProduct(product, "price_cash");
+      addProduct(product);
     } catch {
       toast.show(t("sales.invalidCheckoutValue"), "error");
     }
@@ -291,6 +344,10 @@ export function PosPage(): JSX.Element {
 
   function handleConfirmCheckout() {
     if (!validateSaleDate()) return;
+    if (!paymentMethod) {
+      toast.show(t("sales.selectPaymentMethod"), "error");
+      return;
+    }
     if (!validCheckoutPreview) {
       toast.show(t("sales.invalidCheckoutValue"), "error");
       return;
@@ -401,7 +458,15 @@ export function PosPage(): JSX.Element {
                     {product.barcode ?? product.legacy_code ?? "—"}
                   </span>
                   <span style={{ fontWeight: 600 }}>
-                    {formatCurrencyBrl(product.price_cash ?? 0)}
+                    {formatCurrencyBrl(
+                      resolveCheckoutUnitPrice(
+                        {
+                          priceBase: product.price_base,
+                          priceCash: product.price_cash,
+                        },
+                        null,
+                      ),
+                    )}
                   </span>
                 </button>
               ))}
@@ -493,7 +558,7 @@ export function PosPage(): JSX.Element {
                 <tr>
                   <th>{t("products.heading")}</th>
                   <th>{t("sales.quantity")}</th>
-                  <th>{t("products.priceCash")}</th>
+                  <th>{t("products.priceBase")}</th>
                   <th>{t("sales.total")}</th>
                   <th>{t("common.actions")}</th>
                 </tr>
@@ -570,6 +635,7 @@ export function PosPage(): JSX.Element {
               onValueChange={(value) => setDiscount(value ?? 0)}
             />
           </div>
+          {!isCheckoutModalOpen && priceFallbackNotice}
           <div className="totals">
             <div className="row">
               <span>{t("sales.subtotal")}</span>
@@ -614,7 +680,7 @@ export function PosPage(): JSX.Element {
             <p role="alert">{t("sales.invalidCheckoutValue")}</p>
           )}
           <PrinterDestinationSelector selection={printerSelection} />
-          <div className="receipt-summary-box">
+          <div className="receipt-summary-box" aria-live="polite">
             <div className="row">
               <span>{t("sales.saleDate")}</span>
               <strong>{formatDateDdMmYyyy(saleDate)}</strong>
@@ -639,18 +705,27 @@ export function PosPage(): JSX.Element {
             </label>
             <select
               id="payment-method"
-              value={paymentMethod}
+              value={paymentMethod ?? ""}
+              required
               onChange={(event) =>
-                setPaymentMethod(event.target.value as SalePaymentMethod)
+                setPaymentMethod(
+                  (event.target.value as SalePaymentMethod) || null,
+                )
               }
             >
+              <option value="" disabled>
+                {t("sales.selectPaymentMethod")}
+              </option>
               {paymentMethodOptions.map((method) => (
                 <option key={method} value={method}>
                   {paymentMethodLabels[method]}
                 </option>
               ))}
             </select>
+            <small className="text-muted">{t("sales.pricingHint")}</small>
           </div>
+
+          {priceFallbackNotice}
 
           {!isCreditWithEntry && (
             <div className="form-group">
@@ -663,7 +738,7 @@ export function PosPage(): JSX.Element {
                   if (isDecimalValue(value ?? 0, 2)) setAmountPaid(value ?? 0);
                   else toast.show(t("sales.invalidCheckoutValue"), "error");
                 }}
-                disabled={paymentMethod === "credit"}
+                disabled={!paymentMethod || paymentMethod === "credit"}
               />
               <small className="text-muted">
                 {t("sales.changeAmount")}: {formatCurrencyBrl(calculatedChange)}
@@ -750,6 +825,7 @@ export function PosPage(): JSX.Element {
               disabled={
                 finalizeMutation.isPending ||
                 !validCheckoutPreview ||
+                !paymentMethod ||
                 !customerBalanceReady ||
                 Boolean(saleDateError)
               }
@@ -770,6 +846,9 @@ export function PosPage(): JSX.Element {
       >
         <div className="form-grid vertical">
           <p className="text-muted">{t("sales.receiptPrompt")}</p>
+          {printError && printError.saleId === completedSale?.id && (
+            <p role="alert">{printError.message}</p>
+          )}
           <div className="receipt-summary-box">
             <div className="row total-row">
               <span>{t("sales.total")}</span>

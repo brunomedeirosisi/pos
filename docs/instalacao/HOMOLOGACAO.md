@@ -56,7 +56,7 @@ Os resultados de uma execução são registrados em `docs/test-evidence` e no re
 - [ ] Reiniciar e entrar na conta: Docker, containers e agente iniciam; sem login o supervisor não opera.
 - [ ] Testar desligamento/rede indisponível/suspensão. Definir política operacional para que o Principal permaneça ligado e conectado durante o expediente.
 - [ ] Criar backup manual; conferir arquivo, metadados e SHA256 local/externo. Simular destino indisponível e confirmar falha visível sem declarar sucesso.
-- [ ] Observar backup automático vencido e nova tentativa após falha; conferir `backup-status.json` e capacidade do destino.
+- [ ] Habilitar o backup diário na aplicação; observar uma retomada após horário perdido e a continuidade do próximo horário após falha no histórico de execuções. Desabilitar e conferir que o supervisor Windows não cria backups periódicos. Conferir capacidade e réplica do destino.
 - [ ] Restaurar uma cópia externa em projeto isolado e reconciliar vendas, itens, recebimentos, estoque, usuários e fila/journal. Nunca ensaiar sobre o banco operacional.
 - [ ] Registrar RPO/RTO medidos e procedimento assistido para perda do PC/perfil/DPAPI. Backup do banco não inclui CA, configurações nem segredos Windows.
 - [ ] Definir retenção, proteção e acesso às cópias externas; a aplicação não criptografa os ZIPs.

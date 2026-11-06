@@ -17,7 +17,7 @@ const paymentMethodLabels: Record<
   Record<SalePaymentMethod, string>
 > = {
   "pt-BR": {
-    cash: "Dinheiro",
+    cash: "À vista",
     card: "Cartao",
     bank: "Transferencia",
     other: "Outro",

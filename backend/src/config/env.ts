@@ -68,7 +68,7 @@ const BaseEnvSchema = z.object({
   COMPANY_TAX_ID: z.string().min(1).default('N/A'),
   PRINT_AGENT_URL: z.string().url().optional(),
   STORE_ID: z.string().uuid().optional(),
-  PRINT_MODE: z.enum(['direct', 'queue']).default('direct'),
+  PRINT_MODE: z.enum(['browser', 'direct', 'queue']).default('direct'),
   PRINT_AGENT_TOKEN_SHA256: z.preprocess(emptyStringAsUndefined, z.string().regex(/^[a-f0-9]{64}$/).optional()),
   PRINT_PRINTER_NAME: z.string().min(1).max(200).default('Epson LX-300+'),
   PRINT_QUEUE_LEASE_SECONDS: z.coerce.number().int().min(60).max(600).default(120),

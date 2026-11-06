@@ -1,6 +1,9 @@
-import { HttpError } from '../errors.js';
-import { getEnv } from '../config/env.js';
-import type { SaleReceiptDto, SaleReceiptLocale } from '../modules/sales/contracts/sales-contracts.js';
+import { HttpError } from "../errors.js";
+import { getEnv } from "../config/env.js";
+import type {
+  SaleReceiptDto,
+  SaleReceiptLocale,
+} from "../modules/sales/contracts/sales-contracts.js";
 
 type PrintReceiptPayload = {
   receipt: SaleReceiptDto;
@@ -9,30 +12,30 @@ type PrintReceiptPayload = {
 };
 
 export class PrintAgentService {
-  readonly printerModel = 'Epson LX-300+';
+  readonly printerModel = "Epson LX-300+";
 
   async print(payload: PrintReceiptPayload): Promise<void> {
     const env = getEnv();
     if (!env.PRINT_AGENT_URL) {
-      throw new HttpError(
-        503,
-        'receipt printer is not configured. Start the local print agent and set PRINT_AGENT_URL.',
-      );
+      throw new HttpError(503, "receipt_printer_not_configured");
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), env.PRINT_AGENT_TIMEOUT_MS);
+    const timeout = setTimeout(
+      () => controller.abort(),
+      env.PRINT_AGENT_TIMEOUT_MS,
+    );
 
     try {
       const response = await fetch(env.PRINT_AGENT_URL, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          job_type: 'sale-receipt',
+          job_type: "sale-receipt",
           printer_model: this.printerModel,
-          mode: 'text',
+          mode: "text",
           copies: payload.copies,
           locale: payload.locale,
           receipt_code: payload.receipt.sale.code,
@@ -46,8 +49,8 @@ export class PrintAgentService {
         const details = await response.text().catch(() => response.statusText);
         throw new HttpError(
           503,
-          'receipt printer rejected the job. Check the Epson LX-300+ connection and local print agent.',
-          details || response.statusText
+          "receipt_printer_rejected",
+          details || response.statusText,
         );
       }
     } catch (error) {
@@ -55,17 +58,14 @@ export class PrintAgentService {
         throw error;
       }
 
-      if ((error as Error).name === 'AbortError') {
-        throw new HttpError(
-          503,
-          'receipt printer timed out. Check the Epson LX-300+ connection and local print agent.'
-        );
+      if ((error as Error).name === "AbortError") {
+        throw new HttpError(503, "receipt_printer_timeout");
       }
 
       throw new HttpError(
         503,
-        'receipt printer is unavailable. Check the Epson LX-300+ connection and local print agent.',
-        error instanceof Error ? error.message : undefined
+        "receipt_printer_unavailable",
+        error instanceof Error ? error.message : undefined,
       );
     } finally {
       clearTimeout(timeout);

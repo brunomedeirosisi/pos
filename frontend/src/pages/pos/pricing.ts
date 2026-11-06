@@ -28,7 +28,7 @@ type CheckoutSourceItem = {
 export function projectCustomerDebtAfterSale(
   currentBalance: number,
   pendingAmount: number,
-  paymentMethod: SalePaymentMethod,
+  paymentMethod: SalePaymentMethod | null,
 ): number {
   const addedDebt =
     paymentMethod === "credit" || paymentMethod === "credit_with_entry"
@@ -41,17 +41,32 @@ function normalizePrice(value: number | null | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-export function resolveCheckoutUnitPrice(
+export function resolveCheckoutPrice(
   item: Pick<CheckoutSourceItem, "priceCash" | "priceBase">,
-  _paymentMethod: SalePaymentMethod,
+  paymentMethod: SalePaymentMethod | null,
+): { unitPrice: number; usesFallback: boolean } {
+  const primaryPrice = normalizePrice(
+    paymentMethod === "cash" ? item.priceCash : item.priceBase,
+  );
+  const fallbackPrice = normalizePrice(
+    paymentMethod === "cash" ? item.priceBase : item.priceCash,
+  );
+  return {
+    unitPrice: primaryPrice ?? fallbackPrice ?? 0,
+    usesFallback: primaryPrice == null && fallbackPrice != null,
+  };
+}
+
+export function resolveCheckoutUnitPrice(
+  ...args: Parameters<typeof resolveCheckoutPrice>
 ): number {
-  return normalizePrice(item.priceCash) ?? normalizePrice(item.priceBase) ?? 0;
+  return resolveCheckoutPrice(...args).unitPrice;
 }
 
 export function buildCheckoutPricingPreview(
   items: CheckoutSourceItem[],
   discount: number,
-  paymentMethod: SalePaymentMethod,
+  paymentMethod: SalePaymentMethod | null,
 ): {
   items: CheckoutPricedItem[];
   subtotal: number;

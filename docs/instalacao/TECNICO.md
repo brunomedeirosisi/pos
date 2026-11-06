@@ -2,7 +2,7 @@
 
 ## Escopo e arquitetura
 
-O Modo Nuvem de 1.0.0-store.3 conecta os caixas a uma origem HTTPS pública e mantém somente navegador/agente no Windows. Build leve, requisitos do servidor, TLS e migração estão em [NUVEM.md](NUVEM.md). Ele não provisiona hospedagem. A arquitetura abaixo descreve a alternativa local.
+O Modo Nuvem, disponível desde 1.0.0-store.3, conecta os caixas a uma origem HTTPS pública e mantém somente navegador/agente no Windows. O release atual é 1.0.0-store.4. Build leve, requisitos do servidor, TLS e migração estão em [NUVEM.md](NUVEM.md). Ele não provisiona hospedagem. A arquitetura abaixo descreve a alternativa local.
 
 O ensaio de publicação temporária do checkout local tem roteiro em [TESTE-INTERNET.md](TESTE-INTERNET.md), com topologia do túnel, confiança da CA, configuração CORS, diagnóstico e distinção entre navegador e agentes de impressão. Ele usa `docker-compose.yml` da raiz e não o Compose do instalador Principal.
 
@@ -40,7 +40,7 @@ O instalador não seleciona o Compose de desenvolvimento. Gera um projeto estáv
 | `Pos.Terminal.ps1` | Pareamento individual, DPAPI, instalação/reparo do Terminal e URL de destino público. |
 | `Start-Terminal.ps1` / `Parar-Terminal.ps1` / `Diagnosticar-Terminal.ps1` | Ciclo de vida do agente Terminal após login, sem Docker ou portas de entrada. |
 | `Firewall-POS.ps1` | Único auxiliar elevado: regra TCP443 para IP atribuído, rede Privada e LocalSubnet; permite retirar somente essa regra. |
-| `Start-POS.ps1` | Supervisor após login: aguarda Docker, inicia serviços/agente e realiza backup vencido. |
+| `Start-POS.ps1` | Supervisor após login: aguarda Docker e inicia serviços/agente. O backend controla o backup agendado. |
 | `Parar-POS.ps1` | Sinal de parada, espera do agente e parada dos containers sem remover dados. |
 | `Atualizar-POS.ps1` | Atualização somente de versão explicitamente compatível, com backup prévio e bloqueio após falha. |
 | `Desativar-POS.ps1` | Remove inicialização/regra de acesso; mantém volumes e arquivos. |
@@ -58,8 +58,8 @@ No computador de desenvolvimento Windows x64, use Git, Docker Desktop Linux/amd6
 ```powershell
 ./infra/installer/Test-Installer.ps1 -NodePath (Get-Command node.exe).Source
 ./infra/installer/Test-CloudHttps.ps1 -NodePath (Get-Command node.exe).Source
-./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.3' -CompatibleFrom '1.0.0-store.2'
-./infra/installer/Build-CloudInstaller.ps1 -Version '1.0.0-store.3'
+./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.4' -CompatibleFrom '1.0.0-store.3'
+./infra/installer/Build-CloudInstaller.ps1 -Version '1.0.0-store.4'
 ```
 
 O runtime Windows obtido pelo builder também é usado nos testes; Node instalado localmente não é exigido pelo build. O parâmetro `-NodePath` do teste é opcional para uma execução manual sem Node. O build exige acesso à rede para dependências/imagens/runtime. Seus temporários ficam em uma pasta `pos-store-build-*` sob o Temp do usuário, informada no log.
@@ -88,7 +88,7 @@ Para assinar um release, forneça `-SigningThumbprint` com um certificado de cod
 Atualizações futuras precisam declarar a versão de origem após ensaio de upgrade:
 
 ```powershell
-./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.3' -CompatibleFrom '1.0.0-store.2'
+./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.4' -CompatibleFrom '1.0.0-store.3'
 ```
 
 `CompatibleFrom` é uma declaração do mantenedor, não uma prova automática de compatibilidade de schema. O gate de release deve incluir migrações, leitura de dados anteriores, backup/restore em alvo isolado e preservação de operações. O problema de checksums/privilégios de migração da TSK-038 continua pendente; não aprove releases apenas por esse campo.
@@ -119,7 +119,9 @@ O auxiliar elevado de firewall valida IP privado atribuído e perfil Privado. A 
 
 O atalho na pasta Inicializar chama PowerShell oculto, no usuário interativo da instalação. O supervisor usa lock de arquivo para evitar instâncias duplicadas e aguarda Docker. Não registra serviço SYSTEM nem pressupõe acesso de Session 0 à impressora. Docker e spooler precisam ser homologados nessa conta após login/reboot.
 
-O worker é iniciado com runtime do release e segredo por ambiente. O Principal mantém o destino `principal`; cada Terminal pareado recebe um UUID próprio. O supervisor registra estado/PIDs em runtime-status.json e tenta backup quando o último sucesso ultrapassa 24h; em falha, tenta depois de uma hora. A agenda depende da sessão/supervisor; não garante execução com PC desligado ou usuário desconectado.
+O worker é iniciado com runtime do release e segredo por ambiente. O Principal mantém o destino `principal`; cada Terminal pareado recebe um UUID próprio. O supervisor registra estado/PIDs em runtime-status.json. Os serviços Docker precisam estar ativos para executar o agendamento; o backend consulta o relógio do banco no fuso `America/Sao_Paulo`, independentemente de navegador ou agente aberto.
+
+O agendamento diário é controlado pelo backend e pela página Backup e Restauração; o supervisor Windows não cria backups periódicos independentes. Atualize o pacote do instalador junto com as imagens para remover o temporizador antigo. A instalação, a atualização e a ação explícita de diagnóstico continuam podendo criar backups de sistema. Configuração e operação: [agendamento](../backup-scheduling.md).
 
 A CLI de backup usa createManagedBackup e o mesmo preflight/lock/replicação/catalogação/retenção da aplicação. Ator nulo identifica execução de sistema, sem fingir um usuário humano. A instalação exige réplica; o caminho externo deve existir e ser acessível no container pelo UID 10001, com capacidade de publicação exclusiva/hardlinks. O verificador não demonstra que o dispositivo está fisicamente fora do host. Réplicas externas não sofrem retenção automática. Arquivos importados e Redis/AOF também têm volumes persistentes, mas isso não garante idempotência da importação.
 
@@ -207,10 +209,14 @@ Troca de máquina/conta/IP/CA requer plano assistido: backup externo validado, a
 Reprodução do ensaio de release, após construir o pacote (requer Node no host e Docker Compose com suporte a `!override`):
 
 ```powershell
-node infra/installer/test-store.mjs --bundle artifacts/POS-Loja-1.0.0-store.3 --evidence docs/test-evidence/installer-cloud-store-20261027.json
+node infra/installer/test-store.mjs --bundle artifacts/POS-Loja-1.0.0-store.4 --evidence docs/test-evidence/installer-store-20261105.json
+# Upgrade real, inicializando o banco com o init.sql da versao anterior:
+node infra/installer/test-store.mjs --bundle artifacts/POS-Loja-1.0.0-store.4 --upgrade-from artifacts/POS-Loja-1.0.0-store.3 --evidence docs/test-evidence/installer-upgrade-20261105.json
 ```
 
 Esse ensaio usa o projeto fixo `pos-installer-smoke`, volumes próprios sintéticos, porta efêmera somente em loopback e sub-rede de teste `172.29.74.0/24`. Limpa apenas esse projeto no início/fim. Não execute dois ensaios simultâneos. A saída do spooler é injetada/simulada; HTTPS, duas sessões, fila, API, banco, backup e bind externo são reais. O teste não comprova que o diretório temporário de réplica está fisicamente em outro dispositivo.
+
+O ensaio também verifica as cinco migrações posteriores à store.3, o decodificador 7-Zip na imagem final, a paginação, o agendamento inicialmente desabilitado, a execução automática com réplica/checksum e a persistência da agenda após recriar a API. No upgrade, cria backup usando a API antiga e preserva sessão, venda, trabalhos pendentes, credencial e conteúdo dos recibos. `Test-Installer.ps1 -NodePath` inclui os contratos de backup do supervisor nos builds e no CI Windows.
 
 O checklist [HOMOLOGACAO.md](HOMOLOGACAO.md) registra os ensaios físicos/reboot/rede/backup que precisam ocorrer na loja. A evidência automatizada entregue não certifica drivers, BIOS, rede real, NAS/UNC, assinatura comercial ou regras de negócio pendentes. Não há dependência nova de npm para esta entrega.
 

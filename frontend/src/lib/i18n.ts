@@ -49,6 +49,48 @@ const baseCommon = {
 export const resources = {
   en: {
     translation: {
+      timeInput: {
+        openPicker: "Open time picker",
+        title: "Choose a time",
+        format: "HH:mm (24 hours)",
+        hour: "Hour",
+        minute: "Minute",
+      },
+      backupSchedule: {
+        unsaved: "Unsaved changes.",
+        title: "Automatic backup",
+        enable: "Enable automatic backup",
+        time: "Automatic backup time",
+        timezone: "Time zone: {{timezone}}",
+        enabled: "Saved setting: automatic backup is enabled.",
+        disabled: "Saved setting: automatic backup is disabled.",
+        nextRun: "Next automatic backup",
+        notScheduled: "Not scheduled",
+        saved: "Backup schedule saved.",
+        loadError: "Could not load the backup schedule.",
+        invalidTime: "Enter a valid time in HH:mm (00:00–23:59).",
+        catchUp:
+          "If the server is offline at the scheduled time, one pending backup runs when it returns. Disabling stops new automatic runs; a run already in progress finishes normally.",
+        lastRun: "Last automatic run",
+        never: "No automatic runs yet.",
+        history: "Backup execution history",
+        type: "Execution type",
+        result: "File or error details",
+        scheduledFor: "Scheduled for {{date}}",
+        interrupted: "The backup operation was interrupted.",
+        status: {
+          running: "Running",
+          completed: "Completed",
+          failed: "Failed",
+        },
+        types: {
+          manual: "Manual",
+          automatic: "Automatic",
+          system: "System",
+          upload: "Uploaded",
+        },
+      },
+
       dateInput: {
         openCalendar: "Open calendar",
         chooseDate: "Choose a date",
@@ -129,6 +171,8 @@ export const resources = {
       },
       common: baseCommon,
       apiErrors: {
+        internalError:
+          "The operation could not be completed. Contact the person responsible for this system.",
         paymentReportLimitExceeded:
           "The selection exceeds 5,000 payments. Narrow the date or payment method filters.",
         paymentReportInconsistent:
@@ -246,6 +290,9 @@ export const resources = {
         priceCash: "Cash Price",
         priceBase: "Base Price",
         minStock: "Minimum Stock",
+        currentStock: "Current stock",
+        initialStockHint: "Initial quantity on hand. Leave blank for zero.",
+        invalidInitialStock: "Enter a quantity from 0 to 99,999,999,999.999, with up to 3 decimal places.",
         reference: "Reference",
         addTitle: "Add product",
         editTitle: "Edit product",
@@ -403,11 +450,36 @@ export const resources = {
         editTitle: "Edit payment term",
       },
       sales: {
+        browserPrintingRequired:
+          "This environment prints through the browser. Open the printable receipt.",
+        printerNotConfigured:
+          "Direct receipt printing is not configured. Open the printable receipt or contact the person responsible for the printer.",
+        printerUnavailable:
+          "Could not connect to the local print agent. Make sure it is running on the printer computer, or open the printable receipt.",
+        printerTimeout:
+          "The print agent did not respond in time. Check the printer and its queue before requesting another copy.",
+        printerRejected:
+          "The print agent could not complete the request. Check the printer and its queue before requesting another copy.",
+        printQueueFull:
+          "The printer queue is full. Wait for pending jobs to finish before trying again.",
+        printReceiptSizeInvalid:
+          "This receipt cannot be sent to the printer because its content is empty or too large. Open the printable version.",
+        printRequestConflict:
+          "This print request was already used with different options. Check the print history before requesting another copy.",
+
         heading: "Sales",
         customer: "Customer",
         seller: "Seller",
         paymentTerm: "Payment Term",
         paymentMethod: "Payment Method",
+        cashPaymentMethod: "Cash",
+        selectPaymentMethod: "Select a payment method.",
+        unitPrice: "Unit price",
+        pricingHint:
+          "Cash uses the cash price. All other payment methods use the base price. If the selected price is missing, the other registered price is used.",
+        priceFallbackTitle: "Alternative price in use",
+        priceFallbackNotice:
+          "{{name}}: {{missingPrice}} is not set. Using {{usedPrice}}: {{amount}} per unit.",
         paymentDateTime: "Payment Date & Time",
         item: "Item",
         total: "Total",
@@ -439,8 +511,10 @@ export const resources = {
         confirmCheckout: "Confirm sale",
         orderNumber: "Order number (optional)",
         customerDebtAfterSale: "Customer debt after sale",
-        customerBalancePreview: "Estimated balance. Confirmed when the sale is completed.",
-        customerBalanceLoadError: "Unable to load the customer's balance. Try again before completing the sale.",
+        customerBalancePreview:
+          "Estimated balance. Confirmed when the sale is completed.",
+        customerBalanceLoadError:
+          "Unable to load the customer's balance. Try again before completing the sale.",
         fromDate: "From date",
         toDate: "To date",
         saleCreated: "Sale registered successfully!",
@@ -626,6 +700,7 @@ export const resources = {
           "Records processed by this import. Existing records may have been updated; these counts are not all new records.",
         balancesVerified:
           "{{count}} customer balances verified against CLIENTES.DBF.DEBITO. Historical discrepancies are recorded as reconciliation adjustments.",
+        stockVerified: "Initial stock verified for {{count}} products. Subsequent stock movements are preserved.",
         recordType: "Record type",
         processedRecords: "Records processed",
         mismatches:
@@ -651,6 +726,7 @@ export const resources = {
           sales: "Importing sales, orders and items",
           payments: "Importing customer payments",
           stock: "Importing stock movements",
+          productStock: "Reconciling initial product stock",
           reconciliation: "Generating reconciliation report",
           balances: "Reconciling authoritative customer balances",
           processing: "Processing data",
@@ -701,6 +777,48 @@ export const resources = {
   },
   "pt-BR": {
     translation: {
+      timeInput: {
+        openPicker: "Abrir seletor de horário",
+        title: "Escolher um horário",
+        format: "HH:mm (24 horas)",
+        hour: "Hora",
+        minute: "Minuto",
+      },
+      backupSchedule: {
+        unsaved: "Alterações não salvas.",
+        title: "Backup automático",
+        enable: "Habilitar backup automático",
+        time: "Horário do backup automático",
+        timezone: "Fuso horário: {{timezone}}",
+        enabled: "Configuração salva: backup automático habilitado.",
+        disabled: "Configuração salva: backup automático desabilitado.",
+        nextRun: "Próximo backup automático",
+        notScheduled: "Não agendado",
+        saved: "Agendamento de backup salvo.",
+        loadError: "Não foi possível carregar o agendamento de backup.",
+        invalidTime: "Informe um horário válido em HH:mm (00:00–23:59).",
+        catchUp:
+          "Se o servidor estiver desligado no horário agendado, um único backup pendente será executado quando ele voltar. Desativar impede novas execuções automáticas; uma execução em andamento termina normalmente.",
+        lastRun: "Última execução automática",
+        never: "Nenhuma execução automática realizada.",
+        history: "Histórico de execuções de backup",
+        type: "Tipo de execução",
+        result: "Arquivo ou detalhes do erro",
+        scheduledFor: "Agendado para {{date}}",
+        interrupted: "A operação de backup foi interrompida.",
+        status: {
+          running: "Em execução",
+          completed: "Concluído",
+          failed: "Falhou",
+        },
+        types: {
+          manual: "Manual",
+          automatic: "Automática",
+          system: "Sistema",
+          upload: "Importado",
+        },
+      },
+
       dateInput: {
         openCalendar: "Abrir calendário",
         chooseDate: "Escolher uma data",
@@ -824,6 +942,8 @@ export const resources = {
         error: "Erro",
       },
       apiErrors: {
+        internalError:
+          "Não foi possível concluir a operação. Consulte o responsável pelo sistema.",
         paymentReportLimitExceeded:
           "A seleção excede 5.000 pagamentos. Reduza o período ou filtre a forma de pagamento.",
         paymentReportInconsistent:
@@ -941,6 +1061,9 @@ export const resources = {
         priceCash: "Preço à vista",
         priceBase: "Preço base",
         minStock: "Estoque mínimo",
+        currentStock: "Estoque atual",
+        initialStockHint: "Quantidade inicial disponível. Deixe em branco para zero.",
+        invalidInitialStock: "Informe uma quantidade entre 0 e 99.999.999.999,999, com até 3 casas decimais.",
         reference: "Referência",
         addTitle: "Adicionar produto",
         editTitle: "Editar produto",
@@ -1099,11 +1222,36 @@ export const resources = {
         editTitle: "Editar condição",
       },
       sales: {
+        browserPrintingRequired:
+          "A impressão deste ambiente é feita pelo navegador. Abra o recibo imprimível.",
+        printerNotConfigured:
+          "A impressão direta de recibos não está configurada. Abra o recibo para impressão ou consulte o responsável pela impressora.",
+        printerUnavailable:
+          "Não foi possível conectar ao agente de impressão local. Confira se ele está em execução no computador da impressora ou abra o recibo para impressão.",
+        printerTimeout:
+          "O agente de impressão não respondeu a tempo. Confira a impressora e a fila antes de solicitar outra via.",
+        printerRejected:
+          "O agente de impressão não conseguiu concluir a solicitação. Confira a impressora e a fila antes de solicitar outra via.",
+        printQueueFull:
+          "A fila da impressora está cheia. Aguarde os trabalhos pendentes antes de tentar novamente.",
+        printReceiptSizeInvalid:
+          "O recibo não pode ser enviado à impressora porque está vazio ou é muito grande. Abra a versão para impressão.",
+        printRequestConflict:
+          "Esta solicitação de impressão já foi usada com opções diferentes. Confira o histórico de impressão antes de solicitar outra via.",
+
         heading: "Vendas",
         customer: "Cliente",
         seller: "Vendedor",
         paymentTerm: "Condição",
         paymentMethod: "Forma de pagamento",
+        cashPaymentMethod: "À vista",
+        selectPaymentMethod: "Selecione uma forma de pagamento.",
+        unitPrice: "Preço unitário",
+        pricingHint:
+          "À vista utiliza o preço à vista. As demais formas utilizam o preço base. Se o preço selecionado não estiver preenchido, será usado o outro preço cadastrado.",
+        priceFallbackTitle: "Preço alternativo em uso",
+        priceFallbackNotice:
+          "{{name}}: {{missingPrice}} não está preenchido. Usando {{usedPrice}}: {{amount}} por unidade.",
         paymentDateTime: "Data e hora do pagamento",
         item: "Produto",
         total: "Total",
@@ -1135,8 +1283,10 @@ export const resources = {
         confirmCheckout: "Confirmar venda",
         orderNumber: "Número do pedido (opcional)",
         customerDebtAfterSale: "Saldo devedor do cliente após a venda",
-        customerBalancePreview: "Saldo estimado. Confirmado ao concluir a venda.",
-        customerBalanceLoadError: "Não foi possível carregar o saldo do cliente. Tente novamente antes de concluir a venda.",
+        customerBalancePreview:
+          "Saldo estimado. Confirmado ao concluir a venda.",
+        customerBalanceLoadError:
+          "Não foi possível carregar o saldo do cliente. Tente novamente antes de concluir a venda.",
         fromDate: "Data inicial",
         toDate: "Data final",
         saleCreated: "Venda registrada com sucesso!",
@@ -1328,6 +1478,7 @@ export const resources = {
           "Registros processados nesta importação. Registros existentes podem ter sido atualizados; as quantidades não representam apenas novos cadastros.",
         balancesVerified:
           "{{count}} saldos de clientes conferidos com CLIENTES.DBF.DEBITO. Divergências históricas foram registradas como ajustes de reconciliação.",
+        stockVerified: "Estoque inicial conferido para {{count}} produtos. As movimentações posteriores são preservadas.",
         recordType: "Tipo de registro",
         processedRecords: "Registros processados",
         mismatches:
@@ -1353,6 +1504,7 @@ export const resources = {
           sales: "Importando vendas, pedidos e itens",
           payments: "Importando pagamentos de clientes",
           stock: "Importando movimentações de estoque",
+          productStock: "Conciliando o estoque inicial dos produtos",
           reconciliation: "Gerando relatório de reconciliação",
           balances: "Conciliando os saldos oficiais dos clientes",
           processing: "Processando dados",

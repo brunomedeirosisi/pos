@@ -257,7 +257,7 @@ export function createPrintSaleReceiptUseCase(
       }
       throw new HttpError(
         503,
-        "receipt printer is unavailable. Check the Epson LX-300+ connection and local print agent.",
+        "receipt_printer_unavailable",
         error instanceof Error ? error.message : undefined,
       );
     }

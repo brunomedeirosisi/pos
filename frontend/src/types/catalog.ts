@@ -7,6 +7,7 @@ export type Product = {
   group_id: string | null;
   reference: string | null;
   min_stock: number | null;
+  current_stock: number;
   price_cash: number | null;
   price_base: number | null;
 };
@@ -20,6 +21,8 @@ export type ProductInput = {
   price_cash?: number | null;
   price_base?: number | null;
 };
+
+export type ProductCreateInput = ProductInput & { initial_stock?: number };
 
 export type ProductGroup = {
   id: string;

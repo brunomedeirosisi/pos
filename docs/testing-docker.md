@@ -8,6 +8,42 @@ node infra/test-disposable.mjs --docker --images --backups --seeds
 
 Verified with Docker Engine 29.8.0 / Compose 5.5.1. The runner overlay uses Compose's `!reset` tag. The host Node process orchestrates Docker and sends image smoke requests; test suites and their npm dependencies execute in containers. No host npm or host `node_modules` is required in `--docker` mode.
 
+## Product catalog stock validation (2026-11-06)
+
+The backend and frontend Docker runners passed **931 tests and controls**: 231 backend unit tests, 295 PostgreSQL/Redis integration tests, 4 regressions, 7 measurement controls and 394 frontend tests. Lint, lint-rule canaries, typechecks and production builds passed for both workspaces with `TZ=America/Sao_Paulo`.
+
+The 31 new tests cover product stock over real PostgreSQL and the existing catalog UI in PT-BR/EN: zero, signed/fractional quantities, movement aliases, consistency with the critical-stock dashboard, product isolation, real checkout/cancellation, read permissions, read-only save behavior and table states. Shared list tests also verify stock after pagination. The API contract and operator documentation describe `current_stock` and its localized presentation. See [product stock](product-stock.md) and the [Docker runner evidence](test-evidence/product-stock-docker-20261106.log.gz).
+
+Commands used from the repository root:
+
+```powershell
+docker compose -p pos-phase0-tests -f infra/docker-compose.test.yml -f infra/docker-compose.test-runners.yml --profile runners build backend-tests frontend-tests
+docker compose -p pos-phase0-tests -f infra/docker-compose.test.yml -f infra/docker-compose.test-runners.yml --profile runners up -d --wait db redis
+docker compose -p pos-phase0-tests -f infra/docker-compose.test.yml -f infra/docker-compose.test-runners.yml --profile runners run --rm --no-deps -e TZ=America/Sao_Paulo backend-tests
+docker compose -p pos-phase0-tests -f infra/docker-compose.test.yml -f infra/docker-compose.test-runners.yml --profile runners run --rm --no-deps -e TZ=America/Sao_Paulo frontend-tests
+docker compose -p pos-phase0-tests -f infra/docker-compose.test.yml -f infra/docker-compose.test-runners.yml --profile runners down --volumes --remove-orphans
+```
+
+No dependency, schema or seed change was required. Agent, benchmark seed, backup and runtime-image suites were not repeated for this catalog change. Application containers and production data were not changed.
+
+## Initial imported product stock validation (2026-11-06)
+
+The subsequent import correction passed **951 tests and controls in Docker**: 241 backend unit tests, 305 PostgreSQL/Redis integration tests, 4 regressions, 7 measurement controls and 394 frontend tests. Lint, lint-rule canaries, typechecks and builds passed. Twenty additional tests cover the real `ESTO_PROD` source, missing/invalid fields, preserved product keys, stock without historical movements, transactional reconciliation, idempotence, repeat imports and preservation of operational sales/adjustments. Existing PT-BR/EN import-page tests now verify the additional stage and stock certification.
+
+The final API image also passed an isolated synthetic CLI check using real `pg_dump`: preview projected 53 units from an official source of 50 plus 3 operational units, a mismatched fingerprint was rejected, and apply created/validated a managed backup before persisting the verified balance. These checks used the disposable test database and a dedicated test-only backup volume.
+
+The existing application's original archive was inspected read-only. All eight imported catalog attributes matched the latest staging for 7,494 records; a different local DBF version was excluded. After a validated pre-migration backup, the updated API/frontend were recreated and the administrative stock CLI's preview verified all 7,494 projections. Apply created another validated managed backup and stored audited source reconciliations. All 7,494 balances equal the original `PRODUTO.DBF.ESTO_PROD` plus operational movements. The source has 6,535 nonzero quantities; after preserving later operations, 6,530 current balances are nonzero.
+
+Before/after row counts and fingerprints stayed identical for products, sales, items, customers, payments and original movement data. Migration classified the 887 historical unlinked movements as legacy; 144 operational movements retained their quantities and effect. Protected list/detail/array API reads, 18 critical-stock dashboard rows and health checks passed. No overwrite/reimport or benchmark seed change was needed. Per-product reports remain private in ignored artifacts; published [Docker and runtime evidence](test-evidence/product-stock-import-docker-20261106.log.gz) contains aggregate runtime verification only. The dedicated test project and backup volume were removed after validation. See [stock source, migration and repair instructions](product-stock.md).
+
+## Product creation stock validation (2026-11-06)
+
+The creation flow passed **989 tests and controls in Docker**: 241 backend unit tests, 317 PostgreSQL/Redis integration tests, 4 regressions, 7 measurement controls and 420 frontend tests. Lint, lint-rule canaries, typechecks and production builds passed for backend/frontend with `TZ=America/Sao_Paulo`.
+
+The existing modal now exposes editable **Estoque atual / Current stock** on creation, defaulting to zero. Tests cover PT-BR/EN numeric input and validation, blank/default/fractional quantities, saved stock in the list, reset after save, retained values after failure and unchanged read-only editing. API tests verify the initial operational entry, permissions, no writes on invalid input, atomic rollback if movement persistence fails, and checkout/cancellation starting from the entered balance. The creation-only request field is `initial_stock`; response `current_stock` remains derived.
+
+The API/frontend runtime images were rebuilt and recreated after checks passed. Health, the published `ProductCreate` contract and the frontend creation bundle passed smoke checks. Existing imported stock reconciliations and movement rows retained identical counts and hashes across the update. No business records were created for runtime smoke, and no schema, dependency or seed change was needed. The disposable test project was removed afterward. See [creation behavior and API contract](product-stock.md) and [Docker evidence](test-evidence/product-stock-create-docker-20261106.log.gz).
+
 ## What runs
 
 | Part | Checks |
@@ -21,6 +57,16 @@ Verified with Docker Engine 29.8.0 / Compose 5.5.1. The runner overlay uses Comp
 All workspace checks run before a workspace failure is reported. Lint canaries intentionally invoke invalid code and empty test selections; their expected nonzero child exits are assertions of the gate. Product regressions now contain **no expected failures**. A nonzero top-level exit indicates a failed check, and the harness attempts cleanup in `finally`.
 
 `--docker` runs the workspace checks; `--images` adds runtime images and smoke; `--backups` requires `--images`; `--seeds` adds the isolated seed validation. The legacy mode without `--docker` still runs integration/regression on the host and needs installed backend dependencies plus `NPM_CLI`. CI uses the full Docker command above.
+
+## Payment-dependent catalog prices validation (2026-11-03)
+
+The `backend-tests` and `frontend-tests` Compose runners passed all workspace checks in Docker with disposable PostgreSQL/Redis: **231 backend unit tests, 280 integration tests, 4 regressions, 360 frontend tests and 7 measurement controls (882 total)**. Lint, lint-rule canaries, typechecks and production builds passed. [Runner evidence](test-evidence/catalog-pricing-docker-20261103.log.gz).
+
+Coverage includes base prices in product cards/cart, explicit payment selection, all six payment methods, switching back and forth, quantities/discounts, payment/change, down payments, final customer debt, missing-price fallback and configured zero prices. Both PT-BR and EN are exercised. HTTP/PostgreSQL tests verify server recalculation against forged client prices, saved unit prices/totals, receipts after catalog changes, original stock amounts on cancellation and immutable balance snapshots.
+
+This run used the existing test runner images and overlay directly, without host Node/npm. Agent checks, runtime image smoke, backup recovery and benchmark seed validation were not repeated for this pricing change. No migration or seed changes are needed: the catalog already stores both fields, the integration fixtures already use different cash/base prices, and historical fixture transactions keep their saved values. The disposable test project is removed after validation; the application Compose project is not selected.
+
+The fallback-notification follow-up rebuilt and reran the frontend runner: **378 tests passed**, including 18 new cases, with lint, lint-rule canaries, typecheck and production build passing. The persistent PT-BR/EN notice identifies the product, missing price and alternative unit price; tests cover the cart, all six payment methods, switching methods, removal, duplicate cart additions, continued checkout and configured zero prices. Backend pricing and persistence were unchanged in this follow-up, so their previously passing suites were not repeated. No database, seed or dependency changes were required. [Notification runner evidence](test-evidence/catalog-pricing-notices-docker-20261103.log.gz).
 
 ## Import feedback validation (2026-10-29)
 

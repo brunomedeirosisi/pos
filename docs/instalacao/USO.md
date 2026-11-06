@@ -4,7 +4,7 @@ Para servidor na internet, siga [NUVEM.md](NUVEM.md): o pacote POS-Nuvem conecta
 
 Para um ensaio temporário do checkout local pela internet, consulte [TESTE-INTERNET.md](TESTE-INTERNET.md): comandos em uma linha, duas janelas PowerShell, certificado, CORS, recuperação dos serviços e encerramento. Esse roteiro usa o Compose da raiz do projeto; os comandos do Principal instalado são diferentes.
 
-Este guia cobre o instalador Windows do POS 1.0.0-store.3: **Caixa 1 Principal**, com aplicação/banco/impressora, e **Caixa 2 Terminal**, que acessa pelo navegador. O pacote inclui um executável de entrada e arquivos auxiliares; extraia o ZIP inteiro. O executável não funciona isolado.
+Este guia cobre o instalador Windows do POS 1.0.0-store.4: **Caixa 1 Principal**, com aplicação/banco/impressora, e **Caixa 2 Terminal**, que acessa pelo navegador. O pacote inclui um executável de entrada e arquivos auxiliares; extraia o ZIP inteiro. O executável não funciona isolado.
 
 A instalação fica pronta para homologação da infraestrutura. Antes de vendas reais, conclua os controles de crédito/cliente inativo, estoque não negativo e recuperação operacional pendentes no roadmap. “Instalação concluída” não certifica essas regras de negócio nem a saída física da impressora.
 
@@ -24,7 +24,7 @@ No Caixa 2: navegador, acesso à rede e o pacote Terminal-POS recebido do Caixa 
 Receba o ZIP e seu SHA256 por um canal confiável. Confira o hash antes de extrair:
 
 ```powershell
-Get-FileHash ./POS-Loja-1.0.0-store.3.zip -Algorithm SHA256
+Get-FileHash ./POS-Loja-1.0.0-store.4.zip -Algorithm SHA256
 ```
 
 Compare com o valor fornecido pelo responsável pela versão. O build local padrão não possui assinatura digital do instalador; o runtime Node incluído tem sua assinatura e checksum verificados no build. Não desative antivírus/SmartScreen para contornar um pacote desconhecido. Uma distribuição comercial deve usar certificado de assinatura confiável.
@@ -106,7 +106,7 @@ Resultado incerto **não é reimpresso automaticamente**. Uma nova ação do ope
 
 ## 6. Backups
 
-A instalação exige um backup inicial com réplica verificada. Depois, o supervisor tenta um novo backup quando o último sucesso tem pelo menos 24 horas, enquanto a conta do Principal estiver conectada e o supervisor ativo. Se falhar, registra a falha e tenta novamente após uma hora. Ao iniciar depois de um período desligado, verifica se há backup atrasado.
+A instalação exige um backup inicial com réplica verificada. Os backups diários são controlados pela aplicação e começam desabilitados: habilite o agendamento em **Backup e Restauração**, escolha o horário e salve. O servidor precisa estar ativo; após um período desligado, executa uma única ocorrência pendente ao voltar. Confira o próximo horário e o histórico na tela. O supervisor Windows não cria backups periódicos por conta própria.
 
 Confira regularmente a tela de backups e o diagnóstico. Para criar/verificar um backup manual:
 
@@ -147,6 +147,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $posTools 'At
 
 O atualizador faz backup antes da troca, verifica imagens e saúde e preserva a versão anterior e os volumes. Se a atualização falhar após possível migração, não volta automaticamente o banco nem a imagem antiga: bloqueia o reinício para diagnóstico/recuperação assistida.
 
+O pacote `1.0.0-store.4` declara atualização a partir de `1.0.0-store.3`. Atualize o pacote completo para substituir também o supervisor antigo. Depois, habilite o backup diário na aplicação; a antiga rotina automática de 24 horas deixa de existir. As migrações são aplicadas pela API ao iniciar. Para versões anteriores, siga as etapas de atualização dos pacotes compatíveis. O cliente Nuvem não atualiza a aplicação do servidor.
+
 Para retirar a inicialização automática e a regra HTTPS sem excluir dados:
 
 ```powershell
@@ -157,6 +159,12 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $posTools 'De
 
 Impressoras por caixa: [IMPRESSORAS.md](IMPRESSORAS.md). Documentação técnica: [TECNICO.md](TECNICO.md). Checklist de aceitação: [HOMOLOGACAO.md](HOMOLOGACAO.md).
 
+### Backup automático diário
+
+Em **Backup e Restauração**, marque **Habilitar backup automático**, escolha o horário de 24 horas e clique em **Salvar**. Confira o fuso e o próximo horário mostrados na tela. O recurso começa desabilitado. Apenas Admin ou perfis com `system:backup:schedule` podem alterar essa configuração.
+
+O servidor executa os backups mesmo sem navegador aberto. Se estiver desligado no horário, realiza um único backup pendente ao voltar. Desativar impede novas execuções automáticas e mantém backups manuais disponíveis. A última execução e o histórico mostram conclusão ou erro. São aplicadas as mesmas regras de armazenamento, réplica e retenção dos backups manuais. Detalhes: [agendamento de backups](../backup-scheduling.md).
+
 ### Navegação nas listagens
 
 Use os controles abaixo das tabelas para mudar de página, ir diretamente a um número ou escolher 10, 25, 50 ou 100 registros. Pesquisar ou mudar filtros volta à primeira página. Ao voltar dos detalhes, a navegação da sessão é preservada. Os seletores permitem escrever e navegar pelas páginas de opções. Recibos e relatórios impressos continuam completos. Veja o inventário e os detalhes em [Paginação](../pagination.md).
@@ -165,16 +173,38 @@ Use os controles abaixo das tabelas para mudar de página, ir diretamente a um n
 
 Todos os campos de data usam **DD/MM/YYYY**, em português e inglês, independentemente do idioma do navegador. Digite a data (as barras são incluídas automaticamente ao escrever apenas números) ou use o botão de calendário. No PDV, a sugestão é hoje e datas futuras são bloqueadas. Datas impossíveis ou incompletas exibem orientação de correção.
 
+### Estoque dos produtos
+
+Ao **Adicionar** um produto, preencha **Estoque atual** (**Current stock** em inglês) com a quantidade inicial disponível. O campo começa em zero e, se ficar em branco, será gravado como zero. Aceita quantidades de zero até 99.999.999.999,999, com até três casas decimais, nos formatos PT-BR e EN. Ao salvar, o produto e sua entrada inicial de estoque são registrados juntos. Se houver falha, nenhum produto com saldo incompleto será criado. A quantidade já aparece na listagem e no painel; novas vendas e cancelamentos alteram esse saldo normalmente.
+
+A listagem de **Produtos** mostra a coluna **Estoque atual** (**Current stock** em inglês). Ao abrir **Editar**, o mesmo saldo aparece no pop-up, em um campo somente para leitura, separado do **Estoque mínimo**. Produtos importados partem do saldo `ESTO_PROD` do `PRODUTO.DBF` original; o histórico `MOV_EST.DBF` é conciliado para não contar suas entradas e saídas novamente. Vendas, cancelamentos e ajustes operacionais posteriores continuam alterando o saldo, com a mesma regra do painel de estoque crítico. Produtos nativos sem movimentações mostram zero. Saldos negativos e frações existentes são exibidos com até três casas decimais, usando os separadores do idioma selecionado. Recarregue a listagem para consultar movimentações registradas depois da consulta anterior. O saldo não é alterado ao salvar o cadastro. Instalações importadas pela versão anterior precisam do reparo administrativo descrito em [estoque dos produtos](../product-stock.md), sem repetir a sobrescrita dos dados.
+
 ### Quantidade na venda
 
 Informe unidades inteiras (1, 2, 3…). Os controles aumentam ou diminuem uma unidade. Frações, zero e negativos são recusados. Para retirar um produto do carrinho, use **Excluir**.
 
 ### Preço e saldo devedor no fechamento
 
-A forma de pagamento não altera o preço do produto: o fechamento mantém o preço exibido no carrinho. O preço à vista do cadastro é usado para todas as formas; se estiver ausente, o preço base é utilizado.
+Os produtos e o carrinho usam o **Preço base**. Ao abrir o fechamento, escolha uma forma de pagamento: **À vista** usa o **Preço à vista** cadastrado; cartão, transferência, outro, **À prazo** e **À prazo com entrada** usam o **Preço base**. Em inglês, a opção à vista aparece como **Cash**. Enquanto nenhuma forma estiver selecionada, o resumo mantém o preço base e a confirmação fica desabilitada.
 
-Ao selecionar um cliente, confira o **Saldo devedor do cliente após a venda** no fechamento. Apenas **À prazo** e a parte não paga de **À prazo com entrada** aumentam a dívida. Dinheiro, cartão, transferência e outro exigem quitação integral; o troco não abate dívidas anteriores.
+Ao trocar a forma de pagamento, o resumo recalcula os valores dos itens, subtotal, total, valor pago, troco e saldo devedor, mantendo o desconto informado. Se esse desconto superar o novo subtotal, revise-o antes de confirmar. Se o preço necessário estiver vazio, será usado o outro preço cadastrado. Nesse caso, um aviso no carrinho ou no fechamento informa o produto, qual preço está vazio e qual preço e valor por unidade foram utilizados. O aviso permanece visível enquanto a alternativa estiver em uso, acompanha a forma de pagamento escolhida e não impede a venda. Um preço igual a zero é respeitado; produtos sem nenhum preço configurado não podem ser vendidos. A listagem do cadastro mostra os dois preços.
 
-Exemplo: com dívida anterior de R$ 500,00 e compra de R$ 100,00, o saldo será R$ 500,00 no pagamento imediato, R$ 600,00 à prazo ou R$ 580,00 com entrada de R$ 20,00. O valor antes de confirmar é estimado; a confirmação mostra o saldo efetivamente gravado.
+Ao selecionar um cliente, confira o **Saldo devedor do cliente após a venda** no fechamento. Apenas **À prazo** e a parte não paga de **À prazo com entrada** aumentam a dívida. À vista, cartão, transferência e outro exigem quitação integral; o troco não abate dívidas anteriores.
+
+Exemplo: com dívida anterior de R$ 500,00 e produto com preço base de R$ 120,00 e preço à vista de R$ 100,00, a compra custará R$ 100,00 à vista ou R$ 120,00 nas demais formas. O saldo será R$ 500,00 no pagamento imediato, R$ 620,00 à prazo ou R$ 600,00 com entrada de R$ 20,00. O valor antes de confirmar é estimado; a confirmação mostra o saldo efetivamente gravado.
+
+Os detalhes da venda, o histórico de compras do cliente, os recibos e o estoque usam os valores confirmados. Alterar os preços no cadastro ou registrar um recebimento posterior não altera compras já gravadas. Cancelamentos revertem os valores originais do estoque. Não é necessário alterar o banco nem os seeds históricos para aplicar essa regra às novas vendas.
 
 O recibo mostra esse saldo e o preserva nas reimpressões, mesmo após outros recebimentos ou vendas. Vendas anteriores a essa atualização não têm um saldo gravado naquele momento e mostram **Indisponivel** no recibo. Se a consulta do saldo falhar, use **Tentar novamente** antes de confirmar. A interface e os recibos também estão disponíveis em inglês.
+
+### Erro ao imprimir um recibo
+
+A venda permanece concluída quando a impressão falha. A orientação fica visível nas opções de recibo do PDV, além do aviso temporário. Se a impressão local estiver indisponível, confira se o aplicativo de impressão está aberto no computador da impressora. O spooler do Windows sozinho não substitui esse aplicativo.
+
+A opção **Abrir recibo imprimível** usa o navegador e continua disponível sem o agente local. Em caso de tempo esgotado ou solicitação rejeitada, confira o papel e a fila antes de pedir outra via. Não há repetição automática.
+
+### Impressão de recibos pelo navegador
+
+Com `PRINT_MODE=browser`, clique em **Imprimir recibo** após finalizar a venda, nos detalhes ou no histórico de vendas. A aplicação abre o recibo em uma nova aba e mostra o diálogo de impressão do navegador após carregar o conteúdo. Escolha a impressora ou o destino PDF nesse diálogo. Não é necessário executar o agente local.
+
+Cancelar o diálogo não altera a venda; a página continua aberta para consulta ou nova impressão pelo botão **Imprimir**. **Abrir recibo imprimível** abre apenas a prévia. O recibo mantém a data original e o saldo gravado após aquela venda. A confirmação de impressão física depende do navegador e da impressora escolhida.

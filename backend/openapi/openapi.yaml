@@ -54,6 +54,7 @@ paths:
                 role-users,
                 receivers,
                 backups,
+                backup-executions,
                 printers,
                 print-jobs,
                 legacy-logs,
@@ -208,7 +209,7 @@ paths:
                 type: object
                 required: [mode, store_id]
                 properties:
-                  mode: { type: string, enum: [direct, queue] }
+                  mode: { type: string, enum: [browser, direct, queue] }
                   store_id: { type: string, nullable: true }
   /api/v1/store-info:
     get:
@@ -663,12 +664,13 @@ paths:
       tags:
         - Catalog
       summary: Create product
+      description: Creates the product and its optional initial stock entry in one transaction. Requires catalog:write.
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ProductWrite"
+              $ref: "#/components/schemas/ProductCreate"
       responses:
         "201":
           description: Product created.
@@ -1422,7 +1424,9 @@ paths:
       description: >
         The API recalculates official item prices, subtotal, discount validation, total, pending amount, and change on
         the server. Client-submitted monetary fields are treated as hints only and normalized from the product catalog
-        before persistence. Once the sale is completed, aggregated stock movements are also written per product with
+        before persistence. The cash method uses product.price_cash; all other methods use product.price_base.
+        If the preferred price is missing, the other configured price is used; zero is a valid configured price.
+        Once the sale is completed, aggregated stock movements are also written per product with
         type `venda`.
       requestBody:
         required: true
@@ -1497,7 +1501,8 @@ paths:
     post:
       tags:
         - Sales
-      summary: Print sale receipt
+      summary: Submit a sale receipt to the configured print agent
+      description: Browser mode uses the receipt page and never submits an agent job. This endpoint returns 400 browser_printing_uses_receipt_page in browser mode. Known printer failures are returned as safe codes for PT-BR/EN feedback. Printing failure does not cancel or recreate the sale. Requests are not retried automatically.
       parameters:
         - $ref: "#/components/parameters/ResourceId"
       requestBody:
@@ -1519,12 +1524,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SaleReceiptPrintResult"
+        "400":
+          description: Invalid print parameters, or browser_printing_uses_receipt_page when the browser owns printing.
         "401":
           $ref: "#/components/responses/UnauthorizedError"
         "403":
           $ref: "#/components/responses/ForbiddenError"
         "404":
           $ref: "#/components/responses/NotFoundError"
+        "503":
+          description: Known print service failure. Diagnostics remain in server logs; check paper/spooler before retrying a timed-out or rejected request.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    enum: [receipt_printer_not_configured, receipt_printer_unavailable, receipt_printer_timeout, receipt_printer_rejected, print_queue_full]
+                  request_id: { type: string, nullable: true }
   /api/v1/sales/{id}/cancel:
     post:
       tags:
@@ -1810,6 +1828,41 @@ paths:
           $ref: "#/components/responses/ForbiddenError"
         "404":
           $ref: "#/components/responses/NotFoundError"
+  /api/v1/admin/backup/schedule:
+    get:
+      tags: [Administration]
+      summary: Read installation-wide automatic backup preferences and latest execution
+      description: Requires system:backup:read. Uses the database store time zone.
+      responses:
+        '200':
+          description: Persisted schedule, next occurrence and latest automatic execution.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupSchedule' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+    patch:
+      tags: [Administration]
+      summary: Save daily automatic backup preferences
+      description: >
+        Requires system:backup:schedule (or wildcard); manual backup creation permission alone does not allow this change.
+        Supply both fields. Time is strict HH:mm in the store zone. Enabling or changing the time schedules the next
+        future occurrence. Disabling prevents new runs and lets an already running backup finish.
+        Preferences and the automatic execution journal belong to the installation and survive business-data restoration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BackupScheduleInput' }
+      responses:
+        '200':
+          description: Schedule saved and audited.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupSchedule' }
+        '400': { description: Invalid boolean, invalid HH:mm time, missing or extra fields. }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
   /api/v1/admin/backups:
     get:
       tags:
@@ -2255,6 +2308,41 @@ components:
               value:
                 message: internal_error
   schemas:
+    BackupScheduleInput:
+      type: object
+      additionalProperties: false
+      required: [enabled, time]
+      properties:
+        enabled: { type: boolean, default: false }
+        time:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          example: '03:00'
+    BackupExecution:
+      type: object
+      required: [id, type, status, scheduledFor, startedAt, finishedAt, filename, errorMessage]
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [manual, automatic, system] }
+        status: { type: string, enum: [running, completed, failed] }
+        scheduledFor: { type: string, format: date-time, nullable: true }
+        startedAt: { type: string, format: date-time }
+        finishedAt: { type: string, format: date-time, nullable: true }
+        filename: { type: string, nullable: true }
+        errorMessage: { type: string, nullable: true }
+    BackupSchedule:
+      type: object
+      required: [enabled, time, timezone, nextRunAt, updatedAt, lastRun]
+      properties:
+        enabled: { type: boolean }
+        time: { type: string, example: '03:00' }
+        timezone: { type: string, example: America/Recife }
+        nextRunAt: { type: string, format: date-time, nullable: true }
+        updatedAt: { type: string, format: date-time }
+        lastRun:
+          nullable: true
+          allOf:
+            - $ref: '#/components/schemas/BackupExecution'
     ListPageResponse:
       type: object
       required: [items, pagination]
@@ -2327,6 +2415,11 @@ components:
           type: number
           format: float
           nullable: true
+        current_stock:
+          type: number
+          readOnly: true
+          description: Current quantity based on PRODUTO.DBF.ESTO_PROD for imported products plus subsequent operational movements. Historical MOV_EST movements are reconciled without double-counting. Native products use their movement ledger, or zero without movements. Shares the critical-stock dashboard calculation and preserves negative/fractional quantities (up to three decimal places). Returned by list, detail, create, update and paginated list responses.
+          example: 1234.567
         price_cash:
           type: number
           format: float
@@ -2338,6 +2431,7 @@ components:
       required:
         - id
         - name
+        - current_stock
     ProductWrite:
       type: object
       properties:
@@ -2367,6 +2461,18 @@ components:
           nullable: true
       required:
         - name
+    ProductCreate:
+      allOf:
+        - $ref: "#/components/schemas/ProductWrite"
+        - type: object
+          properties:
+            initial_stock:
+              type: number
+              minimum: 0
+              maximum: 99999999999.999
+              multipleOf: 0.001
+              default: 0
+              description: Initial quantity on hand. A positive quantity creates one operational entrada movement atomically with the product. Omitted or zero creates no movement. Only accepted on creation; current_stock remains a derived response field.
     ProductPatch:
       allOf:
         - $ref: "#/components/schemas/ProductWrite"
@@ -3132,7 +3238,9 @@ components:
       type: object
       description: >
         The checkout request only needs product ids, quantities, discount, and payment information. The API recalculates
-        official catalog prices and final totals before saving the sale. Calculation policy
+        official catalog prices and final totals before saving the sale. Cash uses product.price_cash; card, bank,
+        other, credit and credit_with_entry use product.price_base. A missing preferred price falls back to the other
+        configured price; zero is preserved, and a product without either price receives HTTP 400. Calculation policy
         line-half-up-money-2-quantity-3/v1: round each line half up to cents, then sum lines and subtract the discount.
         Money uses at most 2 decimal places; quantity uses at most 3. Excess precision, positive lines rounded to zero
         and numeric(14,scale) overflow receive HTTP 400. payment_method and amount_paid are required and cannot be null.

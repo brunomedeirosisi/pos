@@ -23,6 +23,11 @@ import {
   reconcileLegacyCustomerBalances,
   type LegacyBalanceSummary,
 } from "./customer-balances.js";
+import {
+  readLegacyProductStock,
+  reconcileLegacyProductStock,
+  type LegacyProductStockSummary,
+} from "./product-stock.js";
 
 type LegacyImportJob = {
   id: string;
@@ -122,6 +127,7 @@ const STAGING_CONFIG: StagingConfig[] = [
       { name: "referencia", field: "REFERENCIA" },
       { name: "cod_grup", field: "COD_GRUP" },
       { name: "esto_min", field: "EST_MINIMO" },
+      { name: "esto_prod", field: "ESTO_PROD" },
       { name: "avista", field: "AVISTA" },
       { name: "preco_base", field: "VLR_UN_PRO" },
     ],
@@ -277,6 +283,7 @@ const IMPORT_STAGE_SEQUENCE = [
   "migrate-sales",
   "migrate-customer-payments",
   "migrate-stock",
+  "reconcile-product-stock",
   "reconcile-customer-balances",
   "reconciliation-report",
 ] as const;
@@ -927,6 +934,7 @@ async function migrateStockMovements(client?: PoolClient): Promise<number> {
         "unit_value",
         "total",
         "note_number",
+        "origin",
       ],
       batch,
       client,
@@ -946,6 +954,7 @@ async function migrateStockMovements(client?: PoolClient): Promise<number> {
       normalizeNumber(row.valor),
       normalizeNumber(row.total),
       normalizeString(row.nf),
+      "legacy",
     ]);
     if (batch.length >= BATCH_SIZE) {
       await flush();
@@ -1520,6 +1529,7 @@ async function createReconciliationReport(
   payments: number,
   stocks: number,
   balances: LegacyBalanceSummary,
+  productStock: LegacyProductStockSummary,
   client?: PoolClient,
 ): Promise<{ csvPath: string; jsonPath: string; version: string }> {
   const csvPath = path.join(sessionDir, "reconciliation.v1.csv");
@@ -1599,6 +1609,7 @@ async function createReconciliationReport(
   lines.push(`order_items,${saleSummary.orderItems},${targetOrderItems},`);
   lines.push(`customer_payments,${paymentLegacy},${targetPayments},`);
   lines.push(`stock_movements,${stockLegacy},${targetStocks},`);
+  lines.push(`product_stock_verified,${productStock.products},${productStock.verified},PRODUTO.DBF.ESTO_PROD`);
   lines.push(
     `customer_balances_verified,${balances.customers},${balances.verified},CLIENTES.DBF.DEBITO`,
   );
@@ -1670,6 +1681,7 @@ async function createReconciliationReport(
     metrics,
     mismatches: saleSummary.mismatches,
     customerBalances: { ...balances, records: balanceDetails },
+    productStock,
   };
 
   await fsp.writeFile(csvPath, lines.join(os.EOL), "utf8");
@@ -1801,6 +1813,7 @@ async function runImport(
   const balanceSource = await readLegacyCustomerBalances(
     filesMap.get("CLIENTES.DBF")!,
   );
+  const stockSource = await readLegacyProductStock(filesMap.get("PRODUTO.DBF")!);
 
   // Staging is disposable per attempt. Never trust a completed load checkpoint:
   // another import may have replaced the shared tables during retry backoff.
@@ -1908,6 +1921,14 @@ async function runImport(
     },
   );
 
+  const productStock = await runImportStage(
+    job,
+    "reconcile-product-stock",
+    checkpointCache,
+    client,
+    async (client) => reconcileLegacyProductStock(job.id, stockSource, client, job.userId),
+  );
+
   const balances = await runImportStage(
     job,
     "reconcile-customer-balances",
@@ -1938,6 +1959,7 @@ async function runImport(
         Number(paymentsCount ?? 0),
         Number(stockCount ?? 0),
         balances,
+        productStock,
         client,
       );
     },
@@ -1951,6 +1973,7 @@ async function runImport(
     customerPayments: Number(paymentsCount ?? 0),
     stockMovements: Number(stockCount ?? 0),
     customerBalances: balances,
+    productStock,
     reconciliation,
   };
 

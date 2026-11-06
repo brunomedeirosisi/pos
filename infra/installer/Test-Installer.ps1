@@ -35,6 +35,8 @@ try {
     Reject {Test-PosStore 'https://192.168.1.22' 'another-store'} 'Identidade de outra loja recusada'
   } finally {Remove-Item Function:Invoke-RestMethod}
   if($NodePath){
+    $null=Invoke-PosProcess $NodePath @('--test',(Join-Path $PSScriptRoot 'backup-schedule.test.mjs')) 30
+    Check $true 'Contratos do supervisor e dos backups obrigatorios'
     $echoFile=Join-Path $testDirectory 'echo.mjs';[IO.File]::WriteAllText($echoFile,'console.log(JSON.stringify(process.argv.slice(2)))')
     $values=@('C:\pasta com espacos\','aspas " no argumento','literal $() e &','')
     $result=Invoke-PosProcess $NodePath (@($echoFile)+$values) 30

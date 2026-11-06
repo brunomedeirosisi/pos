@@ -2,6 +2,8 @@
 
 A importação usa **`CLIENTES.DBF.DEBITO` como saldo oficial de clientes**, com validação antes da limpeza, ajuste auditável e a etapa `reconcile-customer-balances`. Consulte [a regra financeira e o reparo de importações concluídas](legacy-customer-balances.md). Produto histórico ausente continua sendo uma divergência de itens, separada da conferência dos saldos.
 
+O estoque inicial dos produtos vem de **`PRODUTO.DBF.ESTO_PROD`**, validado antes da publicação. A etapa `reconcile-product-stock` confere o saldo do cadastro, neutraliza a diferença do histórico `MOV_EST.DBF` e preserva operações novas. O progresso tem 17 etapas; o resumo em PT-BR/EN e os relatórios CSV/JSON mostram a quantidade de produtos conferidos. Importações antigas podem ser corrigidas sem sobrescrita: veja [estoque dos produtos](product-stock.md).
+
 ## O que mudou
 - Fila de importação migrada para **Redis + BullMQ** (persistente).
 - Retry automático configurável por ambiente e DLQ persistente.

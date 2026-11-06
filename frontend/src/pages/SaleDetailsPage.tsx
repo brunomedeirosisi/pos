@@ -70,7 +70,7 @@ export function SaleDetailsPage(): JSX.Element | null {
 
   const paymentMethodLabels = React.useMemo(
     () => ({
-      cash: t("customers.paymentMethods.cash"),
+      cash: t("sales.cashPaymentMethod"),
       card: t("customers.paymentMethods.card"),
       bank: t("customers.paymentMethods.bank"),
       other: t("customers.paymentMethods.other"),
@@ -239,8 +239,8 @@ export function SaleDetailsPage(): JSX.Element | null {
           <thead>
             <tr>
               <th>{t("products.heading")}</th>
-              <th>Qty</th>
-              <th>{t("products.priceCash")}</th>
+              <th>{t("sales.quantity")}</th>
+              <th>{t("sales.unitPrice")}</th>
               <th>{t("sales.total")}</th>
             </tr>
           </thead>

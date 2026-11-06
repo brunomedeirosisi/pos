@@ -1,5 +1,6 @@
 import { queryPage, type PageQuery } from "../../../utils/query-page.js";
 import { query } from "../../../db.js";
+import { stockQuantitySql } from "../../../utils/stock-sql.js";
 import type {
   CategoriesMetric,
   DashboardFilterDto,
@@ -329,21 +330,12 @@ function criticalStockSql(): string {
            p.name as product_name,
            nullif(trim(p.reference), '') as sku,
            coalesce(p.min_stock, 0) as minimum_stock,
-           coalesce(
-             sum(
-               case
-                 when sm.type is null then 0
-                 when lower(trim(sm.type)) in ('e', 'entrada', 'in', 'credit', 'compra') then abs(coalesce(sm.quantity, 0))
-                 when lower(trim(sm.type)) in ('s', 'saida', 'out', 'debit', 'venda') then -abs(coalesce(sm.quantity, 0))
-                 else coalesce(sm.quantity, 0)
-               end
-             ),
-             0
-           ) as current_stock
+           coalesce(ls.adjustment, 0) + coalesce(sum(${stockQuantitySql}), 0) as current_stock
          from product p
          left join stock_movement sm on sm.product_id = p.id
+         left join product_legacy_stock ls on ls.product_id = p.id
          where ($1::uuid is null or p.group_id = $1::uuid)
-         group by p.id, p.name, p.reference, p.min_stock
+         group by p.id, p.name, p.reference, p.min_stock, ls.adjustment
        )
        select product_id, product_name, sku, current_stock, minimum_stock
        from stock_position

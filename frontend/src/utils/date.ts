@@ -122,6 +122,7 @@ export function formatDateDdMmYyyy(
 export function formatDateTimeDdMmYyyy(
   value: string | null | undefined,
   fallback = "-",
+  timeZone?: string,
 ): string {
   if (!value) {
     return fallback;
@@ -136,6 +137,30 @@ export function formatDateTimeDdMmYyyy(
     BR_DATE_ONLY_PATTERN.test(value.trim())
   ) {
     return formatDdMmYyyy(parsed);
+  }
+  if (timeZone) {
+    const parts = new Intl.DateTimeFormat("en-GB", {
+      timeZone,
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).formatToParts(parsed);
+    const get = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((part) => part.type === type)!.value;
+    return (
+      get("day") +
+      "/" +
+      get("month") +
+      "/" +
+      get("year") +
+      " " +
+      get("hour") +
+      ":" +
+      get("minute")
+    );
   }
   return `${formatDdMmYyyy(parsed)} ${pad2(parsed.getHours())}:${pad2(parsed.getMinutes())}`;
 }

@@ -7,6 +7,7 @@ import { initializeLegacyImportWorker } from './services/legacy-importer.js';
 import { logger } from './observability/logger.js';
 import { recoverInterruptedRestore } from './services/backup-restore-service.js';
 import { initializeRecoveryControl, preserveBackupCatalog } from './services/recovery-control.js';
+import { startBackupScheduler } from './services/backup-scheduler.js';
 
 async function bootstrap(): Promise<void> {
   const env = getEnv();
@@ -16,6 +17,7 @@ async function bootstrap(): Promise<void> {
   await preserveBackupCatalog();
   await ensureBootstrapAdmin();
   await initializeLegacyImportWorker();
+  startBackupScheduler();
 
   const port = env.API_PORT;
   app.listen(port, () => {

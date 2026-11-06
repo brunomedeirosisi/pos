@@ -23,6 +23,8 @@ const temporary = await mkdtemp(path.join(os.tmpdir(), 'pos-store-smoke-'));
 const replica = path.join(temporary, 'replica');
 await mkdir(replica);
 for (const name of ['store.compose.yml', 'Caddyfile', 'init.sql', 'empty.env']) await cp(path.join(bundle, name), path.join(temporary, name));
+// A genuine upgrade must initialize the old database with the old release SQL.
+if (previous) await cp(path.join(upgradeBundle, 'init.sql'), path.join(temporary, 'init.sql'));
 // Move the release subnet as a whole, preserving its allocation policy and trusted proxy.
 const composeFile = path.join(temporary, 'store.compose.yml');
 await writeFile(composeFile, (await readFile(composeFile, 'utf8')).replaceAll('172.29.73.', '172.29.74.'));
@@ -73,6 +75,9 @@ try {
   if(previous){
     const upgradeScript=path.join(source,'test-upgrade-client.mjs');
     await run(process.execPath,[upgradeScript,'--before'],{env:childEnv,timeout:60000});
+    const oldSchema = await compose(['exec','-T','db','psql','-U','pos','-d','posdb','-At','-c',"select to_regclass('public.customer_legacy_balance') is null and to_regclass('pos_recovery.backup_schedule') is null"]);
+    assert.equal(oldSchema,'t','Upgrade fixture already contains the new release schema');
+    await compose(['exec','-T','api','node','dist/scripts/store-backup.js']);
     const contentSql="select id||':'||request_id||':'||encode(digest(content,'sha256'),'hex') from print_job order by id";
     const contentBefore=await compose(['exec','-T','db','psql','-U','pos','-d','posdb','-At','-c',contentSql]);
     console.log('Historical jobs prepared on previous API. Recreating services with the new release...');
@@ -83,23 +88,39 @@ try {
     assert.equal(contentAfter,contentBefore,'Migration changed historical request IDs or receipt snapshots');
     upgradeEvidence=JSON.parse((await run(process.execPath,[upgradeScript,'--after'],{env:childEnv,timeout:60000})).split(/\r?\n/).at(-1));
     upgradeEvidence.legacyReceiptContentPreserved=true;
+    upgradeEvidence.previousReleaseSchemaUsed=true;
+    upgradeEvidence.preUpgradeReplicatedBackup=true;
     childEnv.POS_SMOKE_UPGRADED='true';
   }
+  const migrations = await compose(['exec','-T','db','psql','-U','pos','-d','posdb','-At','-c',"select filename from schema_migrations order by filename"]);
+  for (const name of ['20261029_001_payment_cancellation.sql','20261029_002_legacy_customer_balances.sql','20261029_003_user_sellers.sql','20261030_001_pagination.sql','20261030_002_sale_customer_balance.sql']) assert.ok(migrations.split(/\r?\n/).includes(name),'Missing release migration: '+name);
+  assert.match(await compose(['exec','-T','api','7zz','i']),/7-Zip/);
   const first = JSON.parse((await run(process.execPath, [childScript], { env: childEnv, timeout: 60000 })).split(/\r?\n/).at(-1));
   console.log('Two HTTPS sessions and outbound queue passed. Creating replicated backup...');
   await compose(['exec', '-T', 'api', 'node', 'dist/scripts/store-backup.js', '--check']);
   await compose(['exec', '-T', 'api', 'node', 'dist/scripts/store-backup.js']);
+  // Advance only the disposable store's due time; let the real API scheduler run.
+  await compose(['exec','-T','db','psql','-U','pos','-d','posdb','-c',"update pos_recovery.backup_schedule set next_run_at=now()-interval '1 minute' where singleton and enabled"]);
+  let automaticRuns = '0';
+  for (let attempt=0; attempt<30 && automaticRuns==='0'; attempt++) {
+    await new Promise(resolve=>setTimeout(resolve,1000));
+    automaticRuns=await compose(['exec','-T','db','psql','-U','pos','-d','posdb','-At','-c',"select count(*) from pos_recovery.backup_run where status='completed'"]);
+  }
+  assert.equal(automaticRuns,'1','The release API did not complete exactly one scheduled backup');
   const replicas = (await readdir(replica)).filter(name => name.endsWith('.zip'));
-  assert.equal(replicas.length, 1);
-  const replicaHash = createHash('sha256').update(await readFile(path.join(replica, replicas[0]))).digest('hex');
-  const primaryHash = await compose(['exec', '-T', 'api', 'sha256sum', '/var/backups/pos/' + replicas[0]]);
-  assert.equal(primaryHash.split(/\s+/)[0], replicaHash);
+  assert.equal(replicas.length, previous ? 3 : 2);
+  const replicaHashes = {};
+  for (const name of replicas) {
+    replicaHashes[name] = createHash('sha256').update(await readFile(path.join(replica, name))).digest('hex');
+    const primaryHash = await compose(['exec', '-T', 'api', 'sha256sum', '/var/backups/pos/' + name]);
+    assert.equal(primaryHash.split(/\s+/)[0], replicaHashes[name]);
+  }
   env.BOOTSTRAP_ADMIN_EMAIL = ''; env.BOOTSTRAP_ADMIN_PASSWORD = ''; env.BOOTSTRAP_ADMIN_FULL_NAME = '';
   await compose(['up', '-d', '--no-deps', '--force-recreate', '--wait', '--wait-timeout', '180', '--pull', 'never', 'api']);
   const second = JSON.parse((await run(process.execPath, [childScript, '--verify'], { env: childEnv, timeout: 60000 })).split(/\r?\n/).at(-1));
   const apiEnv = await compose(['exec', '-T', 'api', 'node', '-e', 'console.log(Boolean(process.env.BOOTSTRAP_ADMIN_PASSWORD))']);
   assert.equal(apiEnv, 'false');
-  evidence = { version: manifest.version, atUtc: new Date().toISOString(), project, images: manifest.images, imagesLoadedFromArchive: !process.argv.includes('--reuse-images'), ...first, ...second, upgradeFrom: previous?.version ?? null, ...upgradeEvidence, replicatedBackup: true, replicaSha256: replicaHash, bootstrapRemoved: true, physicalPrinting: 'simulated', windowsGlobalChanges: false, passed: true };
+  evidence = { version: manifest.version, atUtc: new Date().toISOString(), project, images: manifest.images, imagesLoadedFromArchive: !process.argv.includes('--reuse-images'), ...first, ...second, upgradeFrom: previous?.version ?? null, ...upgradeEvidence, releaseMigrationsApplied: true, bundledArchiveDecoder: true, automaticBackupReplicated: true, replicatedBackup: true, replicaHashes, bootstrapRemoved: true, physicalPrinting: 'simulated', windowsGlobalChanges: false, passed: true };
   const evidenceArg = process.argv.indexOf('--evidence');
   if (evidenceArg > 0) await writeFile(path.resolve(process.argv[evidenceArg + 1]), JSON.stringify(evidence, null, 2) + '\n');
   console.log(JSON.stringify(evidence));

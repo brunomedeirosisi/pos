@@ -6,6 +6,8 @@ import { notFound } from '../errors.js';
 import { requirePermission } from '../middleware/auth.js';
 import { paginationQuerySchema, resolvePagination } from '../utils/pagination.js';
 import { generateNextNumericCode } from '../utils/generated-code.js';
+import { productCurrentStockSql } from '../utils/stock-sql.js';
+import { isDecimalValue } from '../utils/checkout-decimal.js';
 
 export const router = Router();
 
@@ -71,6 +73,12 @@ const writeSchema = z.object({
   price_base: numericField,
 });
 
+const createSchema = writeSchema.extend({
+  initial_stock: z.number().finite().refine((value) => isDecimalValue(value, 3), {
+    message: 'initial_stock must be nonnegative and fit numeric(14,3)',
+  }).default(0),
+});
+
 type ProductRow = {
   id: string;
   legacy_code: string | null;
@@ -81,6 +89,7 @@ type ProductRow = {
   min_stock: string | number | null;
   price_cash: string | number | null;
   price_base: string | number | null;
+  current_stock: string | number;
 };
 
 function toNumeric(value: string | number | null): number | null {
@@ -100,6 +109,7 @@ function mapProduct(row: ProductRow) {
     min_stock: toNumeric(row.min_stock),
     price_cash: toNumeric(row.price_cash),
     price_base: toNumeric(row.price_base),
+    current_stock: Number(row.current_stock),
   };
 }
 
@@ -127,7 +137,8 @@ router.get(
     const offsetParam = params.length;
 
     const { rows } = await query<ProductRow>(
-      `select id, legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base
+      `select id, legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base,
+         ${productCurrentStockSql} as current_stock
        from product
        ${whereClause}
        order by name asc
@@ -143,14 +154,15 @@ router.post(
   '/',
   requirePermission('catalog:write'),
   asyncHandler(async (req, res) => {
-    const body = writeSchema.parse(req.body);
+    const body = createSchema.parse(req.body);
 
     const product = await withTransaction(async (client) => {
       const generatedCode = await generateNextNumericCode('product', client);
       const { rows } = await query<ProductRow>(
         `insert into product (legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base)
          values ($1,$2,$3,$4,$5,$6,$7,$8)
-         returning id, legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base`,
+         returning id, legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base,
+           0::numeric as current_stock`,
         [
           generatedCode,
           body.name,
@@ -164,7 +176,16 @@ router.post(
         client
       );
 
-      return rows[0];
+      if (body.initial_stock > 0) {
+        await query(
+          `insert into stock_movement (product_id, type, quantity, origin)
+           values ($1, 'entrada', $2, 'operational')`,
+          [rows[0].id, body.initial_stock],
+          client,
+        );
+      }
+
+      return { ...rows[0], current_stock: body.initial_stock };
     });
 
     res.status(201).json(mapProduct(product));
@@ -176,7 +197,8 @@ router.get(
   requirePermission('catalog:read'),
   asyncHandler(async (req, res) => {
     const { rows } = await query<ProductRow>(
-      `select id, legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base
+      `select id, legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base,
+         ${productCurrentStockSql} as current_stock
        from product
        where id = $1`,
       [req.params.id]
@@ -207,7 +229,8 @@ router.patch(
       `update product
        set ${sets.join(', ')}
        where id = $${entries.length + 1}
-       returning id, legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base`,
+       returning id, legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base,
+         ${productCurrentStockSql} as current_stock`,
       values
     );
 

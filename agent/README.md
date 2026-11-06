@@ -1,5 +1,7 @@
 # Agente de impressão Windows
 
+O modo `PRINT_MODE=browser` abre a impressão nativa do navegador e não utiliza este agente. As instruções abaixo se aplicam aos modos `direct` e `queue`.
+
 ## Modo instalado na loja: fila de saída HTTPS
 
 O instalador usa `src/pull-agent.mjs`. O worker não abre porta: consulta a API por HTTPS com token exclusivo da loja, busca um trabalho por vez, registra journal local e envia o recibo para `Out-Printer`. O supervisor fornece token pelo ambiente e CA pelo `NODE_EXTRA_CA_CERTS`. Não execute o stub HTTP neste cenário.

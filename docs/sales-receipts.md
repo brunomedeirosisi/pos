@@ -8,10 +8,15 @@ This feature adds receipt printing and reprinting for completed sales, with a la
   - payment method
   - amount paid
   - change (calculated automatically)
+- No payment method is preselected. The summary keeps base prices and confirmation is disabled until the operator selects a method; cancelling and reopening checkout clears that selection.
 - The API recalculates the official sale prices and totals from the product catalog before saving:
-  - all methods use `price_cash`, falling back to `price_base` only if the cash price is missing
-  - switching payment methods does not change the selling price
+  - product cards and the cart start with `price_base`
+  - **À vista / Cash** (`cash`) uses `price_cash`; `card`, `bank`, `other`, `credit` and `credit_with_entry` use `price_base`
+  - if the preferred price is missing, the other configured price is used; a configured zero is preserved, and products without either price cannot be checked out
+  - when the other price is used, a visible PT-BR/EN notice in the cart or checkout identifies each affected product, the missing price and the price/amount used per unit; it updates with payment selection and disappears when no substitution is needed
+  - switching payment methods recalculates item prices, subtotal, total, payment/change and pending balance while retaining the entered discount; a discount above the new subtotal blocks checkout
 - Client-submitted subtotal/total/change values are treated as checkout previews and normalized on the server.
+- Sale details show the saved unit price. Receipts, customer purchase history, balances and stock movements use the finalized amounts. Catalog price changes do not reprice existing sales or receipt reprints; cancellation reverses the original stock amounts.
 - The order number field is optional and blank/null values are ignored safely by the API.
 - After the sale is saved, the user can:
   - print the receipt through the local print agent
@@ -20,6 +25,18 @@ This feature adds receipt printing and reprinting for completed sales, with a la
 - Reprinting is available from:
   - sale details
   - sales history
+
+## Browser printing
+
+Set `PRINT_MODE=browser` to use the browser's native print dialog. Docker Compose forwards this setting to the API; installed Windows deployments retain their explicit `queue` mode.
+
+The shared **Print receipt / Imprimir recibo** action in checkout, sale details and sales history synchronously opens the existing printable receipt page with `autoprint=1` and the selected PT-BR/EN locale. No print-agent request or queue job is created. Saved Windows printer bindings do not block browser printing, and the agent destination selector is hidden.
+
+The receipt loads normally, preserving the original sale data, date and saved after-sale customer balance. Only after a successful load does the page call `window.print()`. Automatic printing happens once per displayed sale, including after refetches and development Strict Mode checks. Cancelling the native dialog leaves the printable page available; its **Print / Imprimir** button permits another explicit attempt. The application does not claim that paper was printed or that a print-agent job was accepted.
+
+**Open printable receipt / Abrir recibo imprimível** remains a preview without automatic printing. Direct HTTP-agent printing and durable queue printing continue to use `PRINT_MODE=direct` and `PRINT_MODE=queue`. Calling the agent submission endpoint in browser mode returns `400 browser_printing_uses_receipt_page` rather than silently falling back to an agent.
+
+No database migration or seed change is necessary. [Docker validation evidence](test-evidence/browser-printing-docker-20261103.log.gz).
 
 ## Backend endpoints
 
@@ -100,6 +117,10 @@ npm start
 - If printing fails, the sale remains completed.
 - The UI shows the error returned by the API/agent.
 - The user can retry from the completion modal, the sale detail page, or the sales history.
+- Known printing failures return safe codes (`receipt_printer_not_configured`, `receipt_printer_unavailable`, `receipt_printer_timeout`, `receipt_printer_rejected`, `print_queue_full`) with their HTTP status and request correlation ID. The UI translates them into actionable PT-BR/EN messages. Dependency diagnostics remain in server logs; unrelated internal errors are still sanitized and displayed as a localized generic message.
+- At POS completion, the failure remains visible in the receipt options for the affected sale. A new explicit attempt resets the feedback; it is not carried to a different sale. [Docker validation evidence](test-evidence/receipt-printing-docker-20261031.log.gz).
+- Direct mode requires the Windows print agent to be running on the configured printer computer. A refused connection to `PRINT_AGENT_URL` means the API cannot reach that agent. A running Windows spooler alone does not provide the HTTP agent.
+- Use **Open printable receipt / Abrir recibo imprimível** to print through the browser independently of the agent. After a timeout or agent rejection, check paper/spooler status before requesting another copy. Print requests are not retried automatically.
 
 ## Layout decisions for Epson LX-300+
 

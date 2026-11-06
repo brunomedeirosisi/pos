@@ -125,6 +125,7 @@ create table if not exists stock_movement (
   date date not null default now(),
   type text not null,
   quantity numeric(14,3) not null,
+  origin text not null default 'operational',
   unit_value numeric(14,2),
   total numeric(14,2),
   note_number text
@@ -237,6 +238,17 @@ create table if not exists system_legacy_import_log (
 
 create index if not exists idx_system_legacy_import_status on system_legacy_import(status);
 create index if not exists idx_system_legacy_import_log_import on system_legacy_import_log(import_id, created_at);
+
+create table if not exists product_legacy_stock (
+  product_id uuid primary key references product(id) on delete cascade,
+  import_id uuid not null references system_legacy_import(id),
+  source_quantity numeric(14,3) not null,
+  reconstructed_quantity numeric not null,
+  adjustment numeric not null,
+  source_sha256 text not null check (source_sha256 ~ '^[a-f0-9]{64}$'),
+  reconciled_at timestamptz not null default now(),
+  check (source_quantity = reconstructed_quantity + adjustment)
+);
 
 create table if not exists customer_legacy_balance (
   customer_id uuid primary key references customer(id) on delete cascade,

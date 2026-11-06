@@ -1,6 +1,6 @@
 # Modo Nuvem — instalação e operação dos caixas Windows
 
-Disponível em **1.0.0-store.3**. Cada caixa acessa a loja publicada na internet pelo navegador. Se tiver impressora própria, executa também um agente Windows que consulta a fila por HTTPS e envia os trabalhos ao spooler local. A aplicação e o banco ficam no servidor contratado.
+Disponível desde **1.0.0-store.3**; pacote atual: **1.0.0-store.4**. Cada caixa acessa a loja publicada na internet pelo navegador. Se tiver impressora própria, executa também um agente Windows que consulta a fila por HTTPS e envia os trabalhos ao spooler local. A aplicação e o banco ficam no servidor contratado.
 
 O instalador conecta os caixas a um servidor existente. Ele não contrata hospedagem, cria domínio, publica o servidor, migra dados ou configura backups da nuvem. O pacote **POS-Nuvem** dispensa Docker nos caixas, imagens de servidor e certificado de rede local. O pacote completo POS-Loja também oferece os modos Nuvem.
 
@@ -13,8 +13,8 @@ Antes de instalar os caixas, o responsável pela hospedagem deve entregar:
 - A origem HTTPS pública final, por exemplo **https://caixa.sualoja.com.br**, na porta **443**, com frontend e API na mesma origem. Informe somente o domínio: sem caminho, parâmetros, usuário, senha ou redirecionamento.
 - Certificado público válido para esse domínio, cadeia completa e compatibilidade com TLS 1.2. Windows e Node precisam reconhecer a cadeia; a CA interna do instalador local não serve para este modo.
 - O **UUID da loja**, conferido no servidor por um canal confiável. A API precisa responder esse mesmo valor em GET /api/v1/store-info. O instalador verifica a identidade antes de enviar código/token.
-- Aplicação atualizada com o frontend desta versão, autenticação, perfis e migrações de impressoras aplicados. O frontend .3 entende a seleção inicial obrigatória do destino de impressão nos caixas sem impressora.
-- **PRINT_MODE=queue** quando houver impressão. Os endpoints de cadastro, pareamento e polling de agente devem estar disponíveis. Cada impressora recebe uma identidade e credencial próprias; o instalador não usa o token do Principal.
+- Aplicação atualizada com o frontend desta versão, autenticação, perfis e migrações aplicados.
+- **PRINT_MODE=queue** para agentes Windows. Os endpoints de cadastro, pareamento e polling devem estar disponíveis. Cada impressora recebe uma identidade e credencial próprias; o instalador não usa o token do Principal. Para impressão pelo diálogo do navegador, configure **PRINT_MODE=browser** no servidor e instale o cliente no modo **Nuvem**, sem agente.
 - Administração, monitoramento, backups externos e ensaio de restauração do servidor definidos. PostgreSQL, Redis, credenciais, arquivos de importação e métricas ficam protegidos na infraestrutura.
 
 O Compose local usa CA interna e configurações de LAN; não constitui uma configuração de hospedagem pública permanente. O ensaio temporário por túnel mantém validação da origem e tem procedimento próprio em [TESTE-INTERNET.md](TESTE-INTERNET.md). A configuração do proxy público, rede privada do banco/Redis, segredos, persistência e recuperação pertence à implantação do servidor. A entrega atual não inclui um provisionador de nuvem ou isolamento de várias lojas. Comece com uma instância para sua loja; expansão para clientes independentes exige arquitetura e operação próprias.
@@ -23,9 +23,9 @@ O Compose local usa CA interna e configurações de LAN; não constitui uma conf
 
 | Situação do caixa | Pacote recomendado | Modo |
 |---|---|---|
-| Somente navegador; usa impressora de outro caixa | POS-Nuvem-1.0.0-store.3.zip | Nuvem |
-| Navegador e impressora conectada a este Windows | POS-Nuvem-1.0.0-store.3.zip | Nuvem com impressora |
-| Serviços e banco continuam dentro da loja | POS-Loja-1.0.0-store.3.zip | Principal / Terminal; veja USO.md |
+| Somente navegador; usa impressora de outro caixa ou diálogo do navegador | POS-Nuvem-1.0.0-store.4.zip | Nuvem |
+| Navegador e impressora conectada a este Windows | POS-Nuvem-1.0.0-store.4.zip | Nuvem com impressora |
+| Serviços e banco continuam dentro da loja | POS-Loja-1.0.0-store.4.zip | Principal / Terminal; veja USO.md |
 
 Para dois caixas e uma impressora, use **Nuvem com impressora** no computador onde ela está conectada e **Nuvem** no outro. Os dois escolhem o mesmo destino no sistema. Se os dois tiverem impressora, pareie cada um com um código diferente e confira o destino próprio em cada navegador.
 
@@ -41,7 +41,7 @@ Não é necessário compartilhar impressora no Windows ou abrir porta no roteado
 Receba o ZIP e seu SHA256 por canal confiável. Confira antes de extrair:
 
 ```powershell
-Get-FileHash ./POS-Nuvem-1.0.0-store.3.zip -Algorithm SHA256
+Get-FileHash ./POS-Nuvem-1.0.0-store.4.zip -Algorithm SHA256
 ```
 
 Compare com o hash distribuído pelo mantenedor. Extraia o **ZIP inteiro** em pasta local; o EXE depende dos arquivos vizinhos. O build sem certificado de assinatura é explicitamente não assinado. Hash comprova integridade quando obtido por canal confiável; para distribuição comercial, assine EXE/scripts com certificado próprio.
@@ -52,9 +52,9 @@ Compare com o hash distribuído pelo mantenedor. Extraia o **ZIP inteiro** em pa
 2. Escolha **Nuvem**.
 3. Informe a **URL HTTPS pública** e o **ID UUID da loja**.
 4. Clique em **Instalar / Reparar**. O instalador valida o pacote, HTTPS e identidade e cria o atalho **POS Nuvem**.
-5. Abra esse atalho e faça login com seu usuário. Em **Destino da impressão**, escolha uma impressora habilitada e confira o nome antes do primeiro pedido.
+5. Abra esse atalho e faça login com seu usuário. Se o servidor usa `PRINT_MODE=queue`, em **Destino da impressão**, escolha uma impressora habilitada e confira o nome antes do primeiro pedido. Com `PRINT_MODE=browser`, a impressão abre o diálogo do navegador e dispensa essa seleção.
 
-Neste modo não há agente, credencial de impressão ou inicialização automática de processos. O atalho solicita uma escolha explícita: não presume que existe uma impressora Principal na nuvem. O botão de imprimir fica bloqueado enquanto o destino não for escolhido/validado. O navegador guarda a preferência por UUID da loja; abrir novamente o atalho sem impressora pode solicitar a seleção outra vez.
+Neste modo não há agente, credencial de impressão ou inicialização automática de processos. Quando o servidor usa fila, o atalho solicita uma escolha explícita: não presume que existe uma impressora Principal na nuvem. Nesse caso, o botão de imprimir fica bloqueado enquanto o destino não for escolhido/validado. O navegador guarda a preferência por UUID da loja; abrir novamente o atalho sem impressora pode solicitar a seleção outra vez.
 
 Para usar o sistema sem impressão, basta o login no navegador. Para imprimir em outro caixa, ele precisa estar pareado, ligado e conectado. Offline não troca automaticamente o destino.
 
@@ -99,6 +99,8 @@ Para **reparar** o mesmo caixa, execute a mesma versão, URL e UUID. No modo com
 
 Troca de conta, Windows ou computador exige novo pareamento e revogação do antigo, após revisar fila/papel. Não copie terminal-agent.bin como se fosse uma senha portável. Atualize o cliente distribuindo o novo pacote verificado e valide o contrato da API antes da liberação. O pacote Nuvem não atualiza o servidor.
 
+As atualizações de vendas, importação, restauração e backup agendado exigem publicar as imagens atuais da API/frontend no servidor e aplicar suas migrações na inicialização. Atualizar somente o ZIP Nuvem muda o cliente Windows. O backup diário é configurado na aplicação e começa desabilitado. Com `PRINT_MODE=browser` no servidor, use o modo **Nuvem**: recibos abrem o diálogo de impressão do navegador, sem agente ou pareamento. **Nuvem com impressora** continua exigindo `PRINT_MODE=queue`.
+
 ## 7. Migrar de instalação local
 
 A migração precisa de manutenção programada: backup/réplica validados, ensaio de restauração em alvo isolado, publicação do servidor, preservação do UUID e dos dados conforme o plano técnico, reconciliação de filas/journals e teste dos dois caixas. O instalador não move volumes, dados, impressões pendentes ou credenciais do Principal para a nuvem.
@@ -121,7 +123,7 @@ O atalho novo chama-se POS Nuvem e não sobrescreve POS Loja. A pasta privada do
 | Código inválido/expirado | Gere outro código no painel e use-o no caixa correspondente. Não envie tokens em chamados. |
 | Destino indisponível | Confira login Windows do caixa que imprime, internet, driver, diagnóstico e revogação. Não há troca automática de destino. |
 | Perfil pertence a outra loja | Preserve o estado; siga o plano de migração assistida. |
-| Caixa sem impressora não imprime | Selecione um destino habilitado no navegador; confirme que o computador correspondente está operacional. |
+| Caixa sem impressora não imprime | Em modo queue, selecione um destino habilitado e confirme que o computador correspondente está operacional. Em modo browser, confira o diálogo de impressão e as impressoras disponíveis no navegador. |
 
 ## 9. Detalhes técnicos e reprodução
 
@@ -134,7 +136,7 @@ Estado: terminal.json schemaVersion 3 com connectionMode cloud, SID, origem, UUI
 Build do cliente no Windows, sem Docker e sem Node previamente instalado:
 
 ```powershell
-./infra/installer/Build-CloudInstaller.ps1 -Version '1.0.0-store.3'
+./infra/installer/Build-CloudInstaller.ps1 -Version '1.0.0-store.4'
 # Opcional: -SigningThumbprint '<certificado de assinatura CurrentUser/My>'
 ```
 

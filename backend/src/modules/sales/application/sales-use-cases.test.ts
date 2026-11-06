@@ -287,7 +287,7 @@ describe("sales use-cases", () => {
     );
   });
 
-  it("keeps the selling price for card payments", async () => {
+  it("uses the base price for card payments instead of the submitted cash price", async () => {
     const repository = createRepositoryMock();
     repository.findProductsForCheckout.mockResolvedValue(catalogProducts);
     repository.create.mockResolvedValue({
@@ -299,11 +299,11 @@ describe("sales use-cases", () => {
       customer_id: null,
       payment_term_id: null,
       payment_method: "card",
-      amount_paid: "100",
+      amount_paid: "120",
       change_amount: "0",
-      subtotal: "100",
+      subtotal: "120",
       discount: "0",
-      total: "100",
+      total: "120",
       status: "completed",
       source: null,
       source_key: null,
@@ -324,7 +324,7 @@ describe("sales use-cases", () => {
           },
         ],
         payment_method: "card",
-        amount_paid: 100,
+        amount_paid: 120,
       },
       {
         id: "33333333-3333-4333-8333-333333333333",
@@ -335,12 +335,12 @@ describe("sales use-cases", () => {
 
     expect(repository.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        subtotal: 100,
-        total: 100,
+        subtotal: 120,
+        total: 120,
         items: [
           expect.objectContaining({
-            unit_price: 100,
-            total: 100,
+            unit_price: 120,
+            total: 120,
           }),
         ],
       }),
@@ -398,10 +398,10 @@ describe("sales use-cases", () => {
       payment_method: "credit",
       amount_paid: "0",
       change_amount: "0",
-      subtotal: "200",
+      subtotal: "250",
       discount: "0",
-      total: "200",
-      pending_amount: "200",
+      total: "250",
+      pending_amount: "250",
       status: "completed",
       source: null,
       source_key: null,
@@ -432,12 +432,12 @@ describe("sales use-cases", () => {
       },
     );
 
-    expect(result.pending_amount).toBe(200);
+    expect(result.pending_amount).toBe(250);
     expect(repository.create).toHaveBeenCalledWith(
       expect.objectContaining({
         amountPaid: 0,
-        pendingAmount: 200,
-        items: [expect.objectContaining({ unit_price: 200 })],
+        pendingAmount: 250,
+        items: [expect.objectContaining({ unit_price: 250 })],
       }),
     );
   });
@@ -463,10 +463,10 @@ describe("sales use-cases", () => {
       payment_method: "credit_with_entry",
       amount_paid: "100",
       change_amount: "0",
-      subtotal: "200",
+      subtotal: "250",
       discount: "0",
-      total: "200",
-      pending_amount: "100",
+      total: "250",
+      pending_amount: "150",
       status: "completed",
       source: null,
       source_key: null,
@@ -497,12 +497,12 @@ describe("sales use-cases", () => {
       },
     );
 
-    expect(result.pending_amount).toBe(100);
+    expect(result.pending_amount).toBe(150);
     expect(repository.create).toHaveBeenCalledWith(
       expect.objectContaining({
         amountPaid: 100,
-        pendingAmount: 100,
-        items: [expect.objectContaining({ unit_price: 200 })],
+        pendingAmount: 150,
+        items: [expect.objectContaining({ unit_price: 250 })],
       }),
     );
   });

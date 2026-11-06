@@ -1,15 +1,18 @@
-import React, { useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { salesService } from '../services/sales';
-import type { SaleReceiptLocale } from '../types/sales';
+import React, { useEffect, useRef } from "react";
+import { useTranslation } from "react-i18next";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { salesService } from "../services/sales";
+import type { SaleReceiptLocale } from "../types/sales";
 
-function resolveLocale(value: string | null, fallbackLanguage: string): SaleReceiptLocale {
-  if (value === 'en' || value === 'pt-BR') {
+function resolveLocale(
+  value: string | null,
+  fallbackLanguage: string,
+): SaleReceiptLocale {
+  if (value === "en" || value === "pt-BR") {
     return value;
   }
-  return fallbackLanguage === 'en' ? 'en' : 'pt-BR';
+  return fallbackLanguage === "en" ? "en" : "pt-BR";
 }
 
 export function SaleReceiptPage(): JSX.Element {
@@ -17,14 +20,15 @@ export function SaleReceiptPage(): JSX.Element {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const locale = resolveLocale(searchParams.get('locale'), i18n.language);
-  const autoPrint = searchParams.get('autoprint') === '1';
+  const locale = resolveLocale(searchParams.get("locale"), i18n.language);
+  const autoPrint = searchParams.get("autoprint") === "1";
+  const autoPrintedSale = useRef<string | null>(null);
 
   const receiptQuery = useQuery({
-    queryKey: ['sale-receipt', id, locale],
+    queryKey: ["sale-receipt", id, locale],
     queryFn: () => {
       if (!id) {
-        throw new Error('Missing sale id');
+        throw new Error("Missing sale id");
       }
       return salesService.getReceipt(id, locale);
     },
@@ -32,16 +36,24 @@ export function SaleReceiptPage(): JSX.Element {
   });
 
   useEffect(() => {
-    if (!autoPrint || receiptQuery.status !== 'success') {
+    if (
+      !autoPrint ||
+      !id ||
+      receiptQuery.status !== "success" ||
+      autoPrintedSale.current === id
+    ) {
       return undefined;
     }
 
-    const timer = setTimeout(() => window.print(), 200);
+    const timer = setTimeout(() => {
+      autoPrintedSale.current = id;
+      window.print();
+    }, 200);
     return () => clearTimeout(timer);
-  }, [autoPrint, receiptQuery.status]);
+  }, [autoPrint, id, receiptQuery.status]);
 
   if (receiptQuery.isLoading) {
-    return <div className="printable-page">{t('common.loading')}</div>;
+    return <div className="printable-page">{t("common.loading")}</div>;
   }
 
   if (receiptQuery.isError || !receiptQuery.data) {
@@ -49,9 +61,15 @@ export function SaleReceiptPage(): JSX.Element {
     return (
       <div className="printable-page">
         <div className="printable-card">
-          <p className="empty-state">{error?.message ?? t('sales.receiptLoadError')}</p>
-          <button type="button" className="button secondary" onClick={() => navigate(-1)}>
-            {t('common.back')}
+          <p className="empty-state">
+            {error?.message ?? t("sales.receiptLoadError")}
+          </p>
+          <button
+            type="button"
+            className="button secondary"
+            onClick={() => navigate(-1)}
+          >
+            {t("common.back")}
           </button>
         </div>
       </div>
@@ -63,11 +81,19 @@ export function SaleReceiptPage(): JSX.Element {
   return (
     <div className="printable-page">
       <div className="printable-actions">
-        <button type="button" className="button secondary" onClick={() => navigate(-1)}>
-          {t('common.back')}
+        <button
+          type="button"
+          className="button secondary"
+          onClick={() => navigate(-1)}
+        >
+          {t("common.back")}
         </button>
-        <button type="button" className="button primary" onClick={() => window.print()}>
-          {t('common.print')}
+        <button
+          type="button"
+          className="button primary"
+          onClick={() => window.print()}
+        >
+          {t("common.print")}
         </button>
       </div>
       <div className="printable-card matrix-receipt-card">

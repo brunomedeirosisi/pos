@@ -56,7 +56,7 @@ export const usePosStore = create<PosState>((set, get) => ({
   paymentTermId: null,
   discount: 0,
 
-  addProduct: (product, priceField = "price_cash") =>
+  addProduct: (product, priceField = "price_base") =>
     set((state) => {
       const fallbackPrice =
         priceField === "price_cash" ? product.price_base : product.price_cash;

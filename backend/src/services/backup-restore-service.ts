@@ -82,7 +82,7 @@ async function finishOperation(
      set status = $2,
          backup_filename = coalesce($3, backup_filename),
          snapshot_filename = coalesce($4, snapshot_filename),
-         details = coalesce($5::jsonb, details),
+         details = coalesce(details, '{}'::jsonb) || coalesce($5::jsonb, '{}'::jsonb),
          error_message = $6,
          finished_at = now()
      where id = $1`,
@@ -153,9 +153,14 @@ export async function enforceRetentionPolicy(actor: Actor | null, context: strin
   }
 }
 
-export async function createManagedBackup(actor: Actor, prefix = 'backup'): Promise<BackupCreateResult> {
-  return withBackupLock(async (lease) => {
-    const operationId = await createOperation('backup', actor, { prefix }, env.BACKUP_OPERATION_TIMEOUT_MS);
+export async function createManagedBackup(actor: Actor, prefix = 'backup', options: {
+  lease?: BackupLease; automatic?: { runId: string; scheduledFor: string };
+} = {}): Promise<BackupCreateResult> {
+  const trigger = options.automatic ? 'automatic' : actor.userId ? 'manual' : 'system';
+  const context = { trigger, ...(options.automatic ? {automaticRunId: options.automatic.runId, scheduledFor: options.automatic.scheduledFor} : {}) };
+  const create = async (lease: BackupLease): Promise<BackupCreateResult> => {
+    lease.assertHeld();
+    const operationId = await createOperation('backup', actor, { prefix, ...context }, env.BACKUP_OPERATION_TIMEOUT_MS);
 
     try {
       const backup = await createBackupArchive(prefix, env.BACKUP_OPERATION_TIMEOUT_MS, lease.signal);
@@ -164,7 +169,7 @@ export async function createManagedBackup(actor: Actor, prefix = 'backup'): Prom
       await query(
         `insert into system_backup (filename, size_bytes, created_by, checksum, metadata)
          values ($1, $2, $3, $4, $5::jsonb)`,
-        [backup.filename, backup.sizeBytes, actor.userId, backup.checksum, JSON.stringify(backup.metadata)]
+        [backup.filename, backup.sizeBytes, actor.userId, backup.checksum, JSON.stringify({...backup.metadata, ...context, operationId})]
       );
 
       await enforceRetentionPolicy(actor, 'backup:create', lease);
@@ -172,7 +177,7 @@ export async function createManagedBackup(actor: Actor, prefix = 'backup'): Prom
       await logAudit({
         userId: actor.userId,
         action: 'BACKUP_CREATE',
-        details: { filename: backup.filename, sizeBytes: backup.sizeBytes, operationId },
+        details: { filename: backup.filename, sizeBytes: backup.sizeBytes, operationId, ...context },
         ipAddress: actor.ipAddress ?? null,
       });
 
@@ -189,7 +194,8 @@ export async function createManagedBackup(actor: Actor, prefix = 'backup'): Prom
       });
       throw error;
     }
-  });
+  };
+  return options.lease ? create(options.lease) : withBackupLock(create);
 }
 
 export type RestoreResult = {

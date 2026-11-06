@@ -1,0 +1,41 @@
+{
+    "runtimeImagesMatchSmokeEvidence":  true,
+    "physicalPrinting":  "simulated",
+    "passed":  true,
+    "packages":  [
+                     {
+                         "version":  "1.0.0-store.4",
+                         "sizeBytes":  286148586,
+                         "sourceWasDirty":  true,
+                         "documentationVerified":  true,
+                         "filesVerified":  30,
+                         "sourceHead":  "5fe1936cd8bcb71a7f36194d12792fe14d09ab81",
+                         "codeSigned":  false,
+                         "sourceScriptsVerified":  true,
+                         "mode":  "Principal",
+                         "path":  "artifacts/POS-Loja-1.0.0-store.4.zip",
+                         "zipContentHashesVerified":  true,
+                         "builtAtUtc":  "2026-11-05T14:56:28.0603666Z",
+                         "sha256":  "66379768d96d752f7ff4c971b97671e49a1e499f58567480fe9e6737dbbf50e8"
+                     },
+                     {
+                         "version":  "1.0.0-store.4",
+                         "sizeBytes":  35053682,
+                         "sourceWasDirty":  true,
+                         "documentationVerified":  true,
+                         "filesVerified":  19,
+                         "sourceHead":  "5fe1936cd8bcb71a7f36194d12792fe14d09ab81",
+                         "codeSigned":  false,
+                         "sourceScriptsVerified":  true,
+                         "mode":  "Cloud",
+                         "path":  "artifacts/POS-Nuvem-1.0.0-store.4.zip",
+                         "zipContentHashesVerified":  true,
+                         "builtAtUtc":  "2026-11-05T14:56:33.8036323Z",
+                         "sha256":  "796138468bc52e6ae4ad3a9a8b22ac69f3f61c27bd8729d0e879fb548d4287d8"
+                     }
+                 ],
+    "httpsChecks":  15,
+    "backupSupervisorContracts":  4,
+    "windowsInstallerChecks":  137,
+    "atUtc":  "2026-11-05T14:57:43.0575645Z"
+}

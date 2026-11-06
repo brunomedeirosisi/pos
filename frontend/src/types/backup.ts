@@ -1,3 +1,20 @@
+export type BackupScheduleInput = { enabled: boolean; time: string };
+export type BackupExecution = {
+  id: string;
+  type: "manual" | "automatic" | "system";
+  status: "running" | "completed" | "failed";
+  scheduledFor: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  filename: string | null;
+  errorMessage: string | null;
+};
+export type BackupSchedule = BackupScheduleInput & {
+  timezone: string;
+  nextRunAt: string | null;
+  updatedAt: string;
+  lastRun: BackupExecution | null;
+};
 export type BackupRecord = {
   id: string;
   filename: string;
@@ -17,7 +34,7 @@ export type RestoreRequest = {
   confirm: true;
 };
 export type RestoreResult = {
-  status: 'ok' | 'rolled_back';
+  status: "ok" | "rolled_back";
   restored: boolean;
   rollbackApplied: boolean;
   snapshot: string;

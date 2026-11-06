@@ -52,14 +52,16 @@ export function usePrinterDestination() {
     refetchInterval: 10000,
   });
   const printers = selected.data?.items ?? [];
-  const direct = query.data?.mode === "direct";
+  const local = query.data?.mode === "direct" || query.data?.mode === "browser";
   const loading =
     query.isPending ||
     (query.data?.mode === "queue" && value !== "choose" && selected.isPending);
-  const error = query.isError || (!direct && selected.isError);
-  const valid = direct || availablePrinter(value, printers);
+  const error = query.isError || (!local && selected.isError);
+  const valid =
+    local ||
+    (query.data?.mode === "queue" && availablePrinter(value, printers));
   const selection: PrinterSelection = {
-    visible: !direct,
+    visible: !local,
     printers,
     value,
     loading,
@@ -83,6 +85,7 @@ export function usePrinterDestination() {
   return {
     selection,
     canPrint: !loading && !error && valid,
-    printerId: direct ? undefined : value,
+    mode: query.data?.mode,
+    printerId: local ? undefined : value,
   };
 }

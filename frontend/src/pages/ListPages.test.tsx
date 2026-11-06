@@ -34,6 +34,7 @@ beforeEach(() => {
   document.body.appendChild(host);
   root = createRoot(host);
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  vi.spyOn(backupService,"schedule").mockResolvedValue({enabled:false,time:"03:00",timezone:"America/Recife",nextRunAt:null,updatedAt:"2026-10-30T12:00:00Z",lastRun:null});
   vi.spyOn(backupService, "options").mockResolvedValue({
     restoreEnabled: true,
   });
@@ -87,6 +88,9 @@ describe.each(["pt-BR", "en"])("list adoption in %s", (locale) => {
             legacy_code: String(number),
             permissions: [],
             discountLimit: 0,
+            price_base: 125,
+            price_cash: 100,
+            current_stock: number,
             status: "active",
             role: null,
             filename: `backup-${number}.zip`,
@@ -110,11 +114,19 @@ describe.each(["pt-BR", "en"])("list adoption in %s", (locale) => {
         ),
       );
       await flush();
-      expect(host.querySelectorAll("tbody tr")).toHaveLength(25);
+      const scope = resource === "backups" ? host.querySelector(`table[aria-label="${i18n.t("backups.listTitle")}"]`)!.closest("section")! : host;
+      expect(scope.querySelectorAll("tbody tr")).toHaveLength(25);
+      if (resource === "products") {
+        expect(host.querySelector("thead")?.textContent).toContain(i18n.t("products.priceBase"));
+        expect(host.querySelector("thead")?.textContent).toContain(i18n.t("products.priceCash"));
+        expect(host.querySelector("thead")?.textContent).toContain(i18n.t("products.currentStock"));
+        expect(host.querySelector("tbody tr")?.textContent).toContain("125,00");
+        expect(host.querySelector("tbody tr")?.textContent).toContain("100,00");
+      }
       expect(host.textContent).toContain(
         i18n.t("pagination.range", { start: 1, end: 25, total: 157 }),
       );
-      const next = host.querySelector<HTMLButtonElement>(
+      const next = scope.querySelector<HTMLButtonElement>(
         `button[aria-label="${i18n.t("pagination.next")}"]`,
       )!;
       expect(next.disabled).toBe(false);
@@ -127,7 +139,13 @@ describe.each(["pt-BR", "en"])("list adoption in %s", (locale) => {
       expect(host.textContent).toContain(
         i18n.t("pagination.range", { start: 26, end: 50, total: 157 }),
       );
-      expect(host.querySelectorAll("tbody tr")).toHaveLength(25);
+      expect(scope.querySelectorAll("tbody tr")).toHaveLength(25);
+      if (resource === "products") {
+        const stockColumn = Array.from(host.querySelectorAll("thead th")).findIndex(
+          (header) => header.textContent === i18n.t("products.currentStock"),
+        );
+        expect(host.querySelector("tbody tr")?.children[stockColumn].textContent).toBe("26");
+      }
     },
   );
 });

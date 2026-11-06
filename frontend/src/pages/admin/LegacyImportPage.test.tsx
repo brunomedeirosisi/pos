@@ -15,7 +15,7 @@ vi.mock('../../components/ui/ToastProvider', () => ({
 }));
 vi.mock('../../store/auth', () => ({ useHasPermission: vi.fn(() => true) }));
 
-const stages = ['reset-target', 'load-staging:stg_produto', 'migrate-master', 'migrate-sales', 'reconciliation-report'];
+const stages = ['reset-target', 'load-staging:stg_produto', 'migrate-master', 'migrate-sales', 'reconcile-product-stock', 'reconciliation-report'];
 const accepted = {
   sessionId: 'synthetic-session',
   status: 'queued',
@@ -67,6 +67,7 @@ function completedStatus(mismatches: string[] = []): LegacyImportStatus {
       sales: { sales: 10, saleItems: 20, orders: 4, orderItems: 8, mismatches },
       customerPayments: 6,
       stockMovements: 7,
+      productStock: { products: 12, verified: 12, adjusted: 10, changed: 12, sourceSha256: 'b'.repeat(64) },
       customerBalances: { customers: 3, verified: 3, adjusted: 2, changed: 3, sourceTotal: '590.00', adjustmentTotal: '-23856.00', sourceSha256: 'a'.repeat(64) },
     },
   };
@@ -285,6 +286,8 @@ describe.each(['pt-BR', 'en'])('legacy import feedback in %s', (locale) => {
     await flush(5000);
     expect(container.textContent).toContain(i18n.t('legacyImport.completed'));
     expect(container.textContent).toContain(i18n.t('legacyImport.balancesVerified', { count: 3 }));
+    expect(container.textContent).toContain(i18n.t('legacyImport.stockVerified', { count: 12 }));
+    expect(container.textContent).toContain(i18n.t('legacyImport.stages.productStock'));
     expect(showToast.mock.calls.filter(([, variant]) => variant === 'success')).toEqual([
       [i18n.t('legacyImport.completed'), 'success'],
     ]);

@@ -17,6 +17,10 @@ function makeBaseEnv() {
 }
 
 describe('parseEnv', () => {
+  it('accepts browser printing without configuring a print agent or queue token',()=>{
+    const parsed=parseEnv({...makeBaseEnv(),PRINT_MODE:'browser'});
+    expect(parsed.PRINT_MODE).toBe('browser');expect(parsed.PRINT_AGENT_URL).toBeUndefined();expect(parsed.PRINT_AGENT_TOKEN_SHA256).toBeUndefined();
+  });
   it('fails when JWT_SECRET is missing', () => {
     const env = makeBaseEnv();
     // @ts-expect-error deliberate missing value for validation

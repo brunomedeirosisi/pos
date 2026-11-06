@@ -56,7 +56,7 @@ afterEach(() => {
   client?.clear();
 });
 
-function render(view: "list" | "details") {
+function render(view: "list" | "details", record: Sale = sale) {
   client = new QueryClient({
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
@@ -69,7 +69,7 @@ function render(view: "list" | "details") {
     ],
     pageFixture([sale]),
   );
-  client.setQueryData(["sale", sale.id], sale);
+  client.setQueryData(["sale", sale.id], record);
   for (const key of ["sales-customers", "sales-sellers", "sales-payment-terms"])
     client.setQueryData([key], []);
   return renderToStaticMarkup(
@@ -89,6 +89,32 @@ function render(view: "list" | "details") {
 describe.each(["pt-BR", "en"])(
   "imported sale date presentation in %s",
   (locale) => {
+    it("labels finalized item prices as unit prices in sale details", async () => {
+      await i18n.changeLanguage(locale);
+      const html = render("details", {
+        ...sale,
+        payment_method: "card",
+        subtotal: 240,
+        discount: 5,
+        total: 235,
+        items: [
+          {
+            id: "item",
+            product_id: "product",
+            product_name: "Saved product",
+            quantity: 2,
+            unit_price: 120,
+            total: 240,
+          },
+        ],
+      });
+      expect(html).toContain(i18n.t("sales.unitPrice"));
+      expect(html).toContain(i18n.t("sales.quantity"));
+      expect(html).not.toContain(i18n.t("products.priceCash"));
+      expect(html).toContain("120,00");
+      expect(html).toContain("240,00");
+    });
+
     it("shows the original calendar date without an artificial hour in sales history", async () => {
       await i18n.changeLanguage(locale);
       const html = render("list");

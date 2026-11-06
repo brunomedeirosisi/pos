@@ -29,7 +29,7 @@ it("does not change the cart for an invalid quantity or aggregate overflow", () 
     usePosStore.getState().updateQuantity(product.id, 0.0001),
   ).toThrow();
   expect(usePosStore.getState().items[0].quantity).toBe(1);
-  const largest = { ...product, id: "large", price_cash: 999999999999.99 };
+  const largest = { ...product, id: "large", price_base: 999999999999.99 };
   expect(() => usePosStore.getState().addProduct(largest)).toThrow();
   expect(usePosStore.getState().items).toHaveLength(1);
 });
@@ -50,4 +50,23 @@ it("increments by one and removes only through the explicit action", () => {
   expect(usePosStore.getState().items[0].quantity).toBe(2);
   usePosStore.getState().removeItem(product.id);
   expect(usePosStore.getState().items).toEqual([]);
+});
+
+it("uses base prices for new and repeated products and falls back only when missing", () => {
+  const differentPrices = { ...product, price_cash: 100, price_base: 125 };
+  usePosStore.getState().addProduct(differentPrices);
+  usePosStore.getState().addProduct(differentPrices);
+  expect(usePosStore.getState().items[0]).toMatchObject({
+    unitPrice: 125,
+    quantity: 2,
+    total: 250,
+    priceCash: 100,
+    priceBase: 125,
+  });
+  usePosStore.getState().reset();
+  usePosStore.getState().addProduct({ ...differentPrices, price_base: null });
+  expect(usePosStore.getState().getTotal()).toBe(100);
+  usePosStore.getState().reset();
+  usePosStore.getState().addProduct({ ...differentPrices, price_base: 0 });
+  expect(usePosStore.getState().getTotal()).toBe(0);
 });

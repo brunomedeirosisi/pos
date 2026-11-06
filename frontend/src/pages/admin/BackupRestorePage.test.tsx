@@ -38,7 +38,17 @@ let container: HTMLDivElement;
 let root: Root;
 let client: QueryClient;
 beforeEach(() => {
-  mockListPages(async () => backupService.list());
+  mockListPages(async (resource) =>
+    resource === "backups" ? backupService.list() : [],
+  );
+  vi.spyOn(backupService, "schedule").mockResolvedValue({
+    enabled: false,
+    time: "03:00",
+    timezone: "America/Recife",
+    nextRunAt: null,
+    updatedAt: "2026-10-30T12:00:00Z",
+    lastRun: null,
+  });
   vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   container = document.createElement("div");
@@ -161,7 +171,8 @@ describe.each(["pt-BR", "en"])("restore feedback in %s", (locale) => {
     await password("backup-password");
     await act(async () =>
       container
-        .querySelector("form")!
+        .querySelector("#backup-upload")!
+        .closest("form")!
         .dispatchEvent(
           new Event("submit", { bubbles: true, cancelable: true }),
         ),
