@@ -39,13 +39,14 @@ O instalador oferece **Nuvem**, com ou sem impressora Windows, para conectar os 
 - [Registro do instalador inicial](docs/technical-audit/22-instalador-windows.md)
 - [Impressoras por caixa e evidências da evolução](docs/technical-audit/24-impressoras-por-caixa.md)
 - [Implementação e evidências do Modo Nuvem](docs/technical-audit/26-instalador-nuvem.md)
+- [Pacotes store.5: estoque, atualização e evidências](docs/technical-audit/29-atualizacao-instaladores-store5.md)
 
 Para gerar o pacote no Windows com Docker Linux/amd64:
 
 ```powershell
-./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.4' -CompatibleFrom '1.0.0-store.3'
+./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.5' -CompatibleFrom '1.0.0-store.4'
 # Cliente Nuvem: Windows, sem Docker no build ou nos caixas
-./infra/installer/Build-CloudInstaller.ps1 -Version '1.0.0-store.4'
+./infra/installer/Build-CloudInstaller.ps1 -Version '1.0.0-store.5'
 ```
 
 Distribua o ZIP inteiro de `artifacts/POS-Loja-<versão>.zip` por canal confiável com seu SHA256. Extraia e abra `Instalar-POS.exe` no Caixa 1. O instalador gera `Terminal-POS` para o Caixa 2. A inicialização automática ocorre após login na conta Windows da instalação. Consulte os guias para os pré-requisitos de rede, Docker, impressora e backup externo e os gates de produto ainda pendentes antes de vendas reais.
@@ -149,6 +150,8 @@ powershell -ExecutionPolicy Bypass -File .\infra\remove-dev-certificate.ps1
 - Configure company header on receipts/reports via `COMPANY_NAME`, `COMPANY_ADDRESS`, `COMPANY_TAX_ID` in your environment.
 
 ### Product Stock
+
+Admin and Manager profiles with `stock:adjust` can make audited manual stock adjustments with a required reason, explicit confirmation, conflict detection and immutable history in PT-BR/EN. New quantities and opening stock use whole units. Other profiles retain their existing stock-read access through product details/history. See [manual stock adjustments](docs/manual-stock-adjustments.md) for permissions, concurrency, API and deployment.
 
 The product catalog list and its existing modal display **Estoque atual / Current stock** in PT-BR and EN, with localized separators and up to three decimal places. Product creation accepts an initial quantity, defaulting to zero, and atomically saves its operational stock entry with the product; existing-product editing shows the computed quantity as read-only. Imported products start from `PRODUTO.DBF.ESTO_PROD`; historical movements are reconciled to avoid counting them twice, and subsequent operational movements retain their effect. The quantity uses the same calculation as the critical-stock dashboard. Native products without movements show zero. See [product stock](docs/product-stock.md) for creation, the import migration, repair of existing imports and tests. No seed change is required.
 
@@ -266,5 +269,11 @@ Test dependencies are installed from the lockfiles inside dedicated Docker image
 The original host-runner mode remains available without `--docker` and requires local test dependencies and `NPM_CLI` pointing to npm/bin/npm-cli.js. Restore and legacy overwrite remain disabled by default pending recovery validation. Applying the authentication migration invalidates previous stateless sessions; operators must sign in again.
 
 A paginação compartilhada das listagens, os contratos de leitura e o inventário de telas estão em [docs/pagination.md](docs/pagination.md).
+
+Seletores de registros usam busca e rolagem infinita em PT-BR/EN, com lotes configuráveis e seleções preservadas: [comportamento, inventário e limites](docs/infinite-selects.md). A paginação de tabelas e históricos permanece independente.
+
+A página de clientes apresenta indicadores globais da carteira e saldo devedor por cliente para Admin/Gerente, reutilizando a fonte financeira dos detalhes: [regras, acesso e atualização](docs/customer-portfolio.md).
+
+O Dashboard possui uma aba **Pagamentos / Payments** com recebimentos, estornos por data, gráficos, rankings, posição atual da carteira e exportação Excel: [regras financeiras, acesso, migração e limitações](docs/dashboard-payments.md).
 
 O PDV aceita somente quantidades inteiras positivas em novas vendas: [quantidades de venda](docs/sales-quantities.md).

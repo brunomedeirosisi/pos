@@ -45,11 +45,11 @@ export function CustomerSummarySection(props: CustomerSummarySectionProps): JSX.
           </div>
           {customer.totals.legacy_balance && (
             <>
-              <div className="balance-card">
+              <div className="balance-card print-hidden">
                 <span>{t('customers.legacySourceBalance')}</span>
                 <strong>{formatCurrency(customer.totals.legacy_balance.source_balance)}</strong>
               </div>
-              <div className="balance-card">
+              <div className="balance-card print-hidden">
                 <span>{t('customers.legacyBalanceAdjustment')}</span>
                 <strong>{formatCurrency(customer.totals.legacy_balance.adjustment)}</strong>
                 <small>{t('customers.legacyBalanceHint')}</small>

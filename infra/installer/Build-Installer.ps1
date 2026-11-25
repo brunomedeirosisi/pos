@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$Version='1.0.0-store.4',[string[]]$CompatibleFrom=@(),[string]$SigningThumbprint='')
+param([string]$Version='1.0.0-store.5',[string[]]$CompatibleFrom=@(),[string]$SigningThumbprint='')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Pos.Common.ps1')
 . (Join-Path $PSScriptRoot 'Pos.Build.ps1')
@@ -42,6 +42,7 @@ $compiler=Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319\csc.ex
 $null=Invoke-PosProcess $compiler @('/nologo','/target:winexe','/platform:x64','/reference:System.Windows.Forms.dll','/reference:System.Web.Extensions.dll',('/out:'+(Join-Path $bundle 'Instalar-POS.exe')),(Join-Path $PSScriptRoot 'Launcher.cs'))
 $null=New-Item -ItemType Directory -Path (Join-Path $bundle 'documentacao')
 foreach($name in @('USO.md','TECNICO.md','HOMOLOGACAO.md','IMPRESSORAS.md','NUVEM.md','TESTE-INTERNET.md')){Copy-Item -LiteralPath (Join-Path $repoRoot ('docs\instalacao\'+$name)) -Destination (Join-Path $bundle ('documentacao\'+$name))}
+foreach($name in @('manual-stock-adjustments.md','product-stock.md')){Copy-Item -LiteralPath (Join-Path $repoRoot ('docs\'+$name)) -Destination (Join-Path $bundle $name)}
 $readme='POS Loja '+$Version+[Environment]::NewLine+'Extraia o ZIP completo e execute Instalar-POS.exe. Leia documentacao/USO.md antes de instalar.'+[Environment]::NewLine+'Principal: mesmo usuario Windows que executa Docker Desktop e a impressora. Terminal: copie somente Terminal-POS gerado pelo Principal.'+[Environment]::NewLine+'O pacote nao inclui dados sinteticos de vendas. Preserve dados/volumes e conclua homologacao de rede, impressora e recuperacao.'
 [IO.File]::WriteAllText((Join-Path $bundle 'LEIA-ME.txt'),$readme,(New-Object Text.UTF8Encoding($true)))
 if($SigningThumbprint){

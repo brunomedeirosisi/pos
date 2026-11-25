@@ -761,6 +761,7 @@ textarea:disabled {
   width: 100%;
   max-height: min(280px, 50vh);
   overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid #d6deea;
   border-radius: var(--radius-sm);
   background: var(--color-surface);
@@ -770,6 +771,10 @@ textarea:disabled {
   list-style: none;
   margin: 0;
   padding: 4px 0;
+}
+
+.searchable-select__sentinel {
+  height: 1px;
 }
 
 .searchable-select__popup p,
@@ -1498,6 +1503,10 @@ textarea:disabled {
 }
 
 @media print {
+  @page {
+    margin: 0;
+  }
+
   .printable-card .table-wrapper {
     overflow: visible;
   }
@@ -1508,6 +1517,15 @@ textarea:disabled {
     break-inside: avoid;
   }
 
+  .printable-header,
+  .receipt-grid > div {
+    break-inside: avoid;
+  }
+
+  .printable-header h2 {
+    font-weight: 700;
+  }
+
   body {
     background: #ffffff;
   }
@@ -1515,7 +1533,8 @@ textarea:disabled {
   .kt-topbar,
   .kt-sidebar,
   .toast-container,
-  .printable-actions {
+  .printable-actions,
+  .print-hidden {
     display: none !important;
   }
 
@@ -1532,6 +1551,10 @@ textarea:disabled {
     box-shadow: none !important;
     border: none !important;
     background: #ffffff !important;
+  }
+
+  .printable-page {
+    padding: 4mm !important;
   }
 }
 
@@ -1575,6 +1598,70 @@ textarea:disabled {
   gap: var(--space-12);
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   align-items: stretch;
+}
+
+.dashboard-tabs { display: flex; flex-wrap: wrap; gap: var(--space-8); margin-bottom: var(--space-16); }
+.dashboard-tabs [role="tab"] { padding: 0.65rem 1.25rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); cursor: pointer; font: inherit; }
+.dashboard-tabs [aria-selected="true"] { background: var(--color-primary); color: white; }
+.dashboard-kpi-card { position: relative; }
+.kpi-help { cursor: help; }
+.kpi-help__text { display: none; position: absolute; top: 100%; left: 0; right: 0; z-index: 40; padding: 0.75rem; background: var(--color-text-strong); color: white; border-radius: var(--radius-sm); text-transform: none; letter-spacing: normal; font-size: 0.8rem; box-shadow: var(--shadow-card); }
+.kpi-help:hover .kpi-help__text, .kpi-help:focus .kpi-help__text { display: block; }
+.payment-drill, .payment-sort { background: transparent; border: 0; padding: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.payment-drill:hover, .payment-sort:hover { text-decoration: underline; }
+.payment-origin { display: grid; gap: 0.4rem; margin-bottom: 1rem; }
+.payment-origin__bar { height: 12px; background: var(--color-border); border-radius: 6px; overflow: hidden; }
+.payment-origin__bar span { display: block; height: 100%; background: var(--color-primary); }
+.payment-unavailable { font-weight: 600; color: var(--color-text-muted); }
+.payments-dashboard td small { display: block; overflow-wrap: anywhere; }
+.payments-dashboard .dashboard-kpis { grid-template-columns: repeat(auto-fit,minmax(min(100%,200px),1fr)); }
+.payments-dashboard .dashboard-kpi-card h3 { overflow-wrap: anywhere; }
+.payments-dashboard .dashboard-line-chart { min-width: 0; }
+.payments-dashboard svg { width: 100%; height: auto; }
+.payment-coverage p { margin-bottom: 0; }
+
+.customer-portfolio__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-12);
+}
+
+.customer-portfolio {
+  margin-bottom: var(--space-16);
+}
+
+.customer-portfolio .dashboard-kpis {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+}
+
+.customer-portfolio .dashboard-kpi-card h3 {
+  overflow-wrap: anywhere;
+}
+
+.customer-balance {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.customer-balance small {
+  display: block;
+  font-size: 0.75rem;
+}
+
+.customer-balance--debt { color: #8a5300; }
+.customer-balance--credit { color: #166534; }
+.customer-balance--clear { color: var(--color-text-muted); }
+
+.customer-balance__sort {
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
 }
 
 .dashboard-kpi-card {
@@ -2063,10 +2150,6 @@ textarea:disabled {
   width: auto;
   flex: 0 0 auto;
   padding: 0.45rem 0.6rem;
-}
-.searchable-select__popup .pagination {
-  padding: 0.5rem;
-  font-size: 0.8rem;
 }
 @media (max-width: 600px) {
   .pagination__controls {

@@ -4,7 +4,7 @@ Para servidor na internet, siga [NUVEM.md](NUVEM.md): o pacote POS-Nuvem conecta
 
 Para um ensaio temporário do checkout local pela internet, consulte [TESTE-INTERNET.md](TESTE-INTERNET.md): comandos em uma linha, duas janelas PowerShell, certificado, CORS, recuperação dos serviços e encerramento. Esse roteiro usa o Compose da raiz do projeto; os comandos do Principal instalado são diferentes.
 
-Este guia cobre o instalador Windows do POS 1.0.0-store.4: **Caixa 1 Principal**, com aplicação/banco/impressora, e **Caixa 2 Terminal**, que acessa pelo navegador. O pacote inclui um executável de entrada e arquivos auxiliares; extraia o ZIP inteiro. O executável não funciona isolado.
+Este guia cobre o instalador Windows do POS 1.0.0-store.5: **Caixa 1 Principal**, com aplicação/banco/impressora, e **Caixa 2 Terminal**, que acessa pelo navegador. O pacote inclui um executável de entrada e arquivos auxiliares; extraia o ZIP inteiro. O executável não funciona isolado.
 
 A instalação fica pronta para homologação da infraestrutura. Antes de vendas reais, conclua os controles de crédito/cliente inativo, estoque não negativo e recuperação operacional pendentes no roadmap. “Instalação concluída” não certifica essas regras de negócio nem a saída física da impressora.
 
@@ -24,7 +24,7 @@ No Caixa 2: navegador, acesso à rede e o pacote Terminal-POS recebido do Caixa 
 Receba o ZIP e seu SHA256 por um canal confiável. Confira o hash antes de extrair:
 
 ```powershell
-Get-FileHash ./POS-Loja-1.0.0-store.4.zip -Algorithm SHA256
+Get-FileHash ./POS-Loja-1.0.0-store.5.zip -Algorithm SHA256
 ```
 
 Compare com o valor fornecido pelo responsável pela versão. O build local padrão não possui assinatura digital do instalador; o runtime Node incluído tem sua assinatura e checksum verificados no build. Não desative antivírus/SmartScreen para contornar um pacote desconhecido. Uma distribuição comercial deve usar certificado de assinatura confiável.
@@ -147,7 +147,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $posTools 'At
 
 O atualizador faz backup antes da troca, verifica imagens e saúde e preserva a versão anterior e os volumes. Se a atualização falhar após possível migração, não volta automaticamente o banco nem a imagem antiga: bloqueia o reinício para diagnóstico/recuperação assistida.
 
-O pacote `1.0.0-store.4` declara atualização a partir de `1.0.0-store.3`. Atualize o pacote completo para substituir também o supervisor antigo. Depois, habilite o backup diário na aplicação; a antiga rotina automática de 24 horas deixa de existir. As migrações são aplicadas pela API ao iniciar. Para versões anteriores, siga as etapas de atualização dos pacotes compatíveis. O cliente Nuvem não atualiza a aplicação do servidor.
+O pacote `1.0.0-store.5` declara atualização a partir de `1.0.0-store.4` e inclui estoque atual, estoque inicial no cadastro, reconciliação de saldos importados e ajustes manuais com histórico auditado. As duas novas migrações são aplicadas pela API ao iniciar, preservando movimentos anteriores e concedendo a permissão de ajuste ao Gerente padrão. A agenda de backup existente é preservada; em uma instalação nova, habilite o backup diário na aplicação. Para versões anteriores, siga as etapas de atualização dos pacotes compatíveis até store.4 antes de aplicar store.5. O cliente Nuvem não atualiza a aplicação do servidor.
 
 Para retirar a inicialização automática e a regra HTTPS sem excluir dados:
 
@@ -175,7 +175,9 @@ Todos os campos de data usam **DD/MM/YYYY**, em português e inglês, independen
 
 ### Estoque dos produtos
 
-Ao **Adicionar** um produto, preencha **Estoque atual** (**Current stock** em inglês) com a quantidade inicial disponível. O campo começa em zero e, se ficar em branco, será gravado como zero. Aceita quantidades de zero até 99.999.999.999,999, com até três casas decimais, nos formatos PT-BR e EN. Ao salvar, o produto e sua entrada inicial de estoque são registrados juntos. Se houver falha, nenhum produto com saldo incompleto será criado. A quantidade já aparece na listagem e no painel; novas vendas e cancelamentos alteram esse saldo normalmente.
+Ao **Adicionar** um produto, Admin e Gerente autorizados podem preencher **Estoque atual** (**Current stock** em inglês) com a quantidade inicial disponível. O campo começa em zero e, se ficar em branco, será gravado como zero. Aceita somente números inteiros de zero até 99.999.999.999, digitados sem separadores. Ao salvar, produto, entrada inicial e auditoria são registrados juntos. Outros perfis com permissão de cadastro podem criar o produto com saldo zero. A quantidade aparece na listagem e no painel; novas vendas e cancelamentos alteram esse saldo normalmente.
+
+Para corrigir o saldo de um produto existente, Admin e Gerente usam **Ajustar estoque**: confira o saldo consultado, informe a nova quantidade inteira e a justificativa, selecione **Revisar ajuste** e **Confirmar ajuste**. Se o saldo mudar nesse intervalo, recarregue e confira novamente. Em **Visualizar** ou **Editar**, a seção **Histórico de Estoque** mostra responsável, data/hora, saldos, diferença e motivo, com filtros e paginação. Os ajustes são auditados e não apagam vendas nem movimentos anteriores. Detalhes: [ajuste manual de estoque](../manual-stock-adjustments.md).
 
 A listagem de **Produtos** mostra a coluna **Estoque atual** (**Current stock** em inglês). Ao abrir **Editar**, o mesmo saldo aparece no pop-up, em um campo somente para leitura, separado do **Estoque mínimo**. Produtos importados partem do saldo `ESTO_PROD` do `PRODUTO.DBF` original; o histórico `MOV_EST.DBF` é conciliado para não contar suas entradas e saídas novamente. Vendas, cancelamentos e ajustes operacionais posteriores continuam alterando o saldo, com a mesma regra do painel de estoque crítico. Produtos nativos sem movimentações mostram zero. Saldos negativos e frações existentes são exibidos com até três casas decimais, usando os separadores do idioma selecionado. Recarregue a listagem para consultar movimentações registradas depois da consulta anterior. O saldo não é alterado ao salvar o cadastro. Instalações importadas pela versão anterior precisam do reparo administrativo descrito em [estoque dos produtos](../product-stock.md), sem repetir a sobrescrita dos dados.
 

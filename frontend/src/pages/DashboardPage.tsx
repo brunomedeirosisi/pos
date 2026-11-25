@@ -1,5 +1,13 @@
 import { DateInput } from "../components/ui/DateInput";
 import { SearchableSelect } from "../components/ui/SearchableSelect";
+import { KpiCard } from "../components/ui/KpiCard";
+import { WidgetFrame } from "../components/ui/DashboardWidget";
+import {
+  chartPalette,
+  renderLinePoints,
+  getHeatColor,
+} from "../components/ui/dashboard-charts";
+import { PaymentsDashboard } from "./dashboard/PaymentsDashboard";
 import { useListQuery } from "../hooks/useListQuery";
 import { useClientPage } from "../hooks/useClientPage";
 import { ListPagination } from "../components/ui/Pagination";
@@ -15,7 +23,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { dashboardService } from "../services/dashboard";
-import { useHasPermission } from "../store/auth";
+import { useCanViewCustomerFinancials, useHasPermission } from "../store/auth";
 import {
   formatDateDdMmYyyy,
   getTodayIsoDate,
@@ -39,16 +47,6 @@ const channelOptions: Array<{ id: string; key: string }> = [
 
 const dayLabels = [1, 2, 3, 4, 5, 6, 7];
 const hourLabels = Array.from({ length: 24 }, (_, index) => index);
-const chartPalette = [
-  "#1d4ed8",
-  "#16a34a",
-  "#ea580c",
-  "#8b5cf6",
-  "#0ea5e9",
-  "#f59e0b",
-  "#ef4444",
-  "#22c55e",
-];
 
 function getDefaultDateRange() {
   const now = new Date();
@@ -79,8 +77,22 @@ function parseFilters(params: URLSearchParams): DashboardFilters {
   };
 }
 
-function buildFilterParams(filters: DashboardFilters): URLSearchParams {
-  const next = new URLSearchParams();
+function buildFilterParams(
+  filters: DashboardFilters,
+  current: URLSearchParams,
+): URLSearchParams {
+  const next = new URLSearchParams(current);
+  for (const key of [
+    "startDate",
+    "endDate",
+    "timezone",
+    "storeId",
+    "sellerId",
+    "categoryId",
+    "channel",
+    "paymentTermId",
+  ])
+    next.delete(key);
   next.set("startDate", filters.startDate);
   next.set("endDate", filters.endDate);
   if (filters.timezone) next.set("timezone", filters.timezone);
@@ -110,97 +122,105 @@ function formatPercent(value: number, locale: string): string {
   return `${formatNumber(value, locale)}%`;
 }
 
-function renderLinePoints(
-  values: number[],
-  width: number,
-  height: number,
-  padding: number,
-  bounds?: { min: number; max: number },
-): string {
-  if (values.length <= 1) {
-    const x = width / 2;
-    const y = height / 2;
-    return `${x},${y}`;
-  }
-
-  const max = bounds?.max ?? Math.max(...values, 1);
-  const min = bounds?.min ?? Math.min(...values, 0);
-  const range = Math.max(max - min, 1);
-
-  return values
-    .map((value, index) => {
-      const ratioX = index / (values.length - 1);
-      const x = padding + ratioX * (width - padding * 2);
-      const ratioY = (value - min) / range;
-      const y = height - padding - ratioY * (height - padding * 2);
-      return `${x},${y}`;
-    })
-    .join(" ");
-}
-
-function getHeatColor(value: number, max: number): string {
-  if (max <= 0 || value <= 0) return "rgba(148, 163, 184, 0.15)";
-  const intensity = Math.max(0.12, value / max);
-  return `rgba(29, 78, 216, ${Math.min(0.95, intensity)})`;
-}
-
-type QueryState = {
-  isLoading: boolean;
-  isFetching: boolean;
-  isError: boolean;
-  error?: unknown;
-  refetch?: () => unknown;
-};
-
-function WidgetFrame({
-  title,
-  state,
-  children,
-  actions,
-  loadingText,
-  errorText,
-}: {
-  title: string;
-  state: QueryState;
-  children: React.ReactNode;
-  actions?: React.ReactNode;
-  loadingText: string;
-  errorText: string;
-}) {
+export function DashboardPage(): JSX.Element {
   const { t } = useTranslation();
+  const [params, setParams] = useSearchParams();
+  const canReadSales = useHasPermission(["sales:read", "reports:view"]);
+  const canReadReports = useHasPermission("reports:view");
+  const canReadFinancials = useCanViewCustomerFinancials();
+  const canReadPayments = canReadReports && canReadFinancials;
+  const tab = params.get("tab") === "payments" ? "payments" : "sales";
+  const choose = (value: string) => {
+    const next = new URLSearchParams(params);
+    next.set("tab", value);
+    setParams(next, { replace: true });
+  };
   return (
-    <section className="card dashboard-widget">
-      <div className="dashboard-widget__head">
-        <h3>{title}</h3>
-        <div className="dashboard-widget__actions">
-          {actions}
-          {state.isFetching && <span className="badge">{"..."}</span>}
-        </div>
-      </div>
-      {state.isLoading && (
-        <div className="dashboard-widget__state">{loadingText}</div>
-      )}
-      {!state.isLoading && state.isError && (
-        <div className="dashboard-widget__state dashboard-widget__state--error">
-          {(state.error as Error)?.message ?? errorText}
+    <div>
+      <div
+        className="dashboard-tabs"
+        role="tablist"
+        aria-label={t("dashboard.heading")}
+        onKeyDown={(event) => {
+          const tabs = Array.from(
+            event.currentTarget.querySelectorAll<HTMLButtonElement>(
+              '[role="tab"]',
+            ),
+          );
+          const index = tabs.indexOf(event.target as HTMLButtonElement);
+          if (
+            index < 0 ||
+            !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)
+          )
+            return;
+          event.preventDefault();
+          const target =
+            event.key === "Home"
+              ? 0
+              : event.key === "End"
+                ? tabs.length - 1
+                : (index + (event.key === "ArrowRight" ? 1 : tabs.length - 1)) %
+                  tabs.length;
+          tabs[target].click();
+          tabs[target].focus();
+        }}
+      >
+        {canReadSales && (
           <button
             type="button"
-            className="button secondary"
-            disabled={state.isFetching}
-            onClick={() => {
-              void state.refetch?.();
-            }}
+            id="dashboard-sales-tab"
+            role="tab"
+            aria-selected={tab === "sales"}
+            tabIndex={tab === "sales" ? 0 : -1}
+            aria-controls="dashboard-sales-panel"
+            onClick={() => choose("sales")}
           >
-            {t("common.retry")}
+            {t("paymentsDashboard.salesTab")}
           </button>
-        </div>
-      )}
-      {!state.isLoading && !state.isError && children}
-    </section>
+        )}
+        {canReadPayments && (
+          <button
+            type="button"
+            id="dashboard-payments-tab"
+            role="tab"
+            aria-selected={tab === "payments"}
+            tabIndex={tab === "payments" ? 0 : -1}
+            aria-controls="dashboard-payments-panel"
+            onClick={() => choose("payments")}
+          >
+            {t("paymentsDashboard.tab")}
+          </button>
+        )}
+      </div>
+      <div
+        id={`dashboard-${tab}-panel`}
+        role="tabpanel"
+        aria-labelledby={
+          tab === "payments" && !canReadPayments
+            ? undefined
+            : `dashboard-${tab}-tab`
+        }
+        aria-label={
+          tab === "payments" && !canReadPayments
+            ? t("paymentsDashboard.tab")
+            : undefined
+        }
+      >
+        {tab === "payments" ? (
+          canReadPayments ? (
+            <PaymentsDashboard />
+          ) : (
+            <p className="card">{t("common.noPermission")}</p>
+          )
+        ) : (
+          <SalesDashboard />
+        )}
+      </div>
+    </div>
   );
 }
 
-export function DashboardPage(): JSX.Element {
+function SalesDashboard(): JSX.Element {
   const { t, i18n } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const canReadDashboard = useHasPermission(["sales:read", "reports:view"]);
@@ -231,7 +251,9 @@ export function DashboardPage(): JSX.Element {
     const needsDefaults =
       !searchParams.get("startDate") || !searchParams.get("endDate");
     if (!needsDefaults) return;
-    setSearchParams(buildFilterParams(filters), { replace: true });
+    setSearchParams(buildFilterParams(filters, searchParams), {
+      replace: true,
+    });
   }, [filters, searchParams, setSearchParams]);
 
   React.useEffect(() => {
@@ -250,8 +272,10 @@ export function DashboardPage(): JSX.Element {
 
   const applyFilters = React.useCallback(() => {
     if (!hasValidDateFilters({ ...draftFilters })) return;
-    setSearchParams(buildFilterParams(draftFilters), { replace: true });
-  }, [draftFilters, setSearchParams]);
+    setSearchParams(buildFilterParams(draftFilters, searchParams), {
+      replace: true,
+    });
+  }, [draftFilters, setSearchParams, searchParams]);
 
   const applySingleFilter = React.useCallback(
     (patch: Partial<DashboardFilters>) => {
@@ -260,9 +284,11 @@ export function DashboardPage(): JSX.Element {
         ...patch,
       };
       setDraftFilters(nextFilters);
-      setSearchParams(buildFilterParams(nextFilters), { replace: true });
+      setSearchParams(buildFilterParams(nextFilters, searchParams), {
+        replace: true,
+      });
     },
-    [filters, setSearchParams],
+    [filters, setSearchParams, searchParams],
   );
 
   const resetFilters = React.useCallback(() => {
@@ -272,8 +298,10 @@ export function DashboardPage(): JSX.Element {
       timezone: "America/Sao_Paulo",
     };
     setDraftFilters(nextDefaults);
-    setSearchParams(buildFilterParams(nextDefaults), { replace: true });
-  }, [setSearchParams]);
+    setSearchParams(buildFilterParams(nextDefaults, searchParams), {
+      replace: true,
+    });
+  }, [setSearchParams, searchParams]);
 
   const summaryQuery = useQuery({
     queryKey: ["dashboard", "summary", filters],
@@ -1091,26 +1119,6 @@ export function DashboardPage(): JSX.Element {
         </WidgetFrame>
       </div>
     </div>
-  );
-}
-
-function KpiCard({
-  label,
-  value,
-  subtitle,
-  isLoading,
-}: {
-  label: string;
-  value: string;
-  subtitle?: string;
-  isLoading?: boolean;
-}) {
-  return (
-    <article className="card dashboard-kpi-card">
-      <p>{label}</p>
-      <h3>{isLoading ? "..." : value}</h3>
-      <small>{subtitle ?? "\u00A0"}</small>
-    </article>
   );
 }
 

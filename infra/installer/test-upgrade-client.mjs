@@ -23,7 +23,7 @@ if(process.argv.includes('--before')){
   assert.equal(claimed.job_id,first.job_id);
   await request('/print-agent/jobs/'+claimed.job_id+'/start',{agent:true,status:204,body:{claim_token:claimed.claim_token}});
   const second=await (await request('/sales/'+sale.id+'/receipt/print',{cookie,status:202,body:{request_id:randomUUID()}})).json();
-  await writeFile(file,JSON.stringify({cookie,saleId:sale.id,total:sale.total,key,claimed:{...claimed,content:undefined},queued:second}));
+  await writeFile(file,JSON.stringify({cookie,productId:product.id,saleId:sale.id,total:sale.total,key,claimed:{...claimed,content:undefined},queued:second}));
   console.log(JSON.stringify({legacySnapshotCreated:true,legacyJobs:2}));
 }else{
   const state=JSON.parse(await readFile(file,'utf8'));
@@ -37,6 +37,8 @@ if(process.argv.includes('--before')){
   await request('/print-agent/jobs/'+next.job_id+'/start',{agent:true,status:204,body:{claim_token:next.claim_token}});
   await request('/print-agent/jobs/'+next.job_id+'/finish',{agent:true,status:204,body:{claim_token:next.claim_token,outcome:'submitted'}});
   const sale=await (await request('/sales/'+state.saleId,{cookie:state.cookie})).json();assert.equal(sale.total,state.total);
+  const product=await (await request('/products/'+state.productId,{cookie:state.cookie})).json();
+  assert.equal(product.current_stock,-1);assert.equal(product.stock_version,'0');
   const printers=await (await request('/print-printers',{cookie:state.cookie})).json();assert.equal(printers.printers[0].id,'principal');
-  console.log(JSON.stringify({legacySessionPreserved:true,legacyAgentCredentialPreserved:true,legacySpoolingAcknowledged:true,legacyQueuedJobPreserved:true,legacyRequestIdPreserved:true,legacySalePreserved:true}));
+  console.log(JSON.stringify({legacySessionPreserved:true,legacyAgentCredentialPreserved:true,legacySpoolingAcknowledged:true,legacyQueuedJobPreserved:true,legacyRequestIdPreserved:true,legacySalePreserved:true,legacyStockBalancePreserved:true}));
 }

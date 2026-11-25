@@ -17,6 +17,7 @@ import {
   withImportTransaction,
 } from "./execution-lock.js";
 import { getEnv } from "../../config/env.js";
+import { lockStockProducts } from "../stock-lock.js";
 import { formatDateOnly, normalizeLegacyDate } from "./date-utils.js";
 import {
   readLegacyCustomerBalances,
@@ -713,6 +714,10 @@ async function migrateMasterData(
 ): Promise<Record<string, number>> {
   const summary: Record<string, number> = {};
 
+  // Coordinate existing product upserts with multi-product operational writers.
+  await runDbQuery(`select p.id from product p join stg_produto s on p.legacy_code=trim(s.cod_prod)
+    order by p.id for no key update of p`, undefined, client);
+
   await runDbQuery(
     `
     insert into product_group (legacy_code, name)
@@ -911,7 +916,7 @@ async function migrateCustomerPayments(client?: PoolClient): Promise<number> {
   return count;
 }
 
-async function migrateStockMovements(client?: PoolClient): Promise<number> {
+async function migrateStockMovements(client: PoolClient): Promise<number> {
   const { rows } = await runDbQuery(
     "select * from stg_mov_est",
     undefined,
@@ -919,6 +924,7 @@ async function migrateStockMovements(client?: PoolClient): Promise<number> {
   );
   let count = 0;
   const productMap = await buildProductLegacyMap(client);
+  await lockStockProducts(client, rows.map((row) => resolveProductId(productMap, row.cod_prod)).filter((id): id is string => Boolean(id)));
   const batch: unknown[][] = [];
   const BATCH_SIZE = 1000;
 

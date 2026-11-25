@@ -1,0 +1,28 @@
+{
+  "version": "1.0.0-store.5",
+  "atUtc": "2026-11-09T00:45:23.220Z",
+  "apiImage": "sha256:35c3c02c35fa78ad95369b0501072ca912299effdc98cc50d11a6e513a721523",
+  "frontendImage": "sha256:e0e18ff6dd4baa0d09b8004470138bb6fe086e5fab5826ce079f6dcfc3646058",
+  "sqlAndApiContractMatchCurrentSource": true,
+  "sourceHashes": {
+    "sql/init.sql": "c1dd06bd28a5c6578f9115ef6ee8f8c037531925de77c79db542ccf28deeefbf",
+    "openapi/openapi.yaml": "9a567bd79ea15869bc050994a55f884dca1848708991dc86e3157f1bf72aad69",
+    "sql/migrations/20260414_001_phase5_legacy_import_hardening.sql": "fcdb45535987601756b25e8a2816c362bfed1ec7d73ba11e59ba4fbf66b827e3",
+    "sql/migrations/20260425_001_dashboard_executive_kpis.sql": "345a81a3b282a1fb8cfcf9049091de252994edb7a068804945aeb138d469262d",
+    "sql/migrations/20260618_001_sale_receipts.sql": "47e1e0eea22470f2c4d3b6cf1d1e537e7372960d04e181d7b727fb95e21862fb",
+    "sql/migrations/20260619_001_credit_sale_payment_methods.sql": "e36009704ee47d21d5f95e6c3ed3def3ebe9255aa90fc24fc3df2cda97462862",
+    "sql/migrations/20260624_001_sale_stock_movements.sql": "a375fba1079ec28b4e0c3b738d09842770a07ab1672eb60e04b6c811ae97f775",
+    "sql/migrations/20261021_001_auth_sessions_and_login_limits.sql": "608bd3ae4f2354bde79e5187cf3a36fbad7322a24f4b3983082a67a5c09eeb9e",
+    "sql/migrations/20261022_001_print_jobs.sql": "25132e0c7afdcfd96bfa2bab8c9818a5b0141ea185f961b9e0d20d0fd079ed65",
+    "sql/migrations/20261023_001_print_printers.sql": "b3892aa97857a2703e364dc93077ebd2d30f8193f4c0bad07287bf62a8ccc912",
+    "sql/migrations/20261029_001_payment_cancellation.sql": "3113d01d9cbfe3af428b4a39841cdb683ecd7a29d6d56ea8e6255174b99d5970",
+    "sql/migrations/20261029_002_legacy_customer_balances.sql": "b48fad938c5175397401b831c4a9ca970e0d8e5976c42d4b72f9de236a71ca70",
+    "sql/migrations/20261029_003_user_sellers.sql": "d2db2ac872eb7c57adb85bec68d450358c23bbc7b237a539b9470058084b786f",
+    "sql/migrations/20261030_001_pagination.sql": "3c3bb15b569a38a6c94db55e178e9ff0d9f892cfe418e38240349768b2e76ccd",
+    "sql/migrations/20261030_002_sale_customer_balance.sql": "80b7968f8b7179fb0d34132107578e38d840de5785362bba93e3fa8efdcb61f3",
+    "sql/migrations/20261106_001_legacy_product_stock.sql": "c34256be3118d1080b8a28f0fbfaaa16bc2bd0d4435b1c4878abb87d7f0df168",
+    "sql/migrations/20261107_001_manual_stock_adjustments.sql": "834f6e766aa498540afb895350a562bdc535cebc80d63ca4ce668b39f28b9bb9"
+  },
+  "stockAdjustmentInterfacePresentInBothLanguages": true,
+  "passed": true
+}

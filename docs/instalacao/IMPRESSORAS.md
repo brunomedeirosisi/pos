@@ -6,7 +6,7 @@ Para servidor na internet, siga [NUVEM.md](NUVEM.md) e selecione **Nuvem com imp
 
 ## 1. Instalar ou atualizar o Principal
 
-Em uma instalação nova, use o pacote 1.0.0-store.4 e siga [USO.md](USO.md). Quem já usa 1.0.0-store.1 deve atualizar o Principal com `Atualizar-POS.ps1`, em manutenção e com backup/réplica acessível, antes de instalar o novo Terminal. O pacote precisa declarar compatibilidade com a versão instalada; avance pelos releases compatíveis até store.3 e depois store.4.
+Em uma instalação nova, use o pacote 1.0.0-store.5 e siga [USO.md](USO.md). Quem já usa 1.0.0-store.1 deve atualizar o Principal com `Atualizar-POS.ps1`, em manutenção e com backup/réplica acessível, antes de instalar o novo Terminal. O pacote precisa declarar compatibilidade com a versão instalada; avance pelos releases compatíveis até store.3, store.4 e depois store.5.
 
 A migração preserva o destino `principal`, trabalhos, conteúdo e credencial existentes. Novos campos identificam o destino e seu nome no histórico. O agente antigo do Principal continua restrito a `principal`. A atualização não distribui sua credencial para outros computadores.
 

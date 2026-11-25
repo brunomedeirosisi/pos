@@ -1,0 +1,21 @@
+{
+    "checks":  [
+                   "daily scheduler creates one real pg_dump archive and replica across simultaneous workers",
+                   "password and confirmation remain mandatory",
+                   "active application writes prevent cutover",
+                   "foreign uploaded SQL is rejected before execution",
+                   "SQL failure rolls back schema replacement atomically",
+                   "real HTTP restore retains durable journal, target and recovery snapshot; revokes sessions",
+                   "native backup restores individual seller links and stable account identities",
+                   "restore preserves installation schedule and durable automatic execution history",
+                   "native backup restores immutable after-sale customer balance and effective selling price",
+                   "post-cutover fault recovers the pre-restore database and reports rollback",
+                   "interrupted recovery keeps maintenance and pins until exclusive startup rollback"
+               ],
+    "fixture":  null,
+    "version":  "1.0.0-store.5",
+    "image":  "sha256:35c3c02c35fa78ad95369b0501072ca912299effdc98cc50d11a6e513a721523",
+    "atUtc":  "2026-11-09T00:44:09.3337460Z",
+    "project":  "pos-installer-recovery",
+    "passed":  true
+}

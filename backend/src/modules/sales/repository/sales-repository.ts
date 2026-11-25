@@ -3,6 +3,8 @@ import { query, withTransaction } from "../../../db.js";
 import { conflict, notFound } from "../../../errors.js";
 import { resolvePagination } from "../../../utils/pagination.js";
 import { resolveCheckoutSeller } from "../../../services/user-sellers.js";
+import { lockStockProducts } from "../../../services/stock-lock.js";
+import { getEnv } from "../../../config/env.js";
 import type {
   CreateSaleItemInput,
   ListSalesQueryDto,
@@ -86,6 +88,8 @@ async function insertSaleStockMovements(
     movementType === "venda"
       ? buildCheckoutStockMovements(items)
       : buildSaleStockMovements(items);
+
+  await lockStockProducts(client, movements.map((movement) => movement.product_id));
 
   for (const movement of movements) {
     await query(
@@ -301,9 +305,11 @@ export class PgSalesRepository implements SalesRepository {
            total,
            status,
            source,
-           source_key
+           source_key,
+           received_by,
+           store_id
          )
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'completed',$13,$14)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'completed',$13,$14,$15,$16)
          returning id, emission_date, paid_at, order_number, seller_id, customer_id, payment_term_id, payment_method, amount_paid, change_amount, customer_balance_after_sale, subtotal, discount, total, status, source, source_key, cancelled_at, cancellation_reason`,
         [
           command.emissionDate,
@@ -320,6 +326,8 @@ export class PgSalesRepository implements SalesRepository {
           command.total,
           command.source,
           command.sourceKey,
+          command.actorUserId,
+          getEnv().STORE_ID ?? "main",
         ],
         client,
       );

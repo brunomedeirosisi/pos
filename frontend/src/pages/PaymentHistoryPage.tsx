@@ -70,6 +70,7 @@ export function PaymentHistoryPage(): JSX.Element {
     },
     onSuccess: (_result, { payment }) => {
       toast.show(t("paymentHistory.cancelSuccess"), "success");
+      void client.invalidateQueries({ queryKey: ["dashboard", "payments"] });
       setToCancel(null);
       setReason("");
       for (const queryKey of [

@@ -4,15 +4,19 @@ import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useTranslation } from "react-i18next";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { customersService } from "../../services/catalog";
-import type { Customer } from "../../types/catalog";
+import type { Customer, CustomerListItem } from "../../types/catalog";
 import { useToast } from "../../components/ui/ToastProvider";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
-import { useHasPermission } from "../../store/auth";
+import {
+  useCanViewCustomerFinancials,
+  useHasPermission,
+} from "../../store/auth";
 import { CustomerFormModal } from "./customers/CustomerFormModal";
 import { CustomersTableRows } from "./customers/CustomersTableRows";
+import { CustomerPortfolioKpis } from "./customers/CustomerPortfolioKpis";
 import {
   buildCustomerPayload,
   customerFormDefaults,
@@ -31,17 +35,42 @@ export function CustomersPage(): JSX.Element {
   const [editing, setEditing] = useState<Customer | null>(null);
   const canReadCatalog = useHasPermission("catalog:read");
   const canWriteCatalog = useHasPermission("catalog:write");
+  const canViewFinancials = useCanViewCustomerFinancials();
+  const [balanceSort, setBalanceSort] = useListState<"asc" | "desc" | null>(
+    "customers-balance-sort",
+    null,
+  );
+  const overview = useQuery({
+    queryKey: ["customers", "overview", canViewFinancials],
+    queryFn: ({ signal }) => customersService.overview(signal),
+    enabled: canReadCatalog,
+    staleTime: 10_000,
+    refetchInterval: 60_000,
+    retry: false,
+  });
 
   const form = useForm<CustomerFormValues>({
     resolver: zodResolver(customerFormSchema),
     defaultValues: customerFormDefaults,
   });
 
-  const customersQuery = useListQuery<Customer>({
-    queryKey: ["customers", debouncedSearch],
+  const customersQuery = useListQuery<CustomerListItem>({
+    queryKey: [
+      "customers",
+      "list",
+      canViewFinancials,
+      debouncedSearch,
+      balanceSort,
+    ],
     resource: "customers",
-    filters: { search: debouncedSearch || undefined },
+    filters: {
+      search: debouncedSearch || undefined,
+      includeBalance: canViewFinancials ? true : undefined,
+      sortBy: canViewFinancials && balanceSort ? "current_balance" : undefined,
+      sortOrder: canViewFinancials && balanceSort ? balanceSort : undefined,
+    },
     enabled: canReadCatalog,
+    refetchInterval: 60_000,
   });
 
   const createMutation = useMutation({
@@ -51,6 +80,7 @@ export function CustomersPage(): JSX.Element {
       toast.show(t("common.saved"), "success");
       // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
       void queryClient.invalidateQueries({ queryKey: ["customers"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "payments"] });
       closeForm();
     },
     onError: (error: Error) => toast.show(error.message, "error"),
@@ -65,6 +95,7 @@ export function CustomersPage(): JSX.Element {
       toast.show(t("common.saved"), "success");
       // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
       void queryClient.invalidateQueries({ queryKey: ["customers"] });
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "payments"] });
       closeForm();
     },
     onError: (error: Error) => toast.show(error.message, "error"),
@@ -135,22 +166,55 @@ export function CustomersPage(): JSX.Element {
 
   return (
     <div className="card">
+      <div className="customer-portfolio__header">
+        <div>
+          <h2>{t("customers.heading")}</h2>
+          <p className="text-muted">{t("customerPortfolio.description")}</p>
+        </div>
+        <div className="table-actions">
+          <button
+            type="button"
+            className="button secondary"
+            disabled={overview.isFetching || customersQuery.isFetching}
+            onClick={() => {
+              void overview.refetch();
+              void customersQuery.refetch();
+            }}
+          >
+            {t("customerPortfolio.refresh")}
+          </button>
+          {canWriteCatalog && (
+            <button
+              type="button"
+              className="button primary"
+              onClick={openCreateForm}
+            >
+              {t("common.add")}
+            </button>
+          )}
+        </div>
+      </div>
+      <CustomerPortfolioKpis
+        data={overview.data}
+        isLoading={overview.isPending}
+        isError={overview.isError}
+        isFetching={overview.isFetching}
+        canViewFinancials={canViewFinancials}
+        onRetry={() => {
+          void overview.refetch();
+        }}
+      />
       <div className="toolbar">
+        <label className="sr-only" htmlFor="customer-list-search">
+          {t("common.search")}
+        </label>
         <input
+          id="customer-list-search"
           type="search"
           placeholder={`${t("common.search")}...`}
           value={search}
           onChange={(event) => setSearch(event.target.value)}
         />
-        {canWriteCatalog && (
-          <button
-            type="button"
-            className="button primary"
-            onClick={openCreateForm}
-          >
-            {t("common.add")}
-          </button>
-        )}
       </div>
 
       <div className="table-wrapper">
@@ -162,6 +226,38 @@ export function CustomersPage(): JSX.Element {
               <th>{t("customers.city")}</th>
               <th>{t("customers.uf")}</th>
               <th>{t("customers.creditLimit")}</th>
+              {canViewFinancials && (
+                <th
+                  className="customer-balance"
+                  aria-sort={
+                    balanceSort === "asc"
+                      ? "ascending"
+                      : balanceSort === "desc"
+                        ? "descending"
+                        : "none"
+                  }
+                >
+                  <button
+                    type="button"
+                    className="customer-balance__sort"
+                    disabled={customersQuery.isFetching}
+                    onClick={() =>
+                      setBalanceSort((current) =>
+                        current === "desc" ? "asc" : "desc",
+                      )
+                    }
+                  >
+                    {t("customerPortfolio.balance")}{" "}
+                    <span aria-hidden="true">
+                      {balanceSort === "asc"
+                        ? "↑"
+                        : balanceSort === "desc"
+                          ? "↓"
+                          : "↕"}
+                    </span>
+                  </button>
+                </th>
+              )}
               <th>{t("customers.status")}</th>
               <th>{t("common.actions")}</th>
             </tr>
@@ -171,6 +267,7 @@ export function CustomersPage(): JSX.Element {
               customers={customersQuery.data ?? []}
               canReadCatalog={canReadCatalog}
               canWriteCatalog={canWriteCatalog}
+              canViewFinancials={canViewFinancials}
               isLoading={customersQuery.isLoading}
               isError={customersQuery.isError}
               error={(customersQuery.error as Error | undefined) ?? undefined}

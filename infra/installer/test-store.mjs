@@ -75,25 +75,31 @@ try {
   if(previous){
     const upgradeScript=path.join(source,'test-upgrade-client.mjs');
     await run(process.execPath,[upgradeScript,'--before'],{env:childEnv,timeout:60000});
-    const oldSchema = await compose(['exec','-T','db','psql','-U','pos','-d','posdb','-At','-c',"select to_regclass('public.customer_legacy_balance') is null and to_regclass('pos_recovery.backup_schedule') is null"]);
+    const oldSchema = await compose(['exec','-T','db','psql','-U','pos','-d','posdb','-At','-c',"select to_regclass('public.product_legacy_stock') is null and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='product' and column_name='stock_version')"]);
     assert.equal(oldSchema,'t','Upgrade fixture already contains the new release schema');
     await compose(['exec','-T','api','node','dist/scripts/store-backup.js']);
     const contentSql="select id||':'||request_id||':'||encode(digest(content,'sha256'),'hex') from print_job order by id";
     const contentBefore=await compose(['exec','-T','db','psql','-U','pos','-d','posdb','-At','-c',contentSql]);
+    const stockSql="select id||':'||product_id||':'||type||':'||quantity from stock_movement order by id";
+    const stockBefore=await compose(['exec','-T','db','psql','-U','pos','-d','posdb','-At','-c',stockSql]);
     console.log('Historical jobs prepared on previous API. Recreating services with the new release...');
     await compose(['stop','api','frontend']);
     env.API_IMAGE=manifest.images.api;env.FRONTEND_IMAGE=manifest.images.frontend;
     await compose(['up','-d','--no-deps','--force-recreate','--wait','--wait-timeout','180','--pull','never','api','frontend']);
     const contentAfter=await compose(['exec','-T','db','psql','-U','pos','-d','posdb','-At','-c',contentSql]);
     assert.equal(contentAfter,contentBefore,'Migration changed historical request IDs or receipt snapshots');
+    assert.equal(await compose(['exec','-T','db','psql','-U','pos','-d','posdb','-At','-c',stockSql]),stockBefore,'Migration changed historical stock movements');
     upgradeEvidence=JSON.parse((await run(process.execPath,[upgradeScript,'--after'],{env:childEnv,timeout:60000})).split(/\r?\n/).at(-1));
     upgradeEvidence.legacyReceiptContentPreserved=true;
     upgradeEvidence.previousReleaseSchemaUsed=true;
     upgradeEvidence.preUpgradeReplicatedBackup=true;
+    upgradeEvidence.legacyStockMovementsPreserved=true;
     childEnv.POS_SMOKE_UPGRADED='true';
   }
   const migrations = await compose(['exec','-T','db','psql','-U','pos','-d','posdb','-At','-c',"select filename from schema_migrations order by filename"]);
-  for (const name of ['20261029_001_payment_cancellation.sql','20261029_002_legacy_customer_balances.sql','20261029_003_user_sellers.sql','20261030_001_pagination.sql','20261030_002_sale_customer_balance.sql']) assert.ok(migrations.split(/\r?\n/).includes(name),'Missing release migration: '+name);
+  for (const name of ['20261029_001_payment_cancellation.sql','20261029_002_legacy_customer_balances.sql','20261029_003_user_sellers.sql','20261030_001_pagination.sql','20261030_002_sale_customer_balance.sql','20261106_001_legacy_product_stock.sql','20261107_001_manual_stock_adjustments.sql']) assert.ok(migrations.split(/\r?\n/).includes(name),'Missing release migration: '+name);
+  assert.equal(await compose(['exec','-T','db','psql','-U','pos','-d','posdb','-At','-c',"select permissions @> '[\"stock:adjust\"]'::jsonb from app_role where name='manager'"]),'t');
+  assert.equal(await compose(['exec','-T','db','psql','-U','pos','-d','posdb','-At','-c',"select count(*) from pg_trigger where not tgisinternal and tgname in ('stock_movement_version','legacy_stock_version','manual_stock_audit_immutable','manual_stock_audit_no_truncate')"]),'4');
   assert.match(await compose(['exec','-T','api','7zz','i']),/7-Zip/);
   const first = JSON.parse((await run(process.execPath, [childScript], { env: childEnv, timeout: 60000 })).split(/\r?\n/).at(-1));
   console.log('Two HTTPS sessions and outbound queue passed. Creating replicated backup...');

@@ -1,4 +1,5 @@
 import { pageQuerySchema } from "../../../utils/query-page.js";
+import { paymentAnalyticsRouter } from "./payment-analytics-router.js";
 import { z } from "zod";
 import { Router } from "express";
 import { requirePermission } from "../../../middleware/auth.js";
@@ -17,6 +18,7 @@ import { PgDashboardRepository } from "../repository/dashboard-repository.js";
 const repository = new PgDashboardRepository();
 
 export const dashboardRouter = Router();
+dashboardRouter.use("/payments", paymentAnalyticsRouter);
 
 dashboardRouter.get(
   "/filters",

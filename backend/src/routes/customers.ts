@@ -9,6 +9,7 @@ import { parseDecimalInput } from '../modules/customer-payments/domain/customer-
 import { paginationQuerySchema, resolvePagination } from '../utils/pagination.js';
 import { generateNextNumericCode } from '../utils/generated-code.js';
 import type { LegacyBalanceReconciliation } from '../modules/customer-payments/domain/customer-balance.js';
+import { canReadCustomerFinancials, getCustomerOverview } from '../services/customer-portfolio.js';
 
 export const router = Router();
 
@@ -168,6 +169,16 @@ router.get(
     );
 
     res.json(rows);
+  })
+);
+
+router.get(
+  '/overview',
+  requirePermission('catalog:read'),
+  asyncHandler(async (req, res) => {
+    // This is deliberately global: table search/page filters must not change portfolio KPIs.
+    z.object({}).strict().parse(req.query);
+    res.set('Cache-Control', 'no-store').json(await getCustomerOverview(canReadCustomerFinancials(req.user)));
   })
 );
 

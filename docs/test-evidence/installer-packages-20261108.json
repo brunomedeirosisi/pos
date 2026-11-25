@@ -1,0 +1,50 @@
+{
+    "windowsInstallerChecks":  137,
+    "httpsChecks":  15,
+    "backupSupervisorContracts":  4,
+    "physicalPrinting":  "simulated",
+    "stockInterfaceLanguagesVerified":  [
+                                            "PT-BR",
+                                            "EN"
+                                        ],
+    "passed":  true,
+    "runtimeImagesMatchSmokeEvidence":  true,
+    "recoveryChecks":  11,
+    "packages":  [
+                     {
+                         "version":  "1.0.0-store.5",
+                         "sizeBytes":  286175910,
+                         "codeSigned":  false,
+                         "sourceWasDirty":  true,
+                         "zipContentHashesVerified":  true,
+                         "stockGuidesVerified":  true,
+                         "builtAtUtc":  "2026-11-08T21:46:50.0157023Z",
+                         "sourceScriptsVerified":  true,
+                         "mode":  "Principal",
+                         "path":  "artifacts/POS-Loja-1.0.0-store.5.zip",
+                         "filesVerified":  32,
+                         "documentationVerified":  true,
+                         "sourceHead":  "fe686e81510832a1713c9b08afa56358c7411f54",
+                         "sha256":  "f2258bdc1712aca92d5daa3a39bcf281c90efad58f212753ed6a6558f966c954"
+                     },
+                     {
+                         "version":  "1.0.0-store.5",
+                         "sizeBytes":  35062049,
+                         "codeSigned":  false,
+                         "sourceWasDirty":  true,
+                         "zipContentHashesVerified":  true,
+                         "stockGuidesVerified":  true,
+                         "builtAtUtc":  "2026-11-09T00:42:23.7629163Z",
+                         "sourceScriptsVerified":  true,
+                         "mode":  "Cloud",
+                         "path":  "artifacts/POS-Nuvem-1.0.0-store.5.zip",
+                         "filesVerified":  21,
+                         "documentationVerified":  true,
+                         "sourceHead":  "fe686e81510832a1713c9b08afa56358c7411f54",
+                         "sha256":  "7416c308135f7a9c07f268e1519d4a0e45990f732fb6fd9e34fa6bcf85829209"
+                     }
+                 ],
+    "atUtc":  "2026-11-09T00:48:51.7797318Z",
+    "sqlAndApiContractMatchCurrentSource":  true,
+    "applicationContainersPreserved":  true
+}

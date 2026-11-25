@@ -47,6 +47,7 @@ beforeAll(async () => {
     "insert into app_user(id,email,password_hash,full_name) values($1,$2,'synthetic','Synthetic stock user')",
     [actorId, `stock-${actorId}@example.test`],
   );
+  await query("update app_user set role_id=(select id from app_role where name='admin') where id=$1", [actorId]);
 });
 afterAll(async () => {
   await query('delete from sale where id=any($1::uuid[])', [saleIds]);
@@ -100,7 +101,7 @@ async function expectStock(id: string, expected: number) {
 }
 
 describe('catalog stock balances over HTTP and real PostgreSQL', () => {
-  it.each([0, 12.345, 100])(
+  it.each([0, 12, 100])(
     'creates a product with %s initial units and a matching operational stock entry',
     async (initialStock) => {
       const id = await createProduct('initial units ' + initialStock, initialStock);
@@ -131,7 +132,7 @@ describe('catalog stock balances over HTTP and real PostgreSQL', () => {
     },
   );
 
-  it.each([-1, 0.0001, 100000000000, 'abc', '1,5', null])(
+  it.each([-1, 0.0001, 12.345, 100000000000, 'abc', '1,5', null])(
     'rejects invalid initial stock %s without creating records',
     async (initial_stock) => {
       const name = `${prefix} rejected initial stock`;
@@ -153,11 +154,11 @@ describe('catalog stock balances over HTTP and real PostgreSQL', () => {
 
   it('rolls back product creation when the initial movement cannot be recorded', async () => {
     await query(`create function product_initial_stock_fail() returns trigger language plpgsql as $$
-      begin if new.quantity=17.321 then raise exception 'Synthetic initial stock failure'; end if; return new; end $$;
+      begin if new.quantity=17 then raise exception 'Synthetic initial stock failure'; end if; return new; end $$;
       create trigger product_initial_stock_fail before insert on stock_movement for each row execute function product_initial_stock_fail()`);
     try {
       const name = `${prefix} failed initial movement`;
-      const result = await request(app).post('/products').send({ name, initial_stock: 17.321 });
+      const result = await request(app).post('/products').send({ name, initial_stock: 17 });
       expect(result.status).toBe(500);
       expect(
         (await query('select count(*)::int as n from product where name=$1', [name])).rows[0].n,

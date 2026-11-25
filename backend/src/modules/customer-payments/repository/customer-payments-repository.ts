@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
 import { query } from '../../../db.js';
+import { getEnv } from '../../../config/env.js';
 import type { PaymentListQueryDto } from '../contracts/customer-payments-contracts.js';
 import { buildPaymentFilterClauses, toDateOnly } from '../domain/customer-payments-domain.js';
 import type { CustomerFinancialTotals, LegacyBalanceReconciliation } from '../domain/customer-balance.js';
@@ -252,11 +253,12 @@ export class PgCustomerPaymentsRepository implements CustomerPaymentsRepository 
          reference,
          notes,
          received_by,
-         source
+         source,
+         store_id
        )
-       values ($1, $2, $3, $4, $5, $6, $7, 'manual')
+       values ($1, $2, $3, $4, $5, $6, $7, 'manual', $8)
        returning id, amount, payment_date, method, reference, notes, received_by, created_at`,
-      [input.customerId, input.amount, toDateOnly(input.paymentDate), input.method, input.reference, input.notes, input.receivedBy],
+      [input.customerId, input.amount, toDateOnly(input.paymentDate), input.method, input.reference, input.notes, input.receivedBy, getEnv().STORE_ID ?? 'main'],
       client
     );
 

@@ -1,0 +1,113 @@
+export type PaymentFilters = {
+  startDate: string;
+  endDate: string;
+  timezone: string;
+  method?: string;
+  origin?: string;
+  customerId?: string;
+  receivedBy?: string;
+  storeId?: string;
+  search?: string;
+};
+export type PaymentMetrics = {
+  gross: number;
+  refunds: number;
+  net: number;
+  count: number;
+  average: number;
+  debtGross: number;
+  debtCount: number;
+  averageAmortization: number;
+  debtPercentage: number;
+};
+export type PaymentBucket = {
+  date: string;
+  gross: number;
+  refunds: number;
+  net: number;
+  count: number;
+  previousNet: number;
+};
+export type PaymentDistribution = {
+  key: string;
+  gross: number;
+  refunds: number;
+  net: number;
+  count: number;
+};
+export type PaymentSummary = {
+  current: PaymentMetrics;
+  previous: PaymentMetrics;
+  today: PaymentMetrics;
+  changePercentage: number | null;
+  todayChangePercentage: number | null;
+  averageChangePercentage: number | null;
+  context: {
+    timezone: string;
+    today: string;
+    asOf: string;
+    startDate: string;
+    endDate: string;
+    previousStart: string;
+    previousEnd: string;
+    days: number;
+  };
+  series: PaymentBucket[];
+  methods: PaymentDistribution[];
+  origins: PaymentDistribution[];
+  heatmap: { weekday: number; hour: number; gross: number; count: number }[];
+  coverage: {
+    unknownTime: number;
+    unknownEmployee: number;
+    unknownStore: number;
+    unknownMethod: number;
+    undatedReversals: number;
+  };
+  position: {
+    asOf: string;
+    referenceDate: string;
+    scope: string;
+    total: number;
+    debtorCount: number;
+    overdue: null;
+    notDue: null;
+    delinquencyPercentage: null;
+    historicalSeries: null;
+    aging: null;
+    settledObligations: null;
+  };
+};
+export type PaymentTransaction = {
+  id: string;
+  logical_id: string;
+  source_id: string;
+  source_type: "sale" | "customer_payment";
+  event_date: string;
+  confirmed_at: string | null;
+  kind: "receipt" | "reversal";
+  origin: string;
+  method: string;
+  customer_id: string | null;
+  customer_name: string | null;
+  received_by: string | null;
+  receiver_name: string | null;
+  store_id: string | null;
+  reference: string | null;
+  gross: number;
+  refunds: number;
+  net: number;
+  reversed: boolean;
+};
+export type PaymentRanking = {
+  id: string;
+  entity_id: string | null;
+  name: string | null;
+  gross: number;
+  refunds: number;
+  net: number;
+  count: number;
+  average: number;
+  participation: number;
+  last_date: string | null;
+  current_balance: number | null;
+};

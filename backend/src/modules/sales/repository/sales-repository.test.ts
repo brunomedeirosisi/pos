@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+vi.mock("../../../services/stock-lock.js", () => ({ lockStockProducts: vi.fn() }));
+vi.mock("../../../config/env.js", () => ({ getEnv: () => ({ STORE_ID: undefined }) }));
 import type { CreateSaleCommand } from "./sales-repository.js";
 
 const { queryMock, withTransactionMock } = vi.hoisted(() => ({

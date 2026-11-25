@@ -82,8 +82,8 @@ export function CustomerPaymentHistoryReportPage(): JSX.Element {
         <div className="printable-header">
           <div>
             <h2>{company.name}</h2>
-            <p>{company.address}</p>
-            <p>{t('customers.companyTaxId', { taxId: company.tax_id })}</p>
+            <p className="print-hidden">{company.address}</p>
+            <p className="print-hidden">{t('customers.companyTaxId', { taxId: company.tax_id })}</p>
           </div>
           <div className="text-right">
             <div className="receipt-code">{t('customers.paymentHistoryReportTitle')}</div>
@@ -109,11 +109,11 @@ export function CustomerPaymentHistoryReportPage(): JSX.Element {
         <div className="receipt-grid">
           {summary.legacy_balance && (
             <>
-              <div>
+              <div className="print-hidden">
                 <span>{t('customers.legacySourceBalance')}</span>
                 <strong>{formatCurrency(summary.legacy_balance.source_balance)}</strong>
               </div>
-              <div>
+              <div className="print-hidden">
                 <span>{t('customers.legacyBalanceAdjustment')}</span>
                 <strong>{formatCurrency(summary.legacy_balance.adjustment)}</strong>
                 <small>{t('customers.legacyBalanceHint')}</small>

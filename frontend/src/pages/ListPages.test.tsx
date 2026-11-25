@@ -23,6 +23,8 @@ vi.mock("../components/ui/ToastProvider", () => ({
   useToast: () => ({ show: vi.fn() }),
 }));
 vi.mock("../store/auth", () => ({
+  useCanAdjustStock: () => true,
+  useCanViewCustomerFinancials: () => false,
   useHasPermission: () => true,
   useAuthStore: { getState: () => ({ logout: vi.fn() }) },
 }));

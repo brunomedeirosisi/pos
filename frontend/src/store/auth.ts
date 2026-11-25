@@ -138,5 +138,12 @@ onUnauthorized(() => {
 export const useHasPermission = (permission: string | string[]): boolean =>
   useAuthStore((state) => hasPermissionInternal(state.user, permission));
 
+export const canAdjustStock = (user: AuthUser | null): boolean =>
+  Boolean(user && ['admin','manager'].includes(user.role) && hasPermissionInternal(user, 'stock:adjust'));
+export const useCanAdjustStock = (): boolean => useAuthStore((state) => canAdjustStock(state.user));
+
+export const useCanViewCustomerFinancials = (): boolean =>
+  useAuthStore((state) => Boolean(state.user && ['admin', 'manager'].includes(state.user.role) && hasPermissionInternal(state.user, 'catalog:read')));
+
 
 

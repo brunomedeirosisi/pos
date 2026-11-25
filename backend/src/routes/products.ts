@@ -7,7 +7,9 @@ import { requirePermission } from '../middleware/auth.js';
 import { paginationQuerySchema, resolvePagination } from '../utils/pagination.js';
 import { generateNextNumericCode } from '../utils/generated-code.js';
 import { productCurrentStockSql } from '../utils/stock-sql.js';
-import { isDecimalValue } from '../utils/checkout-decimal.js';
+import { isCheckoutQuantity } from '../utils/checkout-decimal.js';
+import { adjustStock, recordStockFailure, requireStockActor } from '../services/stock-adjustments.js';
+import { logAudit } from '../utils/audit.js';
 
 export const router = Router();
 
@@ -74,8 +76,8 @@ const writeSchema = z.object({
 });
 
 const createSchema = writeSchema.extend({
-  initial_stock: z.number().finite().refine((value) => isDecimalValue(value, 3), {
-    message: 'initial_stock must be nonnegative and fit numeric(14,3)',
+  initial_stock: z.number().finite().refine((value) => value === 0 || isCheckoutQuantity(value), {
+    message: 'initial_stock must be a nonnegative integer',
   }).default(0),
 });
 
@@ -90,6 +92,7 @@ type ProductRow = {
   price_cash: string | number | null;
   price_base: string | number | null;
   current_stock: string | number;
+  stock_version: string;
 };
 
 function toNumeric(value: string | number | null): number | null {
@@ -138,7 +141,7 @@ router.get(
 
     const { rows } = await query<ProductRow>(
       `select id, legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base,
-         ${productCurrentStockSql} as current_stock
+         ${productCurrentStockSql} as current_stock,stock_version::text
        from product
        ${whereClause}
        order by name asc
@@ -157,12 +160,13 @@ router.post(
     const body = createSchema.parse(req.body);
 
     const product = await withTransaction(async (client) => {
+      const stockActor = body.initial_stock > 0 ? await requireStockActor(req.user?.id, client) : null;
       const generatedCode = await generateNextNumericCode('product', client);
       const { rows } = await query<ProductRow>(
         `insert into product (legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base)
          values ($1,$2,$3,$4,$5,$6,$7,$8)
          returning id, legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base,
-           0::numeric as current_stock`,
+           0::numeric as current_stock,stock_version::text`,
         [
           generatedCode,
           body.name,
@@ -183,14 +187,22 @@ router.post(
           [rows[0].id, body.initial_stock],
           client,
         );
+        await logAudit({ userId: stockActor!.id, action: 'PRODUCT_INITIAL_STOCK', client,
+          ipAddress: req.ip, details: { product_id: rows[0].id, actor: stockActor, previous_quantity: 0, new_quantity: body.initial_stock, result: 'success' } });
       }
 
-      return { ...rows[0], current_stock: body.initial_stock };
+      const version = (await query<{ stock_version: string }>('select stock_version::text from product where id=$1', [rows[0].id], client)).rows[0].stock_version;
+      return { ...rows[0], current_stock: body.initial_stock, stock_version: version };
     });
 
     res.status(201).json(mapProduct(product));
   })
 );
+
+router.post('/:id/stock-adjustments', asyncHandler(async (req,res) => {
+  try { res.status(201).json(await adjustStock(req)); }
+  catch (error) { await recordStockFailure(req,error); throw error; }
+}));
 
 router.get(
   '/:id',
@@ -198,7 +210,7 @@ router.get(
   asyncHandler(async (req, res) => {
     const { rows } = await query<ProductRow>(
       `select id, legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base,
-         ${productCurrentStockSql} as current_stock
+         ${productCurrentStockSql} as current_stock,stock_version::text
        from product
        where id = $1`,
       [req.params.id]
@@ -230,7 +242,7 @@ router.patch(
        set ${sets.join(', ')}
        where id = $${entries.length + 1}
        returning id, legacy_code, name, barcode, group_id, reference, min_stock, price_cash, price_base,
-         ${productCurrentStockSql} as current_stock`,
+         ${productCurrentStockSql} as current_stock,stock_version::text`,
       values
     );
 

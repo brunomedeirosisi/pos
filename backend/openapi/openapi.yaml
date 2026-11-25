@@ -31,6 +31,9 @@ paths:
         Required scopes are customer_id for customer-sales/customer-payments/customer-activity, roleId for role-users,
         saleId for print-jobs and sessionId for legacy-logs/legacy-warnings. No password hashes, printer credentials,
         execution tokens or receipt content are returned.
+        Customer lists optionally accept includeBalance=true for admin/manager profiles with catalog:read;
+        this adds signed current_balance and enables numeric sorting by current_balance. Other profiles receive 403.
+        Without the opt-in, the existing customer list and selector contract does not expose these balances.
       parameters:
         - in: path
           name: resource
@@ -40,6 +43,8 @@ paths:
             enum:
               [
                 products,
+                stock-adjustments,
+                stock-adjustment-users,
                 product-groups,
                 customers,
                 sellers,
@@ -82,6 +87,9 @@ paths:
             schema: { type: string, format: uuid },
           }
         - { in: query, name: seller_id, schema: { type: string, format: uuid } }
+        - { in: query, name: product_id, description: Product identity for stock adjustment history., schema: { type: string, format: uuid } }
+        - { in: query, name: user_id, description: Responsible user for stock adjustment history., schema: { type: string, format: uuid } }
+        - { in: query, name: movement_type, description: Manual adjustment direction., schema: { type: string, enum: [increase, decrease] } }
         - {
             in: query,
             name: payment_term_id,
@@ -119,6 +127,7 @@ paths:
             schema: { type: string, enum: [asc, desc] },
           }
         - { in: query, name: enabled, schema: { type: boolean } }
+        - { in: query, name: includeBalance, description: Customers only. Adds authoritative signed current_balance for admin/manager with catalog read permission. Default false., schema: { type: boolean, default: false } }
       responses:
         "200":
           description: Bounded page; filtered count and valid current page.
@@ -735,6 +744,93 @@ paths:
           $ref: "#/components/responses/UnauthorizedError"
         "403":
           $ref: "#/components/responses/ForbiddenError"
+  /api/v1/products/{id}/stock-adjustments:
+    post:
+      tags: [Catalog]
+      summary: Confirm an audited manual stock adjustment
+      description: >
+        Requires an active authenticated admin or manager with stock:adjust (or wildcard).
+        Role and permissions are read again and locked before persistence. The new quantity must be a nonnegative
+        integer. expected_version is returned by product reads; a changed version returns 409 without changing stock.
+        The signed operational ajuste_manual movement and immutable STOCK_MANUAL_ADJUSTMENT success audit are atomic.
+        Failed attempts are audited separately after rollback. request_id makes retries with identical input idempotent;
+        reuse for different input or actor is rejected. Active legacy publication blocks adjustments.
+      parameters:
+        - $ref: "#/components/parameters/ResourceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/StockAdjustmentInput" }
+      responses:
+        "201":
+          description: Confirmed adjustment or the original receipt for an identical retry.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/StockAdjustmentResult" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "403": { $ref: "#/components/responses/ForbiddenError" }
+        "404": { $ref: "#/components/responses/NotFoundError" }
+        "409": { description: Stock version changed, request identity reused or an import is in progress. }
+        "503": { description: Audit persistence or database recovery is unavailable; no unaudited stock change commits. }
+  /api/v1/dashboard/payments/{resource}:
+    get:
+      tags: [Customers, Sales]
+      summary: Management payment analytics over existing receipt and cancellation records
+      description: >
+        Requires canonical admin/manager role AND reports:view AND catalog:read; custom wildcard roles are denied.
+        All responses use Cache-Control no-store. Options returns the database/store timezone and current calendar date.
+        Summary returns gross confirmed receipts, cancellation reversals on their own recorded dates, net receipts,
+        transaction counts, average payment amount, equal-length previous-period comparison, zero-filled chart buckets,
+        method/origin distributions, known-time heatmap and coverage counters. Today ignores the period filter but keeps
+        other receipt filters. The authoritative receivable position is current and global, with an explicit asOf timestamp.
+        Due-date delinquency, aging, historical positions and settled individual obligations are null when unsupported.
+        Transactions/customers/employees return server-paged lists. Anonymous customer receipts remain separate logical records;
+        unassigned employee receipts are an explicit bucket. Employee attribution never uses the original seller.
+        Transaction sorts are date, amount (signed net), customer, employee, method, origin, id and kind.
+        Ranking sorts are net, gross, count, average, name and last_date. Invalid/unknown sorts and filters return 400.
+        Export uses all matching movements and active sorting, ignoring page/pageSize. It returns a native XLSX with localized
+        headers and numeric BRL cells, and logs DASHBOARD_PAYMENTS_EXPORT. Above 100000 movements it returns 409 instead of a partial file.
+        Imported VENDAS/PEDIDOS sale totals are excluded to avoid double counting imported debt payments. Legacy/backdated payment
+        dates remain calendar dates; unavailable confirmation times are excluded from the heatmap. Credit entry tender is unspecified.
+        Cancellation reversals represent system cancellation events, not independently verified physical cash refunds.
+      parameters:
+        - in: path
+          name: resource
+          required: true
+          schema: { type: string, enum: [options, summary, transactions, customers, employees, export] }
+        - { in: query, name: startDate, description: Effective receipt date. Defaults to the first day of the store current month. Ordered range of at most 366 days; years 0002 to 9999., schema: { type: string, format: date } }
+        - { in: query, name: endDate, description: Inclusive effective receipt date. Defaults to today in the analysis timezone., schema: { type: string, format: date } }
+        - { in: query, name: timezone, description: Valid IANA analysis timezone; defaults to the configured PostgreSQL store timezone., schema: { type: string, maxLength: 80 } }
+        - { in: query, name: method, schema: { type: string, enum: [cash, card, bank, other, legacy, unspecified] } }
+        - { in: query, name: origin, schema: { type: string, enum: [cash_sale, credit_entry, debt_payment] } }
+        - { in: query, name: customerId, schema: { type: string, format: uuid } }
+        - { in: query, name: receivedBy, description: Actual receiver UUID or unassigned., schema: { type: string } }
+        - { in: query, name: storeId, description: Only explicitly attributed store records match; legacy null store IDs are not inferred., schema: { type: string, maxLength: 120 } }
+        - { in: query, name: search, description: Customer name or source UUID/reference., schema: { type: string, maxLength: 200 } }
+        - { in: query, name: grouping, schema: { type: string, enum: [day, week, month], default: day } }
+        - { in: query, name: locale, description: Export headers and sheet name., schema: { type: string, enum: [pt-BR, en], default: pt-BR } }
+        - { $ref: "#/components/parameters/ListPage" }
+        - { $ref: "#/components/parameters/ListPageSize" }
+        - { $ref: "#/components/parameters/ListSortBy" }
+        - { $ref: "#/components/parameters/ListSortOrder" }
+      responses:
+        "200":
+          description: Options, aggregate summary, paginated records or complete filtered XLSX, depending on resource.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/PaymentAnalyticsOptions"
+                  - $ref: "#/components/schemas/PaymentAnalyticsSummary"
+                  - $ref: "#/components/schemas/ListPageResponse"
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "403": { $ref: "#/components/responses/ForbiddenError" }
+        "409": { description: Export exceeds 100000 filtered movements. Narrow the filters; no partial file is generated. }
   /api/v1/customers:
     get:
       tags:
@@ -781,6 +877,26 @@ paths:
           $ref: "#/components/responses/UnauthorizedError"
         "403":
           $ref: "#/components/responses/ForbiddenError"
+  /api/v1/customers/overview:
+    get:
+      tags: [Customers]
+      summary: Global customer portfolio indicators
+      description: >
+        Requires catalog:read. Always global; no search/page/filter parameters are accepted.
+        All authorized readers receive total_customers. Only the canonical admin and manager roles receive financial.
+        Wildcard permissions on a custom role do not grant financial access. Positive balances are debts, zero balances
+        count as customers_without_debt, and negative customer credits are counted separately without reducing total_debt.
+        Uses the same customer_financial_totals view as customer details, including legacy reconciliation and valid payments.
+        Ratios and averages return zero for empty denominators. Debt does not imply overdue payment. Cache-Control is no-store.
+      responses:
+        "200":
+          description: Global portfolio; financial properties are omitted for other roles.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CustomerOverview" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/UnauthorizedError" }
+        "403": { $ref: "#/components/responses/ForbiddenError" }
   /api/v1/customers/{id}:
     get:
       tags:
@@ -2420,6 +2536,11 @@ components:
           readOnly: true
           description: Current quantity based on PRODUTO.DBF.ESTO_PROD for imported products plus subsequent operational movements. Historical MOV_EST movements are reconciled without double-counting. Native products use their movement ledger, or zero without movements. Shares the critical-stock dashboard calculation and preserves negative/fractional quantities (up to three decimal places). Returned by list, detail, create, update and paginated list responses.
           example: 1234.567
+        stock_version:
+          type: string
+          pattern: '^\d+$'
+          readOnly: true
+          description: Opaque stock revision. Send unchanged as expected_version when confirming a manual adjustment.
         price_cash:
           type: number
           format: float
@@ -2432,6 +2553,7 @@ components:
         - id
         - name
         - current_stock
+        - stock_version
     ProductWrite:
       type: object
       properties:
@@ -2467,12 +2589,47 @@ components:
         - type: object
           properties:
             initial_stock:
-              type: number
+              type: integer
               minimum: 0
-              maximum: 99999999999.999
-              multipleOf: 0.001
+              maximum: 99999999999
               default: 0
-              description: Initial quantity on hand. A positive quantity creates one operational entrada movement atomically with the product. Omitted or zero creates no movement. Only accepted on creation; current_stock remains a derived response field.
+              description: Initial whole-unit quantity. A positive value additionally requires an admin/manager with stock:adjust and creates one operational entrada movement plus audit atomically. Omitted or zero creates no movement. Only accepted on creation; current_stock remains a derived response field.
+    StockAdjustmentInput:
+      type: object
+      additionalProperties: false
+      required: [request_id, expected_version, new_quantity, reason]
+      properties:
+        request_id: { type: string, format: uuid }
+        expected_version: { type: string, pattern: '^\d{1,19}$' }
+        new_quantity: { type: integer, minimum: 0, maximum: 99999999999 }
+        reason: { type: string, minLength: 1, maxLength: 1000, description: Nonblank justification, trimmed before persistence. }
+    StockAdjustmentResult:
+      type: object
+      required: [id, product_id, previous_quantity, new_quantity, difference, stock_version]
+      properties:
+        id: { type: string, format: uuid, description: Persistent audit event identity. }
+        product_id: { type: string, format: uuid }
+        previous_quantity: { type: number }
+        new_quantity: { type: integer }
+        difference: { type: number, description: Exact signed delta from the recorded prior balance. }
+        stock_version: { type: string }
+    StockAdjustmentHistory:
+      type: object
+      description: Items in lists/stock-adjustments (catalog:read). Filter by product_id, user_id, from/to calendar dates and movement_type. Sort by created_at; paging is bounded and includes a filtered count. Actor/product labels are immutable event snapshots.
+      properties:
+        id: { type: string, format: uuid }
+        created_at: { type: string, format: date-time }
+        product_id: { type: string, format: uuid }
+        product_code: { type: string, nullable: true }
+        product_name: { type: string }
+        user_id: { type: string, format: uuid }
+        user_name: { type: string }
+        role: { type: string, enum: [admin, manager] }
+        previous_quantity: { type: number }
+        new_quantity: { type: integer }
+        difference: { type: number }
+        reason: { type: string }
+        movement_type: { type: string, enum: [increase, decrease] }
     ProductPatch:
       allOf:
         - $ref: "#/components/schemas/ProductWrite"
@@ -2522,6 +2679,116 @@ components:
         - id
         - name
         - status
+    PaymentAnalyticsOptions:
+      type: object
+      required: [timezone, today]
+      properties:
+        timezone: { type: string }
+        today: { type: string, format: date }
+    PaymentAnalyticsMetrics:
+      type: object
+      required: [gross, refunds, net, count, average, debtGross, debtCount, averageAmortization, debtPercentage]
+      properties:
+        gross: { type: number, minimum: 0 }
+        refunds: { type: number, minimum: 0 }
+        net: { type: number }
+        count: { type: integer, minimum: 0 }
+        average: { type: number, minimum: 0, description: Gross confirmed receipts divided by logical receipt count. }
+        debtGross: { type: number, minimum: 0 }
+        debtCount: { type: integer, minimum: 0 }
+        averageAmortization: { type: number, minimum: 0 }
+        debtPercentage: { type: number, minimum: 0, maximum: 100 }
+    PaymentAnalyticsSummary:
+      type: object
+      required: [current, previous, today, context, series, methods, origins, heatmap, coverage, position]
+      properties:
+        current: { $ref: "#/components/schemas/PaymentAnalyticsMetrics" }
+        previous: { $ref: "#/components/schemas/PaymentAnalyticsMetrics" }
+        today: { $ref: "#/components/schemas/PaymentAnalyticsMetrics" }
+        yesterday: { $ref: "#/components/schemas/PaymentAnalyticsMetrics" }
+        changePercentage: { type: number, nullable: true }
+        todayChangePercentage: { type: number, nullable: true }
+        averageChangePercentage: { type: number, nullable: true }
+        context:
+          type: object
+          properties:
+            timezone: { type: string }
+            startDate: { type: string, format: date }
+            endDate: { type: string, format: date }
+            previousStart: { type: string, format: date }
+            previousEnd: { type: string, format: date }
+            today: { type: string, format: date }
+            asOf: { type: string, format: date-time }
+            days: { type: integer, minimum: 1, maximum: 366 }
+        series:
+          type: array
+          items:
+            type: object
+            properties:
+              date: { type: string, format: date }
+              gross: { type: number }
+              refunds: { type: number }
+              net: { type: number }
+              count: { type: integer }
+              previousNet: { type: number }
+        methods:
+          type: array
+          items: { type: object, description: Actual method key with gross/refunds/net/count; unspecified entries and unknown legacy methods are explicit. }
+        origins:
+          type: array
+          items: { type: object, description: Mutually exclusive cash_sale/credit_entry/debt_payment with gross/refunds/net/count. }
+        heatmap:
+          type: array
+          items: { type: object, description: Observed ISO weekday/hour with gross and confirmed count; missing-time receipts are excluded. }
+        coverage:
+          type: object
+          properties:
+            unknownTime: { type: integer }
+            unknownEmployee: { type: integer }
+            unknownStore: { type: integer }
+            unknownMethod: { type: integer }
+            undatedReversals: { type: integer }
+        position:
+          type: object
+          properties:
+            asOf: { type: string, format: date-time }
+            referenceDate: { type: string, format: date }
+            scope: { type: string, enum: [global_current] }
+            total: { type: number, minimum: 0 }
+            debtorCount: { type: integer, minimum: 0 }
+            overdue: { type: number, nullable: true, description: Currently null; no reliable due-date allocation. }
+            notDue: { type: number, nullable: true }
+            delinquencyPercentage: { type: number, nullable: true }
+            historicalSeries: { type: array, nullable: true, items: { type: object } }
+            aging: { type: array, nullable: true, items: { type: object } }
+            settledObligations: { type: integer, nullable: true }
+    CustomerOverview:
+      type: object
+      required: [total_customers]
+      additionalProperties: false
+      properties:
+        total_customers: { type: integer, minimum: 0 }
+        financial:
+          type: object
+          additionalProperties: false
+          required: [customers_with_debt, customers_without_debt, customers_with_credit, total_debt, total_credit, debt_percentage, average_debt, largest_debt]
+          properties:
+            customers_with_debt: { type: integer, minimum: 0 }
+            customers_without_debt: { type: integer, minimum: 0 }
+            customers_with_credit: { type: integer, minimum: 0 }
+            total_debt: { type: number, minimum: 0, description: Sum of positive balances in BRL. }
+            total_credit: { type: number, minimum: 0, description: Absolute sum of negative customer balances in BRL. }
+            debt_percentage: { type: number, minimum: 0, maximum: 100, description: Debtors divided by all customers times 100; rounded to two decimals. }
+            average_debt: { type: number, minimum: 0, description: Total debt divided by debtors; rounded to cents. }
+            largest_debt: { type: number, minimum: 0 }
+    CustomerListItem:
+      allOf:
+        - $ref: "#/components/schemas/Customer"
+        - type: object
+          properties:
+            current_balance:
+              type: number
+              description: Signed authoritative BRL balance. Only emitted by lists/customers with authorized includeBalance=true; negative means customer credit.
     CustomerWrite:
       type: object
       properties:

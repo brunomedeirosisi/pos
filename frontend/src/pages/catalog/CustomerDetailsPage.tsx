@@ -138,6 +138,8 @@ export function CustomerDetailsPage(): JSX.Element {
         "success",
       );
       setRecentPayment(data);
+      void queryClient.invalidateQueries({ queryKey: ["dashboard", "payments"] });
+      void queryClient.invalidateQueries({ queryKey: ["customers"] });
       if (id) {
         // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
         void queryClient.invalidateQueries({ queryKey: ["customer", id] });

@@ -30,6 +30,8 @@ assert.equal((await (await request('/store-info')).json()).print_mode, 'queue');
 assert.equal((await fetch(base + '/catalog/products')).status, 200);
 const spec = await (await request('/openapi.json')).json();
 assert.ok(spec.paths['/api/v1/print-agent/claim']);
+assert.ok(spec.paths['/api/v1/products/{id}/stock-adjustments']);
+assert.ok(spec.paths['/api/v1/lists/{resource}'].get.parameters.find(parameter=>parameter.name==='resource').schema.enum.includes('stock-adjustments'));
 const stateFile = path.join(directory, 'smoke-state.json');
 if (process.argv.includes('--verify')) {
   const state = JSON.parse(await readFile(stateFile, 'utf8'));
@@ -49,6 +51,10 @@ if (process.argv.includes('--verify')) {
     assert.equal(metadata.content, undefined); assert.equal(metadata.claim_token, undefined);
   }
   for (const id of state.sales) assert.equal((await (await request('/sales/' + id, { cookie })).json()).id, id);
+  const stock = await (await request('/products/'+state.stock.productId,{cookie})).json();
+  assert.equal(stock.current_stock,25);assert.equal(stock.stock_version,state.stock.version);
+  const stockHistory = await (await request('/lists/stock-adjustments?product_id='+state.stock.productId,{cookie})).json();
+  assert.equal(stockHistory.items.length,1);assert.equal(stockHistory.items[0].id,state.stock.requestId);
   const terminalApi=createApi(base,state.terminal.token,state.terminal.printer_id);
   await recoverJournal(path.join(directory,'terminal-journal'),terminalApi);
   let reprints = 0;
@@ -61,7 +67,7 @@ if (process.argv.includes('--verify')) {
   await assert.rejects(terminalApi('/claim',{}),error=>error.status===403);
   const waiting=await (await request('/print-jobs/'+state.offlineJob.job_id,{cookie})).json();
   assert.equal(waiting.status,'queued');assert.equal(waiting.printer_id,state.terminal.printer_id);
-  console.log(JSON.stringify({ persistedAfterApiRecreation: true, backupSchedulePersisted: true, automaticBackupHistoryVerified: true, backupScheduleDisabled: true, noJournalReprint: true, credentialRevocationVerified: true, revokedQueueNotRerouted: true }));
+  console.log(JSON.stringify({ persistedAfterApiRecreation: true, stockAdjustmentAndHistoryPersisted: true, backupSchedulePersisted: true, automaticBackupHistoryVerified: true, backupScheduleDisabled: true, noJournalReprint: true, credentialRevocationVerified: true, revokedQueueNotRerouted: true }));
 } else {
   const cookies = await Promise.all([login(), login()]);
   assert.notEqual(cookies[0], cookies[1]);
@@ -73,9 +79,21 @@ if (process.argv.includes('--verify')) {
   if(!process.env.POS_SMOKE_UPGRADED)assert.deepEqual(initialCatalog,[]);
   const page = await (await request('/lists/products?pageSize=1',{cookie:cookies[0]})).json();
   assert.ok(Array.isArray(page.items));assert.equal(page.pagination.pageSize,1);
-  const product = await (await request('/products', { cookie: cookies[0], status: 201, body: { name: 'Synthetic installer product', price_cash: 10, price_base: 10 } })).json();
+  const product = await (await request('/products', { cookie: cookies[0], status: 201, body: { name: 'Synthetic installer product', price_cash: 10, price_base: 10, initial_stock:20 } })).json();
+  assert.equal(product.current_stock,20);
   const sales = await Promise.all(cookies.map(async cookie => (await (await request('/sales', { cookie, status: 201, body: { payment_method: 'cash', amount_paid: 10, items: [{ product_id: product.id, quantity: 1 }] } })).json()).id));
   assert.notEqual(sales[0], sales[1]);
+  const beforeStock = await (await request('/products/'+product.id,{cookie:cookies[0]})).json();
+  assert.equal(beforeStock.current_stock,18);
+  const adjustment = {request_id:randomUUID(),expected_version:beforeStock.stock_version,new_quantity:25,reason:'Synthetic installer inventory verification'};
+  const adjustmentRoute='/products/'+product.id+'/stock-adjustments';
+  const adjusted=await (await request(adjustmentRoute,{cookie:cookies[0],status:201,body:adjustment})).json();
+  assert.equal(adjusted.previous_quantity,18);assert.equal(adjusted.new_quantity,25);assert.equal(adjusted.difference,7);
+  assert.deepEqual(await (await request(adjustmentRoute,{cookie:cookies[0],status:201,body:adjustment})).json(),adjusted);
+  await request(adjustmentRoute,{cookie:cookies[1],status:409,body:{...adjustment,request_id:randomUUID(),new_quantity:30}});
+  const stockHistory=await (await request('/lists/stock-adjustments?product_id='+product.id,{cookie:cookies[1]})).json();
+  assert.equal(stockHistory.items.length,1);assert.equal(stockHistory.items[0].id,adjustment.request_id);
+  assert.equal(stockHistory.items[0].reason,adjustment.reason);
   const enrollment=await (await request('/print-printers/enrollments',{cookie:cookies[0],body:{display_name:'Synthetic checkout 2'},status:201})).json();
   const terminal={printer_id:enrollment.printer_id,token:randomBytes(32).toString('hex')};
   const paired=await (await request('/print-agent/enroll',{body:{code:enrollment.code,token:terminal.token}})).json();
@@ -107,6 +125,6 @@ if (process.argv.includes('--verify')) {
   const offlineJob=await (await request('/sales/'+sales[1]+'/receipt/print',{cookie:cookies[1],status:202,body:{request_id:randomUUID(),printer_id:terminal.printer_id}})).json();
   assert.equal((await api('/claim',{})).job,null);
   jobs.push({...offlineJob,status:'queued'});
-  await writeFile(stateFile,JSON.stringify({sales,jobs,terminal,offlineJob,schedule}));
-  console.log(JSON.stringify({httpsIdentityVerified:true,independentSessions:2,emptyInitialCatalog:initialCatalog.length===0,backupScheduleInitiallyDisabled:true,paginatedCatalogLoaded:true,sales:sales.length,submittedJobs:printed.length,separatePrinterDestinations:true,agentCrossAccessDenied:true,requestDeduplicated:true,uncertainJobNotReprinted:true,offlineQueueNotRerouted:true,openApiLoaded:true}));
+  await writeFile(stateFile,JSON.stringify({sales,jobs,terminal,offlineJob,schedule,stock:{productId:product.id,requestId:adjustment.request_id,version:adjusted.stock_version}}));
+  console.log(JSON.stringify({httpsIdentityVerified:true,independentSessions:2,emptyInitialCatalog:initialCatalog.length===0,backupScheduleInitiallyDisabled:true,paginatedCatalogLoaded:true,openingStockVerified:true,checkoutStockVerified:true,manualStockAdjustmentVerified:true,stockAdjustmentDeduplicated:true,staleStockVersionRejected:true,stockHistoryVerified:true,sales:sales.length,submittedJobs:printed.length,separatePrinterDestinations:true,agentCrossAccessDenied:true,requestDeduplicated:true,uncertainJobNotReprinted:true,offlineQueueNotRerouted:true,openApiLoaded:true}));
 }

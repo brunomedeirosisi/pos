@@ -94,8 +94,8 @@ export function CustomerPaymentReceiptPage(): JSX.Element {
         <div className="printable-header">
           <div>
             <h2>{company.name}</h2>
-            <p>{company.address}</p>
-            <p>{t('customers.companyTaxId', { taxId: company.tax_id })}</p>
+            <p className="print-hidden">{company.address}</p>
+            <p className="print-hidden">{t('customers.companyTaxId', { taxId: company.tax_id })}</p>
           </div>
           <div className="text-right">
             <div className="receipt-code">{payment.code}</div>
@@ -136,7 +136,7 @@ export function CustomerPaymentReceiptPage(): JSX.Element {
             <strong>{t('customers.paymentReceivedBy')}</strong>
             <div>{payment.received_by_name ?? '-'}</div>
           </div>
-          <div>
+          <div className="print-hidden">
             <strong>{t('customers.paymentReference')}</strong>
             <div>{payment.reference ?? '-'}</div>
           </div>
@@ -148,7 +148,7 @@ export function CustomerPaymentReceiptPage(): JSX.Element {
           </p>
         )}
         {balances.legacy_balance && (
-          <div className="printable-section">
+          <div className="printable-section print-hidden">
             <p>
               {t('customers.legacySourceBalance')}: {formatCurrency(balances.legacy_balance.source_balance)}
             </p>
@@ -159,7 +159,7 @@ export function CustomerPaymentReceiptPage(): JSX.Element {
           </div>
         )}
         {balances.historical_balance_unavailable && (
-          <p role="status">{t('customers.legacyHistoricalBalanceUnavailable')}</p>
+          <p role="status" className="print-hidden">{t('customers.legacyHistoricalBalanceUnavailable')}</p>
         )}
         <div className="receipt-grid" style={{ marginTop: '12px' }}>
           <div>

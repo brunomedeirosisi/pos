@@ -39,7 +39,8 @@ create table if not exists product (
   price_cash numeric(14,2),
   price_base numeric(14,2),
   cost_price numeric(14,2),
-  average_cost numeric(14,2)
+  average_cost numeric(14,2),
+  stock_version bigint not null default 0
 );
 
 create table if not exists customer (
@@ -96,6 +97,7 @@ create table if not exists sale (
   channel text not null default 'pos' check (channel in ('pos','ecommerce','whatsapp','marketplace')),
   source text,
   source_key text,
+  received_by uuid references app_user(id) on delete set null,
   unique(source, source_key)
 );
 
@@ -172,6 +174,12 @@ create table if not exists customer_payment (
 create index if not exists idx_customer_payment_customer on customer_payment(customer_id);
 create index if not exists idx_customer_payment_customer_date on customer_payment(customer_id, payment_date desc, created_at desc);
 create index if not exists idx_customer_payment_method on customer_payment(customer_id, method);
+
+alter table sale add column if not exists received_by uuid references app_user(id) on delete set null;
+alter table customer_payment add column if not exists store_id text;
+create index if not exists idx_sale_receipt_date on sale(paid_at,id) where amount_paid > 0;
+create index if not exists idx_sale_reversal_date on sale(cancelled_at,id) where cancelled_at is not null;
+create index if not exists idx_customer_payment_reversal_date on customer_payment(cancelled_at,id) where cancelled_at is not null;
 
 create table if not exists audit_log (
   id uuid primary key default gen_random_uuid(),
@@ -297,7 +305,7 @@ values
   (
     'manager',
     'Store manager',
-    '["catalog:read","catalog:write","sales:read","sales:cancel","pos:checkout","reports:view","system:backup:read","system:backup:create","system:backup:download"]',
+    '["catalog:read","catalog:write","stock:adjust","sales:read","sales:cancel","pos:checkout","reports:view","system:backup:read","system:backup:create","system:backup:download"]',
     15
   ),
   ('seller', 'Sales operator', '["catalog:read","pos:checkout","sales:read"]', 5)

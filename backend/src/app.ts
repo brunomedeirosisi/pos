@@ -23,6 +23,7 @@ import { router as adminBackupsRouter } from "./routes/admin-backups.js";
 import { router as adminLegacyImportRouter } from "./routes/admin-legacy-import.js";
 import { dashboardRouter } from "./modules/dashboard/http/dashboard-router.js";
 import { errorHandler } from "./middleware/error-handler.js";
+import { stockFailureAuditMiddleware } from "./services/stock-adjustments.js";
 import { recoveryMiddleware } from "./middleware/recovery.js";
 import { requireAuth } from "./middleware/auth.js";
 import {
@@ -108,4 +109,5 @@ app.use("/api/v1/roles", rolesRouter);
 app.use("/api/v1/admin", adminBackupsRouter);
 app.use("/api/v1/admin", adminLegacyImportRouter);
 
+app.use(stockFailureAuditMiddleware);
 app.use(errorHandler);

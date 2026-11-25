@@ -3,11 +3,14 @@ import type {
   Product,
   ProductInput,
   ProductCreateInput,
+  StockAdjustmentInput,
+  StockAdjustmentResult,
   ProductGroup,
   ProductGroupInput,
   Customer,
   CustomerInput,
   CustomerDetails,
+  CustomerOverview,
   CustomerPaymentInput,
   CustomerPaymentsFilters,
   CustomerPaymentsResponse,
@@ -22,6 +25,8 @@ import type {
 } from '../types/catalog';
 
 export const productsService = {
+  get: (id: string) => http.get<Product>(`/products/${id}`),
+  adjustStock: (id: string, data: StockAdjustmentInput) => http.post<StockAdjustmentResult>(`/products/${id}/stock-adjustments`, data),
   list: (search?: string) => http.get<Product[]>('/products', search ? { search } : undefined),
   create: (data: ProductCreateInput) => http.post<Product>('/products', data),
   update: (id: string, data: Partial<ProductInput>) => http.patch<Product>(`/products/${id}`, data),
@@ -34,6 +39,7 @@ export const productGroupsService = {
 };
 
 export const customersService = {
+  overview: (signal?: AbortSignal) => http.get<CustomerOverview>('/customers/overview', undefined, { signal }),
   list: (search?: string) => http.get<Customer[]>('/customers', search ? { search } : undefined),
   create: (data: CustomerInput) => http.post<Customer>('/customers', data),
   update: (id: string, data: Partial<CustomerInput>) => http.patch<Customer>(`/customers/${id}`, data),

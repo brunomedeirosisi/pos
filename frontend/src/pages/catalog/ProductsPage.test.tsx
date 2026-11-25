@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProductsPage } from './ProductsPage';
 import { productsService } from '../../services/catalog';
 import { mockListPages } from '../../test/page-fixtures';
-import { useHasPermission } from '../../store/auth';
+import { useCanAdjustStock, useHasPermission } from '../../store/auth';
 import type { Product } from '../../types/catalog';
 import i18n from '../../lib/i18n';
 
@@ -15,6 +15,7 @@ vi.mock('../../components/ui/ToastProvider', () => ({
   useToast: () => ({ show: vi.fn() }),
 }));
 vi.mock('../../store/auth', () => ({
+  useCanAdjustStock: vi.fn(() => true),
   useHasPermission: vi.fn(() => true),
   useAuthStore: { getState: () => ({ logout: vi.fn() }) },
 }));
@@ -36,6 +37,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
   vi.mocked(useHasPermission).mockReturnValue(true);
+  vi.mocked(useCanAdjustStock).mockReturnValue(true);
   host = document.createElement('div');
   document.body.appendChild(host);
   root = createRoot(host);
@@ -141,18 +143,35 @@ describe.each([
   );
 
   it('shows stock to catalog readers and retains write permissions', async () => {
+    vi.mocked(useCanAdjustStock).mockReturnValue(false);
     vi.mocked(useHasPermission).mockImplementation((permission) => permission === 'catalog:read');
     mockListPages(async () => [product]);
     await render();
     expect(stockCell().textContent).toBe(positive);
     expect(host.querySelector<HTMLButtonElement>('tbody button')!.disabled).toBe(true);
+    expect(host.textContent).not.toContain(i18n.t('stockAdjustment.title'));
+    const view = Array.from(host.querySelectorAll<HTMLButtonElement>('tbody button')).find(
+      (b) => b.textContent === i18n.t('stockAdjustment.view'),
+    )!;
+    await act(async () => view.click());
+    await flush();
+    expect(document.querySelector('fieldset')?.disabled).toBe(true);
+    expect(document.body.textContent).toContain(i18n.t('stockAdjustment.history'));
   });
 
-  it.each(['default', 'blank', 'fractional'])(
+  it('keeps initial stock read-only for catalog writers outside the authorized profiles', async () => {
+    vi.mocked(useCanAdjustStock).mockReturnValue(false);
+    mockListPages(async () => []);
+    await render();
+    await act(async () => host.querySelector<HTMLButtonElement>('.toolbar button')!.click());
+    expect((document.getElementById('current_stock') as HTMLInputElement).readOnly).toBe(true);
+  });
+
+  it.each(['default', 'blank', 'integer'])(
     'creates a product with %s initial stock and shows the saved balance',
     async (mode) => {
       const records: Product[] = [];
-      const expected = mode === 'fractional' ? 1234.567 : 0;
+      const expected = mode === 'integer' ? 1234 : 0;
       mockListPages(async () => [...records]);
       const create = vi.spyOn(productsService, 'create').mockImplementation(async (payload) => {
         const created = {
@@ -174,13 +193,15 @@ describe.each([
       );
       await fill('name', 'New product with stock');
       if (mode === 'blank') await fill('current_stock', '');
-      if (mode === 'fractional') await fill('current_stock', positive);
+      if (mode === 'integer') await fill('current_stock', '1234');
       await submit();
       expect(create).toHaveBeenCalledWith(
         expect.objectContaining({ name: 'New product with stock', initial_stock: expected }),
       );
       expect(document.querySelector('[role="dialog"]')).toBeNull();
-      expect(stockCell().textContent).toBe(mode === 'fractional' ? positive : '0');
+      expect(stockCell().textContent).toBe(
+        mode === 'integer' ? new Intl.NumberFormat(locale).format(1234) : '0',
+      );
       await act(async () => host.querySelector<HTMLButtonElement>('.toolbar button')!.click());
       expect((document.getElementById('current_stock') as HTMLInputElement).value).toBe('0');
     },

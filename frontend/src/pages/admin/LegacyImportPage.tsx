@@ -2,7 +2,7 @@ import { useListQuery } from "../../hooks/useListQuery";
 import { ListPagination } from "../../components/ui/Pagination";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   legacyImportService,
   type LegacyImportResponse,
@@ -90,6 +90,7 @@ function resolveImportErrorMessage(
 export function LegacyImportPage(): JSX.Element {
   const { t } = useTranslation();
   const toast = useToast();
+  const queryClient = useQueryClient();
   const canImport = useHasPermission("system:import:legacy");
 
   const [files, setFiles] = useState<File[]>([]);
@@ -223,6 +224,8 @@ export function LegacyImportPage(): JSX.Element {
     )
       return;
     notifiedSession.current = sessionId;
+    if (status.status === "completed") void queryClient.invalidateQueries({ queryKey: ["dashboard", "payments"] });
+    if (status.status === "completed") void queryClient.invalidateQueries({ queryKey: ["customers"] });
     toast.show(
       t(resultKey),
       status.status === "failed"

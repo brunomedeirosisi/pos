@@ -1,10 +1,9 @@
-import { useListQuery, useListState } from '../../hooks/useListQuery';
-import { ListPagination } from '../../components/ui/Pagination';
+import { useListQuery, useListState } from "../../hooks/useListQuery";
+import { ListPagination } from "../../components/ui/Pagination";
 import React, { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { rolesService } from "../../services/admin";
-import { sellersService } from "../../services/catalog";
 import type { Role, RoleUserSeller } from "../../types/admin";
 import { useHasPermission } from "../../store/auth";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
@@ -17,14 +16,12 @@ import { useToast } from "../../components/ui/ToastProvider";
 
 function UserSellerRow({
   user,
-  options,
   disabled,
   saving,
   canWrite,
   save,
 }: {
   user: RoleUserSeller;
-  options: SelectOption[];
   disabled: boolean;
   saving: boolean;
   canWrite: boolean;
@@ -35,10 +32,6 @@ function UserSellerRow({
     value: user.seller?.id ?? "",
     label: user.seller?.name ?? "",
   });
-  const choices =
-    selected.value && !options.some((item) => item.value === selected.value)
-      ? [...options, selected]
-      : options;
   return (
     <tr>
       <td>
@@ -58,18 +51,13 @@ function UserSellerRow({
           {t("roles.sellerForUser", { name: user.fullName })}
         </label>
         <SearchableSelect
-          id={`user-seller-${user.id}`} resource="sellers"
+          id={`user-seller-${user.id}`}
+          resource="sellers"
           value={selected.value}
-          options={choices}
+          options={selected.value ? [selected] : []}
           onChange={setSelected}
           optionsKey="role-user-sellers"
           disabled={disabled || !canWrite}
-          loadOptions={async (search) =>
-            (await sellersService.list(search)).map((item) => ({
-              value: item.id,
-              label: item.name,
-            }))
-          }
         />
         {!selected.value && <small>{t("roles.automaticSeller")}</small>}
       </td>
@@ -103,12 +91,12 @@ export function RoleSellerLinksDialog({
   const canWrite = useHasPermission("users:write");
   const [search, setSearch] = useListState(`role-${role.id}-users-search`, "");
   const term = useDebouncedValue(search, 300);
-  const users = useListQuery<RoleUserSeller>({queryKey:['roles-user-sellers',role.id,term],resource:'role-users',
-    filters:{roleId:role.id,search:term || undefined},stateKey:`role-${role.id}-users`,enabled:canRead});
-  const sellers = useQuery({
-    queryKey: ["role-seller-options"],
-    queryFn: () => sellersService.list(),
-    enabled: canWrite,
+  const users = useListQuery<RoleUserSeller>({
+    queryKey: ["roles-user-sellers", role.id, term],
+    resource: "role-users",
+    filters: { roleId: role.id, search: term || undefined },
+    stateKey: `role-${role.id}-users`,
+    enabled: canRead,
   });
   const mutation = useMutation({
     mutationFn: ({
@@ -133,10 +121,6 @@ export function RoleSellerLinksDialog({
       });
     },
   });
-  const options = (sellers.data ?? []).map((item) => ({
-    value: item.id,
-    label: item.name,
-  }));
   return (
     <Modal
       open
@@ -160,7 +144,6 @@ export function RoleSellerLinksDialog({
               disabled={mutation.isPending}
               onChange={(event) => {
                 setSearch(event.target.value);
-                
               }}
             />
           </div>
@@ -172,19 +155,6 @@ export function RoleSellerLinksDialog({
                 className="button secondary"
                 onClick={() => {
                   void users.refetch();
-                }}
-              >
-                {t("common.retry")}
-              </button>
-            </p>
-          )}
-          {canWrite && sellers.isError && (
-            <p role="alert">
-              {t("common.searchSelectLoadError")}{" "}
-              <button
-                className="button secondary"
-                onClick={() => {
-                  void sellers.refetch();
                 }}
               >
                 {t("common.retry")}
@@ -212,10 +182,7 @@ export function RoleSellerLinksDialog({
                     <UserSellerRow
                       key={`${user.id}:${user.seller?.id ?? ""}`}
                       user={user}
-                      options={options}
-                      disabled={
-                        mutation.isPending || (canWrite && !sellers.isSuccess)
-                      }
+                      disabled={mutation.isPending}
                       saving={
                         mutation.isPending &&
                         mutation.variables.userId === user.id
@@ -230,8 +197,12 @@ export function RoleSellerLinksDialog({
               </table>
             </div>
           )}
-          <ListPagination query={{...users,isFetching:users.isFetching || mutation.isPending}}/>
-
+          <ListPagination
+            query={{
+              ...users,
+              isFetching: users.isFetching || mutation.isPending,
+            }}
+          />
         </>
       )}
     </Modal>

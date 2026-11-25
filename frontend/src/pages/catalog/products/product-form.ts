@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { parseLocaleNumericInput } from '../../../utils/number';
-import { isDecimalValue } from '../../../utils/checkout-decimal';
+import { isCheckoutQuantity } from '../../../utils/checkout-decimal';
 
 const nullableNumberSchema = z.preprocess(
   parseLocaleNumericInput,
@@ -15,13 +15,16 @@ export const productFormSchema = z.object({
   initial_stock: z
     .preprocess(
       (value) => {
-        if (typeof value === 'string' && !/^[\d\s.,+-]*$/.test(value)) return value;
+        if (typeof value === 'string' && value.trim() && !/^\d+$/.test(value.trim())) return value;
         return parseLocaleNumericInput(value) ?? 0;
       },
       z
         .number({ invalid_type_error: 'products.invalidInitialStock' })
         .finite('products.invalidInitialStock')
-        .refine((value) => isDecimalValue(value, 3), 'products.invalidInitialStock'),
+        .refine(
+          (value) => value === 0 || isCheckoutQuantity(value),
+          'products.invalidInitialStock',
+        ),
     )
     .optional(),
   min_stock: nullableNumberSchema.optional(),

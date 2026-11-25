@@ -1,6 +1,6 @@
 # Modo Nuvem — instalação e operação dos caixas Windows
 
-Disponível desde **1.0.0-store.3**; pacote atual: **1.0.0-store.4**. Cada caixa acessa a loja publicada na internet pelo navegador. Se tiver impressora própria, executa também um agente Windows que consulta a fila por HTTPS e envia os trabalhos ao spooler local. A aplicação e o banco ficam no servidor contratado.
+Disponível desde **1.0.0-store.3**; pacote atual: **1.0.0-store.5**. Cada caixa acessa a loja publicada na internet pelo navegador. Se tiver impressora própria, executa também um agente Windows que consulta a fila por HTTPS e envia os trabalhos ao spooler local. A aplicação e o banco ficam no servidor contratado.
 
 O instalador conecta os caixas a um servidor existente. Ele não contrata hospedagem, cria domínio, publica o servidor, migra dados ou configura backups da nuvem. O pacote **POS-Nuvem** dispensa Docker nos caixas, imagens de servidor e certificado de rede local. O pacote completo POS-Loja também oferece os modos Nuvem.
 
@@ -23,9 +23,9 @@ O Compose local usa CA interna e configurações de LAN; não constitui uma conf
 
 | Situação do caixa | Pacote recomendado | Modo |
 |---|---|---|
-| Somente navegador; usa impressora de outro caixa ou diálogo do navegador | POS-Nuvem-1.0.0-store.4.zip | Nuvem |
-| Navegador e impressora conectada a este Windows | POS-Nuvem-1.0.0-store.4.zip | Nuvem com impressora |
-| Serviços e banco continuam dentro da loja | POS-Loja-1.0.0-store.4.zip | Principal / Terminal; veja USO.md |
+| Somente navegador; usa impressora de outro caixa ou diálogo do navegador | POS-Nuvem-1.0.0-store.5.zip | Nuvem |
+| Navegador e impressora conectada a este Windows | POS-Nuvem-1.0.0-store.5.zip | Nuvem com impressora |
+| Serviços e banco continuam dentro da loja | POS-Loja-1.0.0-store.5.zip | Principal / Terminal; veja USO.md |
 
 Para dois caixas e uma impressora, use **Nuvem com impressora** no computador onde ela está conectada e **Nuvem** no outro. Os dois escolhem o mesmo destino no sistema. Se os dois tiverem impressora, pareie cada um com um código diferente e confira o destino próprio em cada navegador.
 
@@ -41,7 +41,7 @@ Não é necessário compartilhar impressora no Windows ou abrir porta no roteado
 Receba o ZIP e seu SHA256 por canal confiável. Confira antes de extrair:
 
 ```powershell
-Get-FileHash ./POS-Nuvem-1.0.0-store.4.zip -Algorithm SHA256
+Get-FileHash ./POS-Nuvem-1.0.0-store.5.zip -Algorithm SHA256
 ```
 
 Compare com o hash distribuído pelo mantenedor. Extraia o **ZIP inteiro** em pasta local; o EXE depende dos arquivos vizinhos. O build sem certificado de assinatura é explicitamente não assinado. Hash comprova integridade quando obtido por canal confiável; para distribuição comercial, assine EXE/scripts com certificado próprio.
@@ -136,7 +136,7 @@ Estado: terminal.json schemaVersion 3 com connectionMode cloud, SID, origem, UUI
 Build do cliente no Windows, sem Docker e sem Node previamente instalado:
 
 ```powershell
-./infra/installer/Build-CloudInstaller.ps1 -Version '1.0.0-store.4'
+./infra/installer/Build-CloudInstaller.ps1 -Version '1.0.0-store.5'
 # Opcional: -SigningThumbprint '<certificado de assinatura CurrentUser/My>'
 ```
 

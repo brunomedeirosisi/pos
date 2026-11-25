@@ -8,6 +8,12 @@ Os filtros ficam lado a lado, com quebra de linha em telas menores: data inicial
 
 A listagem tem 50 registros por página e ordenação decrescente por data, criação e ID, incluindo pagamentos cancelados. **Ver pagamento** abre os detalhes sem iniciar impressão. **Imprimir recibo** reutiliza a página de recibo existente e sua impressão pelo navegador. O recibo mostra data do pagamento, criação, cliente, valor, forma, responsável, referência, observações e saldos.
 
+O campo **Referência** e seu valor ficam disponíveis na tela, mas são omitidos no recibo impresso. A impressão usa margem de página zero para suprimir o cabeçalho e o rodapé automáticos do navegador (data, hora, título da loja, URL e numeração) em todas as páginas; o conteúdo mantém um recuo interno de 4 mm. O cabeçalho do próprio comprovante aparece apenas no início e os campos mantêm o rótulo junto do valor nas quebras de página. O tamanho do papel continua definido pela impressora.
+
+Na identificação da loja, recibos e relatórios impressos exibem somente o nome em negrito. Endereço e CNPJ/CPF da loja continuam disponíveis na tela, mas são omitidos da impressão. Código e datas do recibo permanecem.
+
+Na impressão, o recibo e o relatório de histórico omitem o saldo no sistema legado, o ajuste de reconciliação e os avisos explicativos relacionados. Essas informações continuam disponíveis na tela. Os valores do pagamento, os saldos anterior e posterior e os totais do relatório permanecem no impresso; saldos históricos desconhecidos continuam representados por `-`.
+
 ## Cancelamento
 
 Somente os perfis de sistema `admin` e `manager` podem cancelar. A restrição vale na interface e na API, inclusive se outro perfil receber permissão curinga. A leitura segue a permissão existente `catalog:read`; o registro continua exigindo `catalog:write`. Não foram criadas permissões adicionais nem modificados os perfis existentes.

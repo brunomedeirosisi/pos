@@ -22,6 +22,9 @@ export type PageInput = {
 export function listPage<T>(
   resource: string,
   input: PageInput & ListFilters = {},
+  signal?: AbortSignal,
 ): Promise<Page<T>> {
-  return http.get<Page<T>>(`/lists/${resource}`, input);
+  return signal
+    ? http.get<Page<T>>(`/lists/${resource}`, input, { signal })
+    : http.get<Page<T>>(`/lists/${resource}`, input);
 }

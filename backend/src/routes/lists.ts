@@ -4,7 +4,7 @@ import type { BackupRow } from "../modules/backup/repository/backup-repository.j
 import { Router, type Request } from "express";
 import { z } from "zod";
 import { query, withTransaction } from "../db.js";
-import { badRequest, notFound } from "../errors.js";
+import { badRequest, forbidden, notFound } from "../errors.js";
 import { requirePermission } from "../middleware/auth.js";
 import { asyncHandler } from "../utils/async-handler.js";
 import { pageQuerySchema, queryPage } from "../utils/query-page.js";
@@ -21,6 +21,8 @@ import {
 import type { PaymentHistoryRecord } from "../modules/customer-payments/repository/payment-history-repository.js";
 import { getEnv } from "../config/env.js";
 import { productCurrentStockSql } from "../utils/stock-sql.js";
+import { stockHistorySql } from "../services/stock-adjustments.js";
+import { canReadCustomerFinancials } from "../services/customer-portfolio.js";
 
 // Separate read contracts preserve existing array endpoints and all mutation routes.
 export const listsRouter = Router();
@@ -29,6 +31,7 @@ const filtersSchema = z.object({
   search: z.string().trim().max(200).optional(),
   id: uuid.optional(),
   optionId: z.string().max(200).optional(),
+  includeBalance: z.enum(["true", "false"]).optional(),
   from: z.string().date().optional(),
   to: z.string().date().optional(),
   seller_id: uuid.optional(),
@@ -43,6 +46,9 @@ const filtersSchema = z.object({
   method: z.enum(["cash", "card", "bank", "other", "legacy"]).optional(),
   sort: z.enum(["asc", "desc"]).optional(),
   enabled: z.enum(["true", "false"]).optional(),
+  product_id: uuid.optional(),
+  user_id: uuid.optional(),
+  movement_type: z.enum(['increase','decrease']).optional(),
 });
 type Filters = z.infer<typeof filtersSchema>;
 type Config = {
@@ -135,9 +141,21 @@ const payments: Config = {
 const configs: Record<string, Config> = {
   products: catalog(
     "product",
-    `id,legacy_code,name,barcode,group_id,reference,min_stock,price_cash,price_base,${productCurrentStockSql} as current_stock,(select pg.name from product_group pg where pg.id=product.group_id) as group_name`,
+    `id,legacy_code,name,barcode,group_id,reference,min_stock,price_cash,price_base,stock_version::text,${productCurrentStockSql} as current_stock,(select pg.name from product_group pg where pg.id=product.group_id) as group_name`,
     ["name", "legacy_code", "barcode"],
   ),
+  'stock-adjustments': {
+    permissions: ['catalog:read'], sql: stockHistorySql,
+    filters: { product_id: 'product_id =', user_id: 'user_id =', from: 'created_at::date >=', to: 'created_at::date <=', movement_type: 'movement_type =' },
+    sorts: { created_at: 'created_at' },defaultSort:'created_at',defaultOrder:'desc',
+  },
+  'stock-adjustment-users': {
+    permissions: ['catalog:read'],
+    sql: `select distinct on (details->'actor'->>'id') details->'actor'->>'id' as id,details->'actor'->>'name' as name
+      from audit_log where action='STOCK_MANUAL_ADJUSTMENT' and details->>'result'='success'
+      order by details->'actor'->>'id',created_at desc,audit_log.id desc`,
+    searches:['name'],sorts:{name:'lower(name)'},defaultSort:'name',
+  },
   "product-groups": catalog("product_group", "id,legacy_code,name"),
   customers: catalog(
     "customer",
@@ -299,6 +317,17 @@ configs["dashboard-stores"] = {
   sorts: { name: "name" },
   defaultSort: "name",
 };
+configs["dashboard-payment-users"] = {
+  permissions: ["reports:view"],
+  sql: `select id,full_name as name from app_user u where exists(select 1 from customer_payment p where p.received_by=u.id)
+    or exists(select 1 from sale s where s.received_by=u.id)`,
+  searches:["name"],sorts:{name:"lower(name)"},defaultSort:"name",
+};
+configs["dashboard-payment-stores"] = {
+  permissions: ["reports:view"],
+  sql: `select store_id as id,store_id as name from sale where store_id is not null union select store_id,store_id from customer_payment where store_id is not null`,
+  searches:["name"],sorts:{name:"name"},defaultSort:"name",
+};
 function parseFilters(req: Request) {
   const filters = filtersSchema.parse(req.query);
   if (
@@ -318,7 +347,15 @@ for (const [resource, config] of Object.entries(configs)) {
     requirePermission(...config.permissions),
     asyncHandler(async (req, res) => {
       const input = pageQuerySchema.parse(req.query);
+      if (["dashboard-payment-users", "dashboard-payment-stores"].includes(resource) && !canReadCustomerFinancials(req.user)) throw forbidden("customer_financials_forbidden");
       const filters = parseFilters(req);
+      const includeBalance = resource === "customers" && filters.includeBalance === "true";
+      if (includeBalance && !canReadCustomerFinancials(req.user)) throw forbidden("customer_financials_forbidden");
+      const sourceSql = includeBalance
+        ? `select customers.*, totals.current_balance from (${config.sql}) customers
+           join customer_financial_totals totals on totals.customer_id=customers.id`
+        : config.sql;
+      if (resource === 'stock-adjustments' && filters.from && filters.to && filters.from > filters.to) throw badRequest('invalid_date_range');
       if (filters.sort && !input.sortOrder) input.sortOrder = filters.sort;
       for (const key of config.required ?? [])
         if (!filters[key]) throw badRequest(`missing_${key}`);
@@ -370,9 +407,10 @@ for (const [resource, config] of Object.entries(configs)) {
       }
       const pageOptions = {
         ...config,
+        sorts: includeBalance ? { ...config.sorts, current_balance: "current_balance" } : config.sorts,
         input,
         params,
-        sql: `select * from (${config.sql}) dataset ${conditions.length ? `where ${conditions.join(" and ")}` : ""}`,
+        sql: `select * from (${sourceSql}) dataset ${conditions.length ? `where ${conditions.join(" and ")}` : ""}`,
       };
       if (resource === "customer-payments") {
         const result = await withTransaction(async (client) => {

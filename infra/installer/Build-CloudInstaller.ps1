@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$Version='1.0.0-store.4',[string]$SigningThumbprint='')
+param([string]$Version='1.0.0-store.5',[string]$SigningThumbprint='')
 $ErrorActionPreference='Stop'
 . (Join-Path $PSScriptRoot 'Pos.Common.ps1')
 . (Join-Path $PSScriptRoot 'Pos.Build.ps1')
@@ -20,6 +20,7 @@ $compiler=Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319\csc.ex
 $null=Invoke-PosProcess $compiler @('/nologo','/target:winexe','/platform:x64','/reference:System.Windows.Forms.dll','/reference:System.Web.Extensions.dll',('/out:'+(Join-Path $bundle 'Instalar-POS.exe')),(Join-Path $PSScriptRoot 'Launcher.cs'))
 $docs=Join-Path $bundle 'documentacao';$null=New-Item -ItemType Directory -Path $docs
 foreach($name in @('NUVEM.md','USO.md','TECNICO.md','HOMOLOGACAO.md','IMPRESSORAS.md','TESTE-INTERNET.md')){Copy-Item -LiteralPath (Join-Path $repoRoot ('docs\instalacao\'+$name)) -Destination (Join-Path $docs $name)}
+foreach($name in @('manual-stock-adjustments.md','product-stock.md')){Copy-Item -LiteralPath (Join-Path $repoRoot ('docs\'+$name)) -Destination (Join-Path $bundle $name)}
 [IO.File]::WriteAllText((Join-Path $bundle 'LEIA-ME.txt'),('POS Nuvem '+$Version+[Environment]::NewLine+'Extraia o ZIP completo e execute Instalar-POS.exe. Leia documentacao/NUVEM.md.'+[Environment]::NewLine+'Informe URL HTTPS publica, ID UUID da loja e, se houver impressora, fila Windows e codigo do administrador.'+[Environment]::NewLine+'Este pacote conecta um caixa a um servidor existente. Nao publica servidor, instala Docker ou modifica certificados/firewall.'),(New-Object Text.UTF8Encoding($true)))
 if($SigningThumbprint){
   $cert=Get-Item -LiteralPath ('Cert:\CurrentUser\My\'+$SigningThumbprint)

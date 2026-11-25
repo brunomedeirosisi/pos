@@ -11,7 +11,9 @@ import { productsService } from "../../services/catalog";
 import type { Product } from "../../types/catalog";
 import { useToast } from "../../components/ui/ToastProvider";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
-import { useHasPermission } from "../../store/auth";
+import { useCanAdjustStock, useHasPermission } from "../../store/auth";
+import { StockAdjustmentDialog } from "./products/StockAdjustmentDialog";
+import { ProductStockHistory } from "./products/ProductStockHistory";
 import { Modal } from "../../components/ui/Modal";
 import { CurrencyInput } from "../../components/ui/CurrencyInput";
 import { formatCurrencyBrl } from "../../utils/number";
@@ -41,10 +43,13 @@ export function ProductsPage(): JSX.Element {
   const debouncedSearch = useDebouncedValue(search, 400);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
+  const [readOnly, setReadOnly] = useState(false);
+  const [adjusting, setAdjusting] = useState<Product | null>(null);
   const focusProductId = searchParams.get("focus");
 
   const canReadCatalog = useHasPermission("catalog:read");
   const canWriteCatalog = useHasPermission("catalog:write");
+  const canAdjustStock = useCanAdjustStock();
 
   const form = useForm<ProductFormValues>({
     resolver: zodResolver(productFormSchema),
@@ -90,16 +95,18 @@ export function ProductsPage(): JSX.Element {
       return;
     }
     setEditing(null);
+    setReadOnly(false);
     form.reset(productFormDefaults);
     setIsFormOpen(true);
   }
 
-  function openEditForm(product: Product) {
-    if (!canWriteCatalog) {
+  function openEditForm(product: Product, viewOnly = false) {
+    if (viewOnly ? !canReadCatalog : !canWriteCatalog) {
       toast.show(t("common.noPermission"), "error");
       return;
     }
     setEditing(product);
+    setReadOnly(viewOnly);
     form.reset({
       name: product.name,
       barcode: product.barcode ?? "",
@@ -114,12 +121,14 @@ export function ProductsPage(): JSX.Element {
   }
 
   function closeForm() {
+    setReadOnly(false);
     setIsFormOpen(false);
     setEditing(null);
     form.reset(productFormDefaults);
   }
 
   const onSubmit = form.handleSubmit((values) => {
+    if (readOnly) return;
     if (editing) {
       updateMutation.mutate(values);
     } else {
@@ -224,6 +233,12 @@ export function ProductsPage(): JSX.Element {
           >
             {t("common.edit")}
           </button>
+          <button type="button" className="button secondary" onClick={() => openEditForm(product,true)}>
+            {t("stockAdjustment.view")}
+          </button>
+          {canAdjustStock && <button type="button" className="button secondary" onClick={() => setAdjusting(product)}>
+            {t("stockAdjustment.title")}
+          </button>}
         </td>
       </tr>
     ));
@@ -237,6 +252,7 @@ export function ProductsPage(): JSX.Element {
     canWriteCatalog,
     focusProductId,
     stockFormatter,
+    canAdjustStock,
   ]);
 
   if (!canReadCatalog) {
@@ -249,7 +265,7 @@ export function ProductsPage(): JSX.Element {
   }
 
   const isSubmitting = createMutation.isPending || updateMutation.isPending;
-  const modalOpen = isFormOpen && canWriteCatalog;
+  const modalOpen = isFormOpen && canReadCatalog;
   const handleModalClose = () => {
     if (isSubmitting) return;
     closeForm();
@@ -297,13 +313,14 @@ export function ProductsPage(): JSX.Element {
       <Modal
         open={modalOpen}
         onClose={handleModalClose}
-        title={editing ? t("products.editTitle") : t("products.addTitle")}
+        title={readOnly ? t("stockAdjustment.productDetails") : editing ? t("products.editTitle") : t("products.addTitle")}
         width="720px"
       >
         <p style={{ marginTop: 0, color: "#64748b" }}>
           {t("products.formHint")}
         </p>
         <form onSubmit={onSubmit}>
+          <fieldset disabled={readOnly} style={{border:0,padding:0,margin:0}}>
           <div className="form-grid">
             <div className="form-group">
               <label htmlFor="name">{t("products.heading")}*</label>
@@ -357,7 +374,8 @@ export function ProductsPage(): JSX.Element {
                 <label htmlFor="current_stock">{t("products.currentStock")}</label>
                 <input
                   id="current_stock"
-                  inputMode="decimal"
+                  inputMode="numeric"
+                  readOnly={!canAdjustStock}
                   aria-invalid={Boolean(form.formState.errors.initial_stock)}
                   aria-describedby={
                     form.formState.errors.initial_stock
@@ -366,7 +384,7 @@ export function ProductsPage(): JSX.Element {
                   }
                   {...form.register("initial_stock")}
                 />
-                <small id="current_stock-hint">{t("products.initialStockHint")}</small>
+                <small id="current_stock-hint">{t(canAdjustStock ? "products.initialStockHint" : "stockAdjustment.readOnlyInfo")}</small>
                 {form.formState.errors.initial_stock && (
                   <small id="current_stock-error" role="alert" style={{ color: "#dc2626" }}>
                     {t("products.invalidInitialStock")}
@@ -427,6 +445,7 @@ export function ProductsPage(): JSX.Element {
               )}
             </div>
           </div>
+          </fieldset>
           <div className="form-actions">
             <button
               type="button"
@@ -434,18 +453,20 @@ export function ProductsPage(): JSX.Element {
               onClick={handleModalClose}
               disabled={isSubmitting}
             >
-              {t("common.cancel")}
+              {readOnly ? t("stockAdjustment.close") : t("common.cancel")}
             </button>
-            <button
+            {!readOnly && <button
               type="submit"
               className="button primary"
               disabled={isSubmitting}
             >
               {isSubmitting ? t("common.loading") : t("common.save")}
-            </button>
+            </button>}
           </div>
         </form>
+        {editing && <ProductStockHistory key={editing.id} product={editing} />}
       </Modal>
+      {adjusting && <StockAdjustmentDialog key={adjusting.id} product={adjusting} onClose={() => setAdjusting(null)} />}
     </div>
   );
 }

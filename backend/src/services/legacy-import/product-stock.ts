@@ -100,7 +100,7 @@ export async function reconcileLegacyProductStock(
 ): Promise<LegacyProductStockSummary> {
   await client.query(
     `select p.id from product p join jsonb_to_recordset($1::jsonb) as x(legacy_code text, source_quantity numeric)
-      on p.legacy_code=x.legacy_code order by p.id for update of p`,
+      on p.legacy_code=x.legacy_code order by p.id for no key update of p`,
     [JSON.stringify(source.records)],
   );
   const plan = await previewLegacyProductStock(source, client);

@@ -77,6 +77,7 @@ export function SalesListPage(): JSX.Element {
       // Refetch é eventual; o QueryClient mantém o estado de erro das consultas.
       void queryClient.invalidateQueries({ queryKey: ["sales"] });
       void queryClient.invalidateQueries({ queryKey: ["dashboard"] });
+      void queryClient.invalidateQueries({ queryKey: ["customers"] });
     },
     onError: (error: Error) => toast.show(error.message, "error"),
   });

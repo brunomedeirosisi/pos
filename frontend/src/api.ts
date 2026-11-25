@@ -35,6 +35,8 @@ type ApiValidationIssue = {
 };
 
 const apiValidationFieldKeys: Record<string, string> = {
+  new_quantity: 'stockAdjustment.newQuantity',
+  reason: 'stockAdjustment.reason',
   quantity: "sales.quantity",
   emission_date: "sales.saleDate",
   amount_paid: "sales.amountPaid",
@@ -50,6 +52,13 @@ const apiValidationFieldKeys: Record<string, string> = {
 };
 
 const apiMessageTranslationKeys: Record<string, string> = {
+  stock_adjustment_conflict: 'stockAdjustment.conflict',
+  stock_adjustment_request_reused: 'stockAdjustment.requestReused',
+  stock_adjustment_import_busy: 'stockAdjustment.importBusy',
+  stock_adjustment_product_not_found: 'stockAdjustment.notFound',
+  stock_adjustment_no_change: 'stockAdjustment.noChange',
+  stock_adjustment_delta_out_of_range: 'stockAdjustment.invalidQuantity',
+  stock_adjustment_invalid_balance: 'stockAdjustment.error',
   browser_printing_uses_receipt_page: "sales.browserPrintingRequired",
   internal_error: "apiErrors.internalError",
   receipt_printer_not_configured: "sales.printerNotConfigured",
@@ -111,6 +120,7 @@ function getValidationFieldLabel(issue: ApiValidationIssue): string | null {
 }
 
 function formatValidationIssueMessage(issue: ApiValidationIssue): string {
+  if (Array.isArray(issue.path) && issue.path.at(-1) === 'new_quantity') return i18n.t('stockAdjustment.invalidQuantity');
   if (Array.isArray(issue.path) && issue.path.at(-1) === "quantity")
     return i18n.t("sales.invalidQuantity");
   const fieldLabel = getValidationFieldLabel(issue);
@@ -286,8 +296,11 @@ export async function api<T>(
 }
 
 export const http = {
-  get: <T>(path: string, query?: ApiOptions["query"]) =>
-    api<T>(path, { method: "GET", query }),
+  get: <T>(
+    path: string,
+    query?: ApiOptions["query"],
+    options?: Pick<RequestInit, "signal">,
+  ) => api<T>(path, { ...options, method: "GET", query }),
   post: <T>(path: string, json?: unknown) =>
     api<T>(path, { method: "POST", json }),
   patch: <T>(path: string, json?: unknown) =>

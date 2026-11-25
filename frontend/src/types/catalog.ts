@@ -8,6 +8,7 @@ export type Product = {
   reference: string | null;
   min_stock: number | null;
   current_stock: number;
+  stock_version?: string;
   price_cash: number | null;
   price_base: number | null;
 };
@@ -23,6 +24,36 @@ export type ProductInput = {
 };
 
 export type ProductCreateInput = ProductInput & { initial_stock?: number };
+
+export type StockAdjustmentInput = {
+  request_id: string;
+  expected_version: string;
+  new_quantity: number;
+  reason: string;
+};
+export type StockAdjustmentResult = {
+  id: string;
+  product_id: string;
+  previous_quantity: number;
+  new_quantity: number;
+  difference: number;
+  stock_version: string;
+};
+export type StockAdjustmentHistory = {
+  id: string;
+  created_at: string;
+  product_id: string;
+  product_code: string | null;
+  product_name: string;
+  user_id: string;
+  user_name: string;
+  role: string;
+  previous_quantity: number;
+  new_quantity: number;
+  difference: number;
+  reason: string;
+  movement_type: 'increase' | 'decrease';
+};
 
 export type ProductGroup = {
   id: string;
@@ -63,6 +94,21 @@ export type CustomerInput = {
   status?: CustomerStatus;
   credit_limit?: number | null;
   notes?: string | null;
+};
+
+export type CustomerListItem = Customer & { current_balance?: number };
+export type CustomerOverview = {
+  total_customers: number;
+  financial?: {
+    customers_with_debt: number;
+    customers_without_debt: number;
+    customers_with_credit: number;
+    total_debt: number;
+    total_credit: number;
+    debt_percentage: number;
+    average_debt: number;
+    largest_debt: number;
+  };
 };
 
 export type LegacyBalanceReconciliation = {

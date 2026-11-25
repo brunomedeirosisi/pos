@@ -2,7 +2,7 @@
 
 ## Escopo e arquitetura
 
-O Modo Nuvem, disponível desde 1.0.0-store.3, conecta os caixas a uma origem HTTPS pública e mantém somente navegador/agente no Windows. O release atual é 1.0.0-store.4. Build leve, requisitos do servidor, TLS e migração estão em [NUVEM.md](NUVEM.md). Ele não provisiona hospedagem. A arquitetura abaixo descreve a alternativa local.
+O Modo Nuvem, disponível desde 1.0.0-store.3, conecta os caixas a uma origem HTTPS pública e mantém somente navegador/agente no Windows. O release atual é 1.0.0-store.5. Build leve, requisitos do servidor, TLS e migração estão em [NUVEM.md](NUVEM.md). Ele não provisiona hospedagem. A arquitetura abaixo descreve a alternativa local.
 
 O ensaio de publicação temporária do checkout local tem roteiro em [TESTE-INTERNET.md](TESTE-INTERNET.md), com topologia do túnel, confiança da CA, configuração CORS, diagnóstico e distinção entre navegador e agentes de impressão. Ele usa `docker-compose.yml` da raiz e não o Compose do instalador Principal.
 
@@ -58,8 +58,8 @@ No computador de desenvolvimento Windows x64, use Git, Docker Desktop Linux/amd6
 ```powershell
 ./infra/installer/Test-Installer.ps1 -NodePath (Get-Command node.exe).Source
 ./infra/installer/Test-CloudHttps.ps1 -NodePath (Get-Command node.exe).Source
-./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.4' -CompatibleFrom '1.0.0-store.3'
-./infra/installer/Build-CloudInstaller.ps1 -Version '1.0.0-store.4'
+./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.5' -CompatibleFrom '1.0.0-store.4'
+./infra/installer/Build-CloudInstaller.ps1 -Version '1.0.0-store.5'
 ```
 
 O runtime Windows obtido pelo builder também é usado nos testes; Node instalado localmente não é exigido pelo build. O parâmetro `-NodePath` do teste é opcional para uma execução manual sem Node. O build exige acesso à rede para dependências/imagens/runtime. Seus temporários ficam em uma pasta `pos-store-build-*` sob o Temp do usuário, informada no log.
@@ -76,6 +76,7 @@ artifacts/POS-Loja-<versão>/
   images.tar
   manifest.json
   documentacao/USO.md / TECNICO.md / HOMOLOGACAO.md / IMPRESSORAS.md / NUVEM.md / TESTE-INTERNET.md
+  manual-stock-adjustments.md / product-stock.md
   LEIA-ME.txt
 artifacts/POS-Loja-<versão>.zip
 artifacts/POS-Loja-<versão>.zip.sha256
@@ -88,7 +89,7 @@ Para assinar um release, forneça `-SigningThumbprint` com um certificado de cod
 Atualizações futuras precisam declarar a versão de origem após ensaio de upgrade:
 
 ```powershell
-./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.4' -CompatibleFrom '1.0.0-store.3'
+./infra/installer/Build-Installer.ps1 -Version '1.0.0-store.5' -CompatibleFrom '1.0.0-store.4'
 ```
 
 `CompatibleFrom` é uma declaração do mantenedor, não uma prova automática de compatibilidade de schema. O gate de release deve incluir migrações, leitura de dados anteriores, backup/restore em alvo isolado e preservação de operações. O problema de checksums/privilégios de migração da TSK-038 continua pendente; não aprove releases apenas por esse campo.
@@ -209,14 +210,14 @@ Troca de máquina/conta/IP/CA requer plano assistido: backup externo validado, a
 Reprodução do ensaio de release, após construir o pacote (requer Node no host e Docker Compose com suporte a `!override`):
 
 ```powershell
-node infra/installer/test-store.mjs --bundle artifacts/POS-Loja-1.0.0-store.4 --evidence docs/test-evidence/installer-store-20261105.json
+node infra/installer/test-store.mjs --bundle artifacts/POS-Loja-1.0.0-store.5 --evidence docs/test-evidence/installer-store-20261108.json
 # Upgrade real, inicializando o banco com o init.sql da versao anterior:
-node infra/installer/test-store.mjs --bundle artifacts/POS-Loja-1.0.0-store.4 --upgrade-from artifacts/POS-Loja-1.0.0-store.3 --evidence docs/test-evidence/installer-upgrade-20261105.json
+node infra/installer/test-store.mjs --bundle artifacts/POS-Loja-1.0.0-store.5 --upgrade-from artifacts/POS-Loja-1.0.0-store.4 --evidence docs/test-evidence/installer-upgrade-20261108.json
 ```
 
 Esse ensaio usa o projeto fixo `pos-installer-smoke`, volumes próprios sintéticos, porta efêmera somente em loopback e sub-rede de teste `172.29.74.0/24`. Limpa apenas esse projeto no início/fim. Não execute dois ensaios simultâneos. A saída do spooler é injetada/simulada; HTTPS, duas sessões, fila, API, banco, backup e bind externo são reais. O teste não comprova que o diretório temporário de réplica está fisicamente em outro dispositivo.
 
-O ensaio também verifica as cinco migrações posteriores à store.3, o decodificador 7-Zip na imagem final, a paginação, o agendamento inicialmente desabilitado, a execução automática com réplica/checksum e a persistência da agenda após recriar a API. No upgrade, cria backup usando a API antiga e preserva sessão, venda, trabalhos pendentes, credencial e conteúdo dos recibos. `Test-Installer.ps1 -NodePath` inclui os contratos de backup do supervisor nos builds e no CI Windows.
+O ensaio também verifica as migrações de estoque posteriores à store.4, a permissão do Gerente, os quatro triggers de versão/auditoria, o decodificador 7-Zip na imagem final, a paginação, o agendamento inicialmente desabilitado, a execução automática com réplica/checksum e a persistência da agenda após recriar a API. Valida estoque inicial, baixa por vendas, ajuste manual, repetição idempotente, conflito de versão e histórico persistido. No upgrade, cria backup usando a API antiga e preserva sessão, venda, movimentos e saldo de estoque, trabalhos pendentes, credencial e conteúdo dos recibos. `Test-Installer.ps1 -NodePath` inclui os contratos de backup do supervisor nos builds e no CI Windows.
 
 O checklist [HOMOLOGACAO.md](HOMOLOGACAO.md) registra os ensaios físicos/reboot/rede/backup que precisam ocorrer na loja. A evidência automatizada entregue não certifica drivers, BIOS, rede real, NAS/UNC, assinatura comercial ou regras de negócio pendentes. Não há dependência nova de npm para esta entrega.
 

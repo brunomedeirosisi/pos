@@ -1,4 +1,4 @@
-import { mockListPages, pageFixture } from '../../test/page-fixtures';
+import { mockListPages, pageFixture } from "../../test/page-fixtures";
 // @vitest-environment jsdom
 import React, { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -60,11 +60,24 @@ const page: RoleUserSellersPage = {
 };
 let root: Root, container: HTMLDivElement, client: QueryClient;
 beforeEach(() => {
-  mockListPages(async(resource,input)=>{
-    if(resource==='roles')return rolesService.list();
-    if(resource==='sellers')return sellersService.list(input.search as string | undefined);
-    const result=await rolesService.userSellers(String(input.roleId),{search:input.search as string | undefined,page:Number(input.page),limit:Number(input.pageSize)});
-    return pageFixture(result.items,Number(input.page),Number(input.pageSize),result.hasMore?Number(input.page)*Number(input.pageSize)+1:(Number(input.page)-1)*Number(input.pageSize)+result.items.length);
+  mockListPages(async (resource, input) => {
+    if (resource === "roles") return rolesService.list();
+    if (resource === "sellers")
+      return sellersService.list(input.search as string | undefined);
+    const result = await rolesService.userSellers(String(input.roleId), {
+      search: input.search as string | undefined,
+      page: Number(input.page),
+      limit: Number(input.pageSize),
+    });
+    return pageFixture(
+      result.items,
+      Number(input.page),
+      Number(input.pageSize),
+      result.hasMore
+        ? Number(input.page) * Number(input.pageSize) + 1
+        : (Number(input.page) - 1) * Number(input.pageSize) +
+            result.items.length,
+    );
   });
   vi.useFakeTimers();
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -104,8 +117,21 @@ async function flush(ms = 20) {
 }
 function button(key: string) {
   return Array.from(
-    (document.querySelector('[role="dialog"]') ?? document).querySelectorAll<HTMLButtonElement>("button"),
-  ).find((item) => item.textContent === i18n.t(key) || item.getAttribute('aria-label')===i18n.t(key==='roles.nextPage'?'pagination.next':key==='roles.previousPage'?'pagination.previous':key))!;
+    (
+      document.querySelector('[role="dialog"]') ?? document
+    ).querySelectorAll<HTMLButtonElement>("button"),
+  ).find(
+    (item) =>
+      item.textContent === i18n.t(key) ||
+      item.getAttribute("aria-label") ===
+        i18n.t(
+          key === "roles.nextPage"
+            ? "pagination.next"
+            : key === "roles.previousPage"
+              ? "pagination.previous"
+              : key,
+        ),
+  )!;
 }
 async function click(element: HTMLElement) {
   await act(async () => element.click());
@@ -156,6 +182,7 @@ describe.each(["pt-BR", "en"])(
         role.name,
       );
       expect(picker("user-a").value).toBe(distant.name);
+      expect(sellersService.list).not.toHaveBeenCalled();
       expect(row("user-b").textContent).toContain(
         i18n.t("roles.automaticSeller"),
       );
@@ -230,7 +257,11 @@ describe.each(["pt-BR", "en"])(
         new Error("offline"),
       );
       await render(locale);
-      expect(picker("user-b").disabled).toBe(true);
+      await act(async () => picker("user-b").focus());
+      await flush();
+      expect(row("user-b").textContent).toContain(
+        i18n.t("common.searchSelectLoadError"),
+      );
       await click(button("common.retry"));
       expect(picker("user-b").disabled).toBe(false);
       vi.mocked(rolesService.linkSeller).mockRejectedValueOnce(

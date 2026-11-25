@@ -1,5 +1,7 @@
 # Paginação das listagens / List pagination
 
+Seletores de registros usam agora [rolagem infinita](infinite-selects.md), sem controles internos de página. As regras de navegação paginada abaixo continuam aplicáveis às tabelas, históricos e listagens convencionais.
+
 Todas as listagens navegáveis usam os mesmos controles: primeira, anterior, próxima e última página, acesso direto pelo número, tamanho de página (10, 25, 50 ou 100), intervalo de registros e página atual/total. Os textos estão disponíveis em PT-BR e EN. A primeira página é 1; uma consulta vazia apresenta 0–0 registros e página 1 de 1.
 
 Filtros e ordenação são aplicados antes da paginação. Alterar a pesquisa, filtros, ordenação ou tamanho volta à primeira página. Exclusões e mudanças concorrentes no total ajustam a página solicitada à última página válida. Falhas oferecem nova tentativa. Os controles ficam indisponíveis durante a consulta. O número da página pode ser confirmado com Enter; todos os controles têm identificação acessível.
@@ -11,7 +13,9 @@ O estado fica no QueryClient da sessão: retornar de detalhes ou edição preser
 | Tela ou componente | Estratégia e origem |
 | --- | --- |
 | Produtos, grupos, clientes, vendedores e condições de pagamento | Servidor: `lists/products`, `product-groups`, `customers`, `sellers`, `payment-terms`. Nomes dos grupos acompanham os produtos. |
+| Histórico de Estoque do produto | Servidor: `lists/stock-adjustments`, com `catalog:read`; snapshots de ajustes concluídos, filtros por produto, usuário, período e aumento/redução. O seletor de responsáveis usa `lists/stock-adjustment-users`. |
 | Recebimentos: escolha e listagem de clientes | Servidor: `lists/customers`. O cliente escolhido permanece selecionado ao navegar na lista. |
+| Carteira de clientes: saldo e indicadores | `lists/customers?includeBalance=true` acrescenta saldo e ordenação numérica somente para Admin/Gerente; contratos antigos/seletores não recebem o campo. `customers/overview` agrega a carteira inteira, independentemente de filtros/páginas. Veja [indicadores da carteira](customer-portfolio.md). |
 | Histórico de vendas | Servidor: `lists/sales`; preserva datas, vendedor, cliente e condição de pagamento. Os nomes relacionados vêm na própria página. |
 | Histórico de recebimentos/pagamentos | Servidor: `lists/payments`; preserva datas, cliente e usuário que recebeu. Ver, imprimir e cancelar mantêm as permissões existentes. |
 | Cliente: compras | Servidor: `lists/customer-sales?customer_id=...`. |
@@ -25,12 +29,13 @@ O estado fica no QueryClient da sessão: retornar de detalhes ou edição preser
 | Histórico de impressões da venda | Servidor: `lists/print-jobs?saleId=...`; substitui os cortes anteriores de 5/20 itens. Atualização periódica da página, sem conteúdo do recibo ou tokens de execução. |
 | Importação: detalhes técnicos e advertências de reconciliação | Servidor: `lists/legacy-logs` e `legacy-warnings`, com `sessionId`. Consulta sob demanda ao abrir os detalhes. O polling usa status compacto com contadores, sem retransmitir todos os logs/advertências. O relatório para download permanece completo. |
 | Dashboard: ranking de vendedores, curva ABC e estoque crítico | Servidor: `dashboard/lists/seller-ranking`, `product-abc`, `critical-stock`. Classificação, participação, acumulados e posições são calculados sobre todo o período filtrado, antes de recortar a página. |
+| Dashboard — Pagamentos: movimentos e rankings | Servidor: `dashboard/payments/transactions`, `customers`, `employees`, com estado independente por tabela, busca/ordenação numérica e identidade estável. Exige Admin/Gerente com `reports:view` e `catalog:read`. O resumo agrega todos os registros elegíveis e a exportação ignora o recorte da página. Veja [regras e fontes](dashboard-payments.md). |
 | Dashboard: tabela diária | Cliente: os mesmos agregados diários já necessários ao gráfico, limitados a 366 dias pela API. O gráfico e o acumulado usam a série completa. |
 | Dashboard: legenda das categorias | Cliente: agregados já necessários ao gráfico circular, com categorias pequenas agrupadas pelo servidor. Cores e percentuais mantêm a relação com o gráfico completo. |
 | PDV: pesquisa de produtos | Servidor: `lists/products`. A navegação não altera o carrinho. |
 | PDV: itens do carrinho | Cliente: coleção da venda em edição, já mantida integralmente no store. Quantidades, edição, remoção, subtotal, desconto e fechamento usam o carrinho completo. |
 | Detalhes da venda: itens | Cliente: documento de uma venda já carregado para exibição e ações. Recibo e totais continuam completos. |
-| Seletores de cliente, vendedor, condição de pagamento, grupo e perfil nos filtros/formulários | `SearchableSelect` reutilizado, com busca e páginas no servidor; resolve separadamente o rótulo de uma seleção salva quando necessário. A pesquisa não aplica um ID até uma opção ser escolhida. |
+| Seletores de cliente, vendedor, condição de pagamento, grupo e perfil nos filtros/formulários | `SearchableSelect` reutilizado, com busca completa no servidor e lotes por rolagem infinita; resolve separadamente o rótulo de uma seleção salva quando necessário. A pesquisa não aplica um ID até uma opção ser escolhida. |
 | Seletores do dashboard | Servidor: `lists/dashboard-stores`, `dashboard-sellers`, `dashboard-categories`, `dashboard-payment-terms`; respeitam `sales:read` ou `reports:view`. |
 | Destino de impressão | `SearchableSelect` com `lists/printers`, filtro de impressoras habilitadas. Valida a impressora salva individualmente, inclusive se estiver fora da página. Não redireciona automaticamente para outra impressora. |
 
@@ -62,6 +67,8 @@ GET /api/v1/lists/products?search=camisa&page=2&pageSize=25&sortBy=name&sortOrde
 | Perfis | `name` (asc) | `search` |
 | Usuários do perfil | `name` (asc), `email` | `roleId` obrigatório, `search` |
 | Recebedores | `name` (asc) | `search` |
+| Ajustes de estoque | `created_at` (desc) | `product_id`, `user_id`, `from`, `to`, `movement_type=increase|decrease` |
+| Responsáveis por ajustes | `name` (asc) | `search`, `optionId` |
 | Vendas/compras do cliente | `emission_date` (desc), `total`, `order_number` | `from`, `to`, `seller_id`, `customer_id`, `payment_term_id`; `customer_id` obrigatório nas compras |
 | Histórico de pagamentos | `payment_date` (desc), `amount`, `created_at` | `from`, `to`, `customer_id`, `received_by` |
 | Pagamentos do cliente | `payment_date` (desc), `amount`, `created_at` | `customer_id` obrigatório, `start_date`, `end_date`, `method`, `sort` (alias da direção existente) |
@@ -82,7 +89,7 @@ O status de importação aceita `compact=true`; sem esse parâmetro, o contrato 
 ## Implementação e operação
 
 - Backend: `utils/query-page.ts` centraliza validação, whitelist, contagem, limite, ordenação e ajuste. `routes/lists.ts` declara os recursos e escopos, reutilizando mapeadores e regras financeiras existentes.
-- Frontend: `Pagination` cuida da interação; `useListQuery` da consulta/estado persistido; `useClientPage` das coleções pequenas já carregadas; `SearchableSelect` reaproveita os controles para opções remotas.
+- Frontend: `Pagination` cuida das tabelas/listagens; `useListQuery` da consulta/estado persistido; `useClientPage` das coleções pequenas já carregadas; `SearchableSelect` e `useSelectOptions` carregam opções por rolagem infinita, sem paginação manual interna.
 - A migração `20261030_001_pagination.sql` cria índices para nomes/identidades, usuários por perfil, pagamentos ativos, impressões, logs e backups. Não altera registros financeiros nem exige mudança de seed. Novas instalações recebem os mesmos índices em `init.sql` e nas migrações.
 - Paginação por offset mantém acesso direto a qualquer página. Em bases muito maiores, contagens exatas e offsets profundos têm custo crescente; a interface limita cada resposta a 100 itens. Esse contrato permite futuramente adicionar cursores sem remover as rotas anteriores.
 
